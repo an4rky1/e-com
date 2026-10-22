@@ -7,7 +7,7 @@
  * `credential_vault` private to this service.
  */
 import { Controller } from '@nestjs/common';
-import { GrpcMethod } from '@auth/infra/grpc';
+import { GrpcControllerBase, GrpcMethod } from '@auth/infra/grpc';
 import { InvalidCredentialsException } from '@auth/platform/error-handling';
 import type {
   SetPasswordRequest,
@@ -38,9 +38,18 @@ interface RevokeAllCredentialsResponse {
   revokedCount: number;
 }
 
+/**
+ * gRPC transport for credential-vault, implementing `CredentialVaultGrpcClient` server-side.
+ *
+ * @remarks It extends {@link GrpcControllerBase} so that the service-token guard reaches this
+ * port: `VerifyPassword` is the call a wrong caller would most want to make, and without the
+ * base it is open to anything that can reach the address.
+ */
 @Controller()
-export class CredentialVaultGrpcController {
-  constructor(private readonly vault: CredentialVaultService) {}
+export class CredentialVaultGrpcController extends GrpcControllerBase {
+  constructor(private readonly vault: CredentialVaultService) {
+    super();
+  }
 
   /**
    * Answers "is this the right password?".

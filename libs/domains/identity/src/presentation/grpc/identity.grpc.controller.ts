@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { ResourceNotFoundException } from '@auth/platform/error-handling';
-import { GrpcMethod } from '@auth/infra/grpc';
+import { GrpcControllerBase, GrpcMethod } from '@auth/infra/grpc';
 import type {
   AuthenticateRequest,
   AuthenticateResponse,
@@ -21,10 +21,16 @@ const SERVICE = 'IdentityService';
  * @remarks "Who is this?" is a question with a required answer, so it is a synchronous gRPC
  * call rather than an event. Every other service depends on this surface instead of reading
  * the database — which is what keeps the database private to identity.
+ *
+ * @remarks It extends {@link GrpcControllerBase} for the same reason the other transports do:
+ * the base carries the service-token guard, and a controller that does not extend it serves
+ * this port — `GetUser`, `SetPassword`'s neighbour — to anything that can reach the address.
  */
 @Controller()
-export class IdentityGrpcController {
-  constructor(private readonly identity: IdentityService) {}
+export class IdentityGrpcController extends GrpcControllerBase {
+  constructor(private readonly identity: IdentityService) {
+    super();
+  }
 
   @GrpcMethod(SERVICE, 'GetUser')
   async getUser(request: GetUserRequest): Promise<UserResponse> {
