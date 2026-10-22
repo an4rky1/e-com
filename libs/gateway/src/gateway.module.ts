@@ -125,6 +125,10 @@ export function createGatewayModule(
     // one address map fails visibly at the first call rather than resolving somewhere else.
     url: config.identityUrl,
     defaultDeadlineMs: config.peerDeadlineMs,
+    // Present, not verify: every peer's guard rejects a call without it, and the token is a
+    // property of the channel rather than of any one adapter so that a sixth peer cannot be
+    // added with a channel that forgets it.
+    serviceToken: config.grpcServiceToken,
   });
 
   return {

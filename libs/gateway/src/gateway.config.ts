@@ -11,8 +11,11 @@
  * has one set — and the service still boots when the variable is missing, which is the test
  * that proves the edge is stateless.
  *
- * @remarks No signing key either. The gateway never decodes a token, so a secret in its
- * environment would be a secret with no use and one more place to leak it from.
+ * @remarks No signing key either. The gateway never decodes a user's token, so a key that would
+ * let it do so is a secret with no use here and one more place to leak it from. The one secret
+ * this service holds is {@link GatewayConfig.grpcServiceToken}, and it is held in order to be
+ * *presented*, never verified — a secret the edge could verify would turn the edge into a place
+ * to forge a session, which is the property the paragraph above is protecting.
  */
 import { z } from 'zod';
 import {
@@ -21,6 +24,7 @@ import {
   readNamespacedEnv,
   resolveModuleConfig,
 } from '@auth/platform/config';
+import { readServiceToken } from '@auth/infra/grpc';
 
 /** The resolved namespace, injected everywhere instead of a module-level read. */
 export const GATEWAY_CONFIG = Symbol('GATEWAY_CONFIG');
@@ -67,6 +71,14 @@ export interface GatewayConfig {
   readonly credentialVaultUrl: string;
   readonly sessionTokenUrl: string;
   readonly authGatewayUrl: string;
+  /**
+   * The platform service token, placed in `x-service-token` on every peer call.
+   *
+   * @remarks Read from `GRPC_SERVICE_TOKEN` rather than from a `GATEWAY_` variable: the same
+   * secret admits a call on every service, so a gateway-only name would be a second secret for
+   * one trust boundary — and a rotation that updated nine services out of ten.
+   */
+  readonly grpcServiceToken: string;
 }
 
 /** proto package -> address, which is the shape `createStaticGrpcChannel` expects. */
@@ -99,6 +111,10 @@ export function resolveGatewayConfig(
       credentialVaultUrl: parsed.CREDENTIAL_VAULT_URL,
       sessionTokenUrl: parsed.SESSION_TOKEN_URL,
       authGatewayUrl: parsed.AUTH_GATEWAY_URL,
+      // Second read of the same `env`, in a different namespace: `GRPC_` is platform-owned,
+      // and this edge refuses to resolve without it rather than booting a client that presents
+      // nothing — which the receiving guard would reject on every call anyway, just later.
+      grpcServiceToken: readServiceToken(env),
     },
     {},
   );

@@ -21,7 +21,7 @@ import { createKafkaPublisher } from '@auth/infra/kafka';
  * leave this process over Kafka. The domain module sees nothing but the transport port.
  */
 const eventPublisher = createKafkaPublisher();
-import { createStaticGrpcChannel } from '@auth/infra/grpc';
+import { createStaticGrpcChannel, readServiceToken } from '@auth/infra/grpc';
 import path from 'node:path';
 
 /**
@@ -57,6 +57,10 @@ const downstreamChannel = createStaticGrpcChannel({
     'account_security.v1':
       process.env.ACCOUNT_SECURITY_GRPC_URL ?? 'localhost:31007',
   },
+  // Every peer's guard rejects a call that presents nothing, so this service refuses to build
+  // its channel without the shared secret — at composition time, not on the first call that
+  // happens to reach a healthy peer.
+  serviceToken: readServiceToken(),
 });
 
 @Module({

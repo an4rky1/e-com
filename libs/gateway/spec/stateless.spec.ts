@@ -152,19 +152,29 @@ describe('the app shell is thin', () => {
   });
 });
 
-describe('the api-gateway needs no environment it was not given', () => {
-  it('resolves from an empty environment', () => {
-    // No `DATABASE_URL`, no signing key, no peer addresses: every one of them has a default
-    // or does not exist, so the edge starts in a container with no configuration at all.
-    const config = resolveGatewayConfig({});
+describe('the api-gateway needs no environment beyond the shared service token', () => {
+  it('refuses to resolve without that token, rather than booting a client that presents nothing', () => {
+    // No `DATABASE_URL`, no signing key, no peer addresses: every one of them has a default or
+    // does not exist. The one thing that is not optional is the secret this edge presents on
+    // every peer call — it cannot verify a token, and a channel with no token of its own would
+    // be refused by every receiving guard, just later and per call.
+    expect(() => resolveGatewayConfig({})).toThrow(/GRPC_SERVICE_TOKEN/);
+  });
+
+  it('resolves every default once that one secret is given', () => {
+    const config = resolveGatewayConfig({
+      GRPC_SERVICE_TOKEN: 'a-shared-service-token',
+    });
 
     expect(config.peerDeadlineMs).toBe(3_000);
     expect(config.identityUrl).toBe('localhost:13001');
+    expect(config.grpcServiceToken).toBe('a-shared-service-token');
   });
 
   it('boots even when a database happens to be in the environment', () => {
     const config = resolveGatewayConfig({
       DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/identity',
+      GRPC_SERVICE_TOKEN: 'a-shared-service-token',
     });
 
     // Absent from the schema, so absent from the result: `readNamespacedEnv` has no way to
@@ -173,17 +183,25 @@ describe('the api-gateway needs no environment it was not given', () => {
     expect(Object.keys(config)).not.toContain('databaseUrl');
   });
 
-  it('reads only the GATEWAY_ namespace', () => {
+  it('reads the token from the platform namespace, and no lookalike of its own', () => {
     const config = resolveGatewayConfig({
       IDENTITY_GRPC_URL: 'identity.internal:13001',
       SESSION_ACCESS_TOKEN_SIGNING_KEY: 'a-signing-key-that-is-not-ours',
       GATEWAY_PEER_DEADLINE_MS: '750',
+      GATEWAY_SERVICE_TOKEN: 'a-token-nobody-else-would-present',
+      GRPC_SERVICE_TOKEN: 'the-shared-service-token',
     });
 
     // Someone else's variable, and a signing key this process has no business holding.
     expect(config.peerDeadlineMs).toBe(750);
     expect(config.identityUrl).toBe('localhost:13001');
     expect(JSON.stringify(config)).not.toContain('signing-key');
+
+    // One variable, read from the namespace every peer shares: a `GATEWAY_`-prefixed twin
+    // would be a second secret for a single trust boundary, and a rotation that updated this
+    // edge out of step with the nine services it calls.
+    expect(config.grpcServiceToken).toBe('the-shared-service-token');
+    expect(JSON.stringify(config)).not.toContain('a-token-nobody-else-would-present');
   });
 
   it('rejects a malformed peer deadline at boot rather than on the first request', () => {
