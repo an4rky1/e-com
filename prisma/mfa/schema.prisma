@@ -21,8 +21,8 @@ datasource db {
 model mfa_factors {
   id                        String              @id @db.Uuid
   user_id                   String              @db.Uuid
-  method                    String
-  status                    String              @default("pending")
+  method                    MfaMethod
+  status                    MfaStatus @default(pending)
   account_label             String?
   destination_hint          String?
   secret_ciphertext         String?
@@ -81,7 +81,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -103,4 +103,22 @@ model totp_used_counters {
   mfa_factors  mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
+enum MfaMethod {
+  totp
+  backup_code
+}
 
+enum MfaStatus {
+  unverified
+  pending
+  active
+  disabled
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

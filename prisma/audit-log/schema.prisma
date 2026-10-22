@@ -70,11 +70,11 @@ model audit_events {
   occurred_at   DateTime @db.Timestamptz(6)
   received_at   DateTime @default(now()) @db.Timestamptz(6)
   actor_id      String
-  actor_type    String
+  actor_type    AuditActorType
   action        String
   resource_type String
   resource_id   String
-  result        String
+  result        AuditResult
   ip_address    String?
   user_agent    String?
   payload       Json
@@ -109,7 +109,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -122,4 +122,25 @@ model outbox_events {
   @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
   @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
   @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+enum AuditActorType {
+  user
+  anonymous
+  system
+}
+
+enum AuditResult {
+  success
+  failure
+  denied
+  detected
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
 }

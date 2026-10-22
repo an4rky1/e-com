@@ -36,7 +36,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -56,7 +56,7 @@ model policies {
   id            String   @id @db.Uuid
   role          String
   permission    String
-  effect        String
+  effect        PolicyEffect
   conditions    Json     @default("[]")
   priority      Int      @default(0)
   resource_type String?
@@ -90,4 +90,15 @@ model roles {
   role_assignments role_assignments[]
 }
 
+enum PolicyEffect {
+  allow
+  deny
+}
 
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

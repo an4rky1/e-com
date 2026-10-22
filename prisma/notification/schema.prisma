@@ -48,7 +48,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -68,8 +68,8 @@ model notifications {
   id             String    @id @db.Uuid
   user_id        String    @db.Uuid
   template       String
-  severity       String    @default("normal")
-  status         String    @default("unread")
+  severity       NotificationSeverity @default(info)
+  status         RecordStatus @default(unread)
   channels       Json
   variables      Json
   payload        Json
@@ -89,8 +89,8 @@ model notifications {
 model notification_deliveries {
   id              String    @id @default(uuid()) @db.Uuid
   notification_id String    @map("notification_id") @db.Uuid
-  channel         String
-  status          String    @default("pending")
+  channel         NotificationChannel
+  status          DeliveryStatus @default(pending)
   error           String?
   dispatched_at   DateTime? @map("dispatched_at") @db.Timestamptz(6)
   created_at      DateTime  @default(now()) @db.Timestamptz(6)
@@ -103,4 +103,35 @@ model notification_deliveries {
   @@map("notification_deliveries")
 }
 
+enum NotificationSeverity {
+  info
+  security
+  critical
+}
 
+enum RecordStatus {
+  unread
+  read
+}
+
+enum NotificationChannel {
+  email
+  sms
+  push
+  inapp
+}
+
+enum DeliveryStatus {
+  pending
+  sent
+  failed
+  skipped
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

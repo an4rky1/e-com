@@ -44,7 +44,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -65,7 +65,7 @@ model users {
   email          String
   display_name   String?
   locale         String    @default("en")
-  status         String    @default("pending_verification")
+  status         UserStatus @default(pending_verification)
   email_verified Boolean   @default(false)
   version        Int       @default(1)
   created_at     DateTime  @default(now()) @db.Timestamptz(6)
@@ -76,4 +76,18 @@ model users {
   @@index([status, created_at(sort: Desc)], map: "users_status_created_idx")
 }
 
+enum UserStatus {
+  pending_verification
+  active
+  suspended
+  locked
+  deleted
+}
 
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

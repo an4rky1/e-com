@@ -30,8 +30,8 @@ model auth_flow_steps {
 
 model auth_flows {
   id              String            @id @db.Uuid
-  strategy        String
-  status          String            @default("pending")
+  strategy        AuthFlowType
+  status          AuthFlowState @default(awaiting_credential)
   user_id         String?           @db.Uuid
   device_id       String?
   client_ip       String?
@@ -69,7 +69,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -84,4 +84,28 @@ model outbox_events {
   @@index([status, attempts], map: "outbox_events_sweep_idx")
 }
 
+enum AuthFlowState {
+  awaiting_credential
+  awaiting_2fa
+  awaiting_step_up
+  completed
+  failed
+  expired
+  cancelled
+}
 
+enum AuthFlowType {
+  login
+  register
+  reset_password
+  magic_link
+  step_up
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

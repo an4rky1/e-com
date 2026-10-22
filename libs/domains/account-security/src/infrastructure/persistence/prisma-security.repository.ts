@@ -100,7 +100,7 @@ export class PrismaSecurityRepository implements SecurityRepositoryPort {
     const pending = signals.map((signal) => ({ signal, events: signal.clearDomainEvents() }));
 
     await client.security_signals.createMany({
-      data: pending.map(({ signal }) => toSignalRow(signal.toRow())),
+      data: pending.map(({ signal }) => toSignalRow(signal)),
       skipDuplicates: true,
     });
 
@@ -339,11 +339,17 @@ function toLoginRow(row: LoginHistoryRow) {
   };
 }
 
-function toSignalRow(row: SecuritySignalRow) {
+function toSignalRow(signal: SecuritySignal) {
+  const row = signal.toRow();
   return {
     signal_id: row.signal_id,
     user_id: row.user_id,
-    signal_type: row.signal_type,
+    // `signal.type`, not `row.signal_type`. The row widens the field to `string` because that is
+    // what the read path faces — a stored row may hold anything, and `fromRow` narrows it back
+    // with `isSecuritySignalType`. This is the opposite direction: `signal.type` is already the
+    // VO's union and `security_signals.signal_type` is a Postgres enum whose members are exactly
+    // those three, so the value can be handed to Prisma without a cast.
+    signal_type: signal.type,
     risk_score: row.risk_score,
     detected_at: row.detected_at,
     // `details` is a JSON column, so it needs Prisma's Json input type; the cast is the

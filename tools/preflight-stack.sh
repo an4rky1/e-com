@@ -6,12 +6,11 @@
 # code failure. A missing dependency is not a test failure, so this exits with a distinct status
 # and a message that names the missing piece.
 #
-# Reachable is not enough: the tables also have to accept what the code writes. The databases
-# outlive any single checkout, so their CHECK constraints are re-aligned here on every run --
-# otherwise a value the domain gained since provisioning (the `locked` credential status, for
-# one) surfaces as a Postgres error inside a login and reads as an application bug. The
-# alignment runs in a child process, so its `set -e` cannot leak into the scripts that source
-# this file.
+# Reachable is not enough for a database that is merely up: it also has to hold the schema the
+# code reads and writes. It does not get checked here, because nothing may patch the schema on the
+# side any more — the vocabularies live in Postgres enum types that only `prisma migrate deploy`
+# applies (see `.github/workflows/ci.yml`), and a database left behind by an older checkout fails
+# loudly at boot instead of being silently repaired on every run.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,9 +27,3 @@ require() {
 require "postgres" "podman exec auth-postgres pg_isready -U postgres"
 require "redis" "podman exec auth-redis redis-cli ping"
 require "redpanda" "podman exec auth-redpanda rpk cluster health"
-
-if ! bash "$ROOT/tools/align-db-constraints.sh"; then
-  echo "preflight: a CHECK constraint does not accept a value the code writes." >&2
-  echo "preflight: the expected vocabulary is declared in $ROOT/tools/align-db-constraints.sh." >&2
-  exit 76
-fi

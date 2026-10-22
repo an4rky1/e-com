@@ -50,7 +50,7 @@ model outbox_events {
   topic               String
   payload             Json
   dedup_key           String
-  status              String               @default("pending")
+  status              OutboxStatus @default(pending)
   attempts            Int                  @default(0)
   next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
   last_error          String?
@@ -69,7 +69,7 @@ model outbox_events {
 model security_signals {
   signal_id   String   @id @db.Uuid
   user_id     String   @db.Uuid
-  signal_type String
+  signal_type SecuritySignalType
   risk_score  Int
   detected_at DateTime @default(now()) @db.Timestamptz(6)
   details     Json     @default("{}")
@@ -78,4 +78,16 @@ model security_signals {
   @@index([user_id, signal_type, detected_at(sort: Desc)], map: "security_signals_user_type_idx")
 }
 
+enum SecuritySignalType {
+  new_device_detected
+  suspicious_login_detected
+  anomaly_detected
+}
 
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

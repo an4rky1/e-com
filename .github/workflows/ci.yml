@@ -112,6 +112,14 @@ jobs:
               -c "CREATE DATABASE $db"
           done
 
+      - name: Apply the Prisma migrations
+        # Creating the database creates no tables: Prisma Migrate is the only thing in this
+        # repository that does, and without this step the first service to boot dies on
+        # `relation "users" does not exist`. The script owns the directory-name-to-database-name
+        # mapping (it is not the identity) and the engine paths, so a laptop and this job cannot
+        # disagree about which schema lands in which database.
+        run: bash tools/migrate.sh
+
       - name: Boot every application
         run: bash tools/boot-check.sh
 
