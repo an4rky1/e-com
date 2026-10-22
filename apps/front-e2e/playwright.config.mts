@@ -5,11 +5,10 @@ import { workspaceRoot } from '@nx/devkit';
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:3000';
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import 'dotenv/config';
+// The address the *harness* uses to reach the gateway. The browser never sees it: the front
+// proxies through its own origin, so this is only for the setup that creates an account and
+// stores a password before a test signs in. Exported by `tools/e2e-front.sh`.
+const gatewayURL = process.env['GATEWAY_URL'] ?? 'http://127.0.0.1:37000';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -35,41 +34,30 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     cwd: workspaceRoot,
+    env: {
+      // The front refuses to build its rewrite without a gateway address, and the browser
+      // only ever reaches `/api/*` on its own origin — so this is where the port is bound.
+      GATEWAY_URL: gatewayURL,
+    },
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // On NixOS the browsers Playwright downloads do not link: the shared libraries they
+        // need (`libglib`, `libnss`, …) are not on the system. A chromium built by nixpkgs
+        // carries its own; when the harness exports `CHROMIUM_EXECUTABLE` Playwright runs
+        // that binary instead of the cached one.
+        ...(process.env['CHROMIUM_EXECUTABLE']
+          ? {
+              launchOptions: {
+                executablePath: process.env['CHROMIUM_EXECUTABLE'],
+                args: ['--no-sandbox'],
+              },
+            }
+          : {}),
+      },
     },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    // Uncomment for mobile browsers support
-    /* {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    }, */
-
-    // Uncomment for branded browsers
-    /* {
-      name: 'Microsoft Edge',
-      use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    },
-    {
-      name: 'Google Chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    } */
   ],
 });
