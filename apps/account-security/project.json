@@ -1,0 +1,23 @@
+{
+  "name": "@app/account-security",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/account-security/src",
+  "projectType": "application",
+  "tags": [
+    "type:app"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/account-security/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/account-security/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/account-security/src/main.ts"
+      }
+    }
+  }
+}

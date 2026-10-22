@@ -5,6 +5,9 @@ dist
 tmp
 out-tsc
 
+# Prisma clients are generated per service by `npm run generate`
+libs/domains/*/src/generated/
+
 # dependencies
 node_modules
 

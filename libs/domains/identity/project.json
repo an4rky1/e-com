@@ -1,0 +1,27 @@
+{
+  "name": "@auth/domains/identity",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/identity/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:identity"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/identity/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/identity"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/identity/jest.config.ts"
+      }
+    }
+  }
+}

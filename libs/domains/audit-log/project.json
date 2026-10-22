@@ -1,0 +1,27 @@
+{
+  "name": "@auth/domains/audit-log",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/audit-log/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:audit-log"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/audit-log/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/audit-log"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/audit-log/jest.config.ts"
+      }
+    }
+  }
+}

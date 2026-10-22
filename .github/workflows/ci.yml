@@ -33,6 +33,9 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
+      # The Prisma clients are not committed (see .gitignore), so a clean checkout has none
+      # until they are built from each service's schema.
+      - run: npm run generate
       - run: npx playwright install --with-deps
 
       # Prepend any command with "nx record --" to record its logs to Nx Cloud
@@ -42,3 +45,89 @@ jobs:
       # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/ci/features/self-healing-ci
       - run: npx nx fix-ci
         if: always()
+
+  backend-e2e:
+    # Unit tests cannot see a misconfigured peer address, a domain value the database
+    # rejects, or an exception filter that reports every failure as "unavailable" — all three
+    # of those shipped green through `test` and were found only by starting the services.
+    # These scripts boot the real thing against real Postgres/Redpanda, so they stay in CI.
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redpanda:
+        image: redpandadata/redpanda:v24.2.2
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "rpk cluster health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          filter: tree:0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Same reason as the job above: the clients are generated, never committed.
+      - run: npm run generate
+
+      - name: Create the per-service databases
+        # The names are the ones the services actually connect to — `notify` for
+        # notification, `session_engine` for session-token — not the directory names.
+        # api-gateway is absent on purpose: it holds no state.
+        run: |
+          for db in identity access_control credential_vault session_engine auth_gateway \
+                    mfa api_key account_security notify audit_log; do
+            PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
+              -c "CREATE DATABASE $db"
+          done
+
+      - name: Boot every application
+        run: bash tools/boot-check.sh
+
+      - name: Registration, outbox and notification
+        run: bash tools/e2e-registration.sh
+
+      - name: Sign-in, session and token validation
+        run: bash tools/e2e-login.sh
+
+      - name: Public gateway edge
+        run: bash tools/e2e-gateway.sh
+
+      - name: Rate limiting at the edge
+        # Needs Redis reachable, which the service container above provides. The script boots
+        # only the edge: the guard runs before any peer is contacted, so a 429 is produced
+        # without any of the other services.
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: bash tools/e2e-rate-limit.sh

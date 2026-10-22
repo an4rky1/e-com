@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package account_security.v1;
+
+// Account security answers "does this login look like an attack". It signals and scores;
+// it never blocks on its own, because a false positive locks a legitimate user out.
+service AccountSecurityService {
+  rpc RecordLoginAttempt (RecordLoginAttemptRequest) returns (RecordLoginAttemptResponse);
+  rpc AssessLoginRisk (AssessLoginRiskRequest) returns (RiskAssessmentResponse);
+  rpc ListDevices (ListDevicesRequest) returns (ListDevicesResponse);
+  rpc RevokeDevice (RevokeDeviceRequest) returns (RevokeDeviceResponse);
+}
+
+message RecordLoginAttemptRequest {
+  string user_id = 1;
+  string email = 2;
+  bool succeeded = 3;
+  string ip_address = 4;
+  string user_agent = 5;
+  string device_fingerprint = 6;
+}
+
+message RecordLoginAttemptResponse {
+  bool locked = 1;
+  int32 failed_attempts = 2;
+  // Epoch millis at which a lockout expires; 0 when not locked.
+  int64 locked_until = 3;
+  string security_event_id = 4;
+  // Whole seconds until the lock lifts, and 0 when there is none. Sent rather than derived so
+  // the caller does not recompute a policy the service already owns — and so the number it
+  // shows agrees with the one the service will enforce.
+  int32 retry_after_seconds = 5;
+}
+
+message AssessLoginRiskRequest {
+  string user_id = 1;
+  string ip_address = 2;
+  string user_agent = 3;
+  string device_fingerprint = 4;
+}
+
+message RiskAssessmentResponse {
+  int32 score = 1;
+  // low, medium, high, critical.
+  string level = 2;
+  repeated string factors = 3;
+  repeated string recommendations = 4;
+}
+
+message ListDevicesRequest {
+  string user_id = 1;
+}
+
+message DeviceResponse {
+  string id = 1;
+  string name = 2;
+  string platform = 3;
+  string ip_address = 4;
+  string country = 5;
+  bool trusted = 6;
+  string last_seen_at = 7;
+}
+
+message ListDevicesResponse {
+  repeated DeviceResponse devices = 1;
+}
+
+message RevokeDeviceRequest {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message RevokeDeviceResponse {
+  bool ok = 1;
+}

@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package mfa.v1;
+
+// MFA answers "can this person prove a second factor". It does not decide whether one is
+// required — auth-gateway owns that, so a policy change never needs an mfa deploy.
+service MfaService {
+  // Whether the account has any usable factor. Cheap, and called on every login that reaches
+  // the credential step.
+  rpc GetStatus (GetStatusRequest) returns (GetStatusResponse);
+  rpc VerifyFactor (VerifyFactorRequest) returns (VerifyFactorResponse);
+  rpc BeginEnrollment (BeginEnrollmentRequest) returns (BeginEnrollmentResponse);
+  rpc ConfirmEnrollment (ConfirmEnrollmentRequest) returns (ConfirmEnrollmentResponse);
+  rpc Disable (DisableRequest) returns (DisableResponse);
+}
+
+message GetStatusRequest {
+  string user_id = 1;
+}
+
+message GetStatusResponse {
+  bool enabled = 1;
+  bool required = 2;
+  int32 recovery_codes_remaining = 3;
+  // JSON-encoded factor list, kept loose so adding a factor type is not a breaking change.
+  string factors = 4;
+}
+
+message VerifyFactorRequest {
+  string user_id = 1;
+  // An OTP or a backup code, exactly as presented — the caller must not have to know which.
+  string code = 2;
+  // Optional hint: which factor the caller meant. Ignored when absent.
+  string factor_id = 3;
+}
+
+message VerifyFactorResponse {
+  bool verified = 1;
+  // totp | backup_code
+  string method = 2;
+  string factor_id = 3;
+}
+
+message BeginEnrollmentRequest {
+  string user_id = 1;
+  string email = 2;
+  // totp is the only method today; kept explicit so adding another is not a wire change.
+  string method = 3;
+}
+
+message BeginEnrollmentResponse {
+  // Base32 secret. Only ever returned here, never stored or logged in the clear.
+  string secret = 1;
+  string otpauth_url = 2;
+  string qr_code_data_url = 3;
+}
+
+message ConfirmEnrollmentRequest {
+  string user_id = 1;
+  string code = 2;
+}
+
+message ConfirmEnrollmentResponse {
+  bool confirmed = 1;
+  // Shown to the user exactly once; stored only as digests.
+  repeated string backup_codes = 2;
+}
+
+message DisableRequest {
+  string user_id = 1;
+  string code = 2;
+}
+
+message DisableResponse {
+  bool disabled = 1;
+}

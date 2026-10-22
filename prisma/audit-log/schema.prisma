@@ -1,0 +1,125 @@
+/**
+ * audit-log service schema — source of truth, pulled from the live database DDL.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ *
+ * @remarks String columns rather than enums, deliberately, and validated in the domain layer
+ * instead: adding a result kind would otherwise be a `type` migration on a table that is the
+ * only record of what an operator may later have to defend in an incident.
+ *
+ * @remarks `audit_events` carries no `updated_at` and no delete path. The table is append-only
+ * by construction — there is no column a later statement could use to rewrite history, and
+ * `previous_hash`/`hash` make an out-of-band `UPDATE` detectable by `GET /audit/verify`
+ * rather than silent.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/audit-log/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Consumer-side idempotency, copied from the identity schema.
+///
+/// @remarks The key is `<topic>:<eventId>`. Kafka is at-least-once, so the same security event
+/// arrives twice whenever a pod dies between handling it and committing its offset; without
+/// this table every redelivery would append a second, hash-chained record saying the same
+/// thing happened.
+model idempotency_keys {
+  key        String   @id
+  response   Json
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idempotency_keys_created_idx")
+}
+
+/// The current head of each hash chain.
+///
+/// @remarks Not optional bookkeeping. A head kept in process memory is defeated by a restart
+/// and by a second replica: both would start a fresh chain from genesis and two partitions
+/// would exist under one key, so nothing that reads the log could tell which record came
+/// first. The stored head is what makes a chain verifiable across restarts and across the
+/// fleet — it is the only place the chain's current position is recorded.
+model audit_chain_heads {
+  partition_key String   @id
+  head_hash     String
+  event_count   Int      @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([updated_at], map: "audit_chain_heads_updated_idx")
+}
+
+/// One append-only audit record.
+///
+/// @remarks `partition_key` + `sequence` is the chain's total order. `sequence` is assigned
+/// under a row lock on `audit_chain_heads`, so two writers to the same partition cannot mint
+/// the same position, and `occurred_at` — which the producer controls and which two records
+/// can legitimately share — is never the ordering key.
+model audit_events {
+  id            String   @id @db.Uuid
+  partition_key String
+  sequence      Int
+  occurred_at   DateTime @db.Timestamptz(6)
+  received_at   DateTime @default(now()) @db.Timestamptz(6)
+  actor_id      String
+  actor_type    String
+  action        String
+  resource_type String
+  resource_id   String
+  result        String
+  ip_address    String?
+  user_agent    String?
+  payload       Json
+  trace_id      String
+  previous_hash String
+  hash          String
+
+  @@unique([partition_key, sequence], map: "audit_events_chain_seq_idx")
+  @@index([actor_id, occurred_at(sort: Desc)], map: "audit_events_actor_occurred_idx")
+  @@index([action, occurred_at(sort: Desc)], map: "audit_events_action_occurred_idx")
+  @@index([resource_type, resource_id, occurred_at(sort: Desc)], map: "audit_events_resource_occurred_idx")
+  @@index([result, occurred_at(sort: Desc)], map: "audit_events_result_occurred_idx")
+  @@index([occurred_at(sort: Desc)], map: "audit_events_occurred_idx")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              String               @default("pending")
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@auth/domains/mfa",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/mfa/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:mfa"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/mfa/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/mfa"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/mfa/jest.config.ts"
+      }
+    }
+  }
+}

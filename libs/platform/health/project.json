@@ -1,0 +1,26 @@
+{
+  "name": "@auth/platform/health",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/platform/health/src",
+  "projectType": "library",
+  "tags": [
+    "type:platform"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/platform/health/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/platform/health"
+      ],
+      "options": {
+        "jestConfig": "libs/platform/health/jest.config.ts"
+      }
+    }
+  }
+}

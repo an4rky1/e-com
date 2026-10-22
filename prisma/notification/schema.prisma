@@ -1,0 +1,106 @@
+/**
+ * notification service schema — source of truth, pulled from the live database DDL.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ *
+ * @remarks Three kinds of row, and they are not interchangeable:
+ *
+ * - `outbox_events` holds rows the relay publishes to Kafka. It also holds two terminal
+ *   (`status = 'published'`) marker kinds — `notification.consumer.claim` for dedup and the
+ *   `notification.dispatched` announcement once it is published — which the relay never claims
+ *   because it only claims `pending`.
+ * - `notifications` holds records: what this service tried to tell a user, and what happened.
+ *   A record is *not* an event and must never be written to `outbox_events`; a `pending` row
+ *   there would be published to a topic every other service subscribes to.
+ * - `notification_deliveries` holds one row per channel per notification, so "the email
+ *   failed but the push arrived" is a query rather than a JSON path.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/notification/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              String               @default("pending")
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+/// One durable notification record. Keyed by the notification id, so a re-save updates.
+model notifications {
+  id             String    @id @db.Uuid
+  user_id        String    @db.Uuid
+  template       String
+  severity       String    @default("normal")
+  status         String    @default("unread")
+  channels       Json
+  variables      Json
+  payload        Json
+  deduplicated   Boolean   @default(false)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @db.Timestamptz(6)
+  read_at        DateTime? @db.Timestamptz(6)
+
+  deliveries notification_deliveries[]
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@index([status])
+  @@map("notifications")
+}
+
+/// One channel's attempt. The unique key is what makes a re-save an update, not a second row.
+model notification_deliveries {
+  id              String    @id @default(uuid()) @db.Uuid
+  notification_id String    @map("notification_id") @db.Uuid
+  channel         String
+  status          String    @default("pending")
+  error           String?
+  dispatched_at   DateTime? @map("dispatched_at") @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+
+  notification notifications @relation(fields: [notification_id], references: [id], onDelete: Cascade)
+
+  @@unique([notification_id, channel])
+  @@index([status])
+  @@map("notification_deliveries")
+}
+
+

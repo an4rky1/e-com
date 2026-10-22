@@ -1,0 +1,106 @@
+/**
+ * mfa service schema — source of truth, pulled from the live database DDL.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/mfa/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model mfa_factors {
+  id                        String              @id @db.Uuid
+  user_id                   String              @db.Uuid
+  method                    String
+  status                    String              @default("pending")
+  account_label             String?
+  destination_hint          String?
+  secret_ciphertext         String?
+  secret_hash               String?
+  pending_secret_kind       String?
+  pending_secret_value      String?
+  pending_secret_expires_at DateTime?           @db.Timestamptz(6)
+  failed_attempts           Int                 @default(0)
+  locked_until              DateTime?           @db.Timestamptz(6)
+  created_at                DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime            @default(now()) @db.Timestamptz(6)
+  activated_at              DateTime?           @db.Timestamptz(6)
+  last_verified_at          DateTime?           @db.Timestamptz(6)
+  version                   Int                 @default(1)
+  totp_used_counters        totp_used_counters?
+
+  @@index([user_id, created_at(sort: Desc)], map: "mfa_factors_user_created_idx")
+  @@index([user_id, method, created_at(sort: Desc)], map: "mfa_factors_user_method_created_idx")
+}
+
+model mfa_recovery_code_sets {
+  set_id             String               @id @db.Uuid
+  user_id            String               @unique(map: "mfa_recovery_code_sets_user_unique") @db.Uuid
+  salt               String
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  regenerated_at     DateTime?            @db.Timestamptz(6)
+  mfa_recovery_codes mfa_recovery_codes[]
+}
+
+model mfa_recovery_codes {
+  set_id                 String                 @db.Uuid
+  code_index             Int
+  digest                 String
+  consumed_at            DateTime?              @db.Timestamptz(6)
+  mfa_recovery_code_sets mfa_recovery_code_sets @relation(fields: [set_id], references: [set_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([set_id, code_index])
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              String               @default("pending")
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+model totp_used_counters {
+  factor_id    String      @id @db.Uuid
+  last_counter BigInt
+  updated_at   DateTime    @default(now()) @db.Timestamptz(6)
+  mfa_factors  mfa_factors @relation(fields: [factor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+

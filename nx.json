@@ -5,9 +5,8 @@
     "default": ["{projectRoot}/**/*", "sharedGlobals"],
     "production": [
       "default",
-      "!{projectRoot}/.eslintrc.json",
       "!{projectRoot}/eslint.config.mjs",
-      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
       "!{projectRoot}/tsconfig.spec.json",
       "!{projectRoot}/jest.config.[jt]s",
       "!{projectRoot}/src/test-setup.[jt]s",
@@ -19,9 +18,7 @@
     {
       "plugin": "@nx/js/typescript",
       "options": {
-        "typecheck": {
-          "targetName": "typecheck"
-        },
+        "typecheck": { "targetName": "typecheck" },
         "build": {
           "targetName": "build",
           "configName": "tsconfig.lib.json",
@@ -43,34 +40,34 @@
     },
     {
       "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
-      }
+      "options": { "targetName": "lint" }
     },
     {
       "plugin": "@nx/playwright/plugin",
-      "options": {
-        "targetName": "e2e"
-      }
+      "options": { "targetName": "e2e" }
     },
     {
       "plugin": "@nx/jest/plugin",
-      "options": {
-        "targetName": "test"
-      }
+      "options": { "targetName": "test" }
     }
   ],
   "targetDefaults": {
-    "test": {
-      "dependsOn": ["^build"]
-    }
+    "build": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": ["production", "^production", "{workspaceRoot}/tsconfig.base.json"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "cache": true
+    },
+    "serve": { "cache": false },
+    "test": { "cache": true },
+    "lint": { "cache": true }
   },
   "generators": {
     "@nx/next": {
-      "application": {
-        "style": "scss",
-        "linter": "eslint"
-      }
+      "application": { "style": "scss", "linter": "eslint" }
     }
   }
 }

@@ -1,0 +1,17 @@
+{
+  "name": "@auth/contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/contracts/src",
+  "projectType": "library",
+  "tags": [
+    "type:contracts"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/contracts/tsconfig.lib.json --noEmit"
+      }
+    }
+  }
+}

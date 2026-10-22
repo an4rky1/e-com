@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "node16",
+    "moduleResolution": "node16",
+    "composite": false,
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "declarationMap": false,
+    "isolatedModules": true,
+    "sourceMap": true,
+    "rootDir": ".",
+    // TS 6 no longer needs baseUrl for `paths` (they resolve relative to this file), but
+    // runtime resolvers — ts-node/tsconfig-paths, webpack aliases, jest — still anchor on it.
+    // Without it, `@auth/*` type-checks but fails to resolve when the app actually starts.
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "strictPropertyInitialization": false,
+    "noUnusedLocals": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node", "jest"]
+  }
+}

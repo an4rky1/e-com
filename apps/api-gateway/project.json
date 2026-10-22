@@ -1,0 +1,23 @@
+{
+  "name": "@app/api-gateway",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-gateway/src",
+  "projectType": "application",
+  "tags": [
+    "type:app"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/api-gateway/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/api-gateway/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/api-gateway/src/main.ts"
+      }
+    }
+  }
+}

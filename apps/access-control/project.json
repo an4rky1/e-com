@@ -1,0 +1,23 @@
+{
+  "name": "@app/access-control",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/access-control/src",
+  "projectType": "application",
+  "tags": [
+    "type:app"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/access-control/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/access-control/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/access-control/src/main.ts"
+      }
+    }
+  }
+}

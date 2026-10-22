@@ -1,0 +1,97 @@
+/**
+ * session-token service schema — source of truth, pulled from the live database DDL.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/session-token/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              String               @default("pending")
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model refresh_tokens {
+  id                  String    @id @db.Uuid
+  session_id          String    @db.Uuid
+  family_id           String    @db.Uuid
+  token_type          String
+  jti                 String    @unique(map: "refresh_tokens_jti_unique")
+  token_digest        String?
+  status              String    @default("active")
+  issued_at           DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at          DateTime  @db.Timestamptz(6)
+  rotated_to_token_id String?   @db.Uuid
+  retired_at          DateTime? @db.Timestamptz(6)
+  revoked_at          DateTime? @db.Timestamptz(6)
+  version             Int       @default(1)
+  sessions            sessions  @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([family_id, status], map: "refresh_tokens_family_idx")
+  @@index([session_id], map: "refresh_tokens_session_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sessions {
+  id                 String           @id @db.Uuid
+  user_id            String           @db.Uuid
+  token_family_id    String           @db.Uuid
+  device_id          String?
+  status             String           @default("active")
+  issued_at          DateTime         @default(now()) @db.Timestamptz(6)
+  expires_at         DateTime         @db.Timestamptz(6)
+  refresh_expires_at DateTime         @db.Timestamptz(6)
+  revoked_at         DateTime?        @db.Timestamptz(6)
+  revoke_reason      String?
+  client_ip          String?
+  user_agent         String?
+  version            Int              @default(1)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  refresh_tokens     refresh_tokens[]
+
+  @@index([token_family_id], map: "sessions_family_idx")
+}
+
+

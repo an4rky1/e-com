@@ -1,0 +1,23 @@
+{
+  "name": "@app/audit-log",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/audit-log/src",
+  "projectType": "application",
+  "tags": [
+    "type:app"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/audit-log/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/audit-log/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/audit-log/src/main.ts"
+      }
+    }
+  }
+}

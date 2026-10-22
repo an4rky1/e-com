@@ -1,0 +1,27 @@
+{
+  "name": "@auth/domains/api-key",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/api-key/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:api-key"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/api-key/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/api-key"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/api-key/jest.config.ts"
+      }
+    }
+  }
+}

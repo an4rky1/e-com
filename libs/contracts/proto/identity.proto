@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package identity.v1;
+
+// Identity answers "who is this user" — the question every other auth service asks
+// before it can make a decision. It is read-mostly and never owns credentials.
+service IdentityService {
+  rpc GetUser (GetUserRequest) returns (UserResponse);
+  rpc GetUserByEmail (GetUserByEmailRequest) returns (UserResponse);
+  // Creates the account record, and nothing else: no credential, no session, no role. The
+  // edge in front of this service calls it so registration is reachable from one origin.
+  rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+  // Resolves an opaque principal (a verified token, a session id, an internal caller)
+  // into the user behind it. Used by the gateway on every authenticated request.
+  rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
+  rpc UpdateUserStatus (UpdateUserStatusRequest) returns (UserResponse);
+}
+
+message UserResponse {
+  string id = 1;
+  string email = 2;
+  string display_name = 3;
+  // JSON-encoded UserStatus union, kept loose so adding a status is not a breaking change.
+  string status = 4;
+  bool email_verified = 5;
+  repeated string roles = 6;
+  bool deleted = 7;
+  string created_at = 8;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserByEmailRequest {
+  string email = 1;
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string display_name = 2;
+  // BCP-47 tag; empty means "let identity decide".
+  string locale = 3;
+  // Where the signup came from, e.g. `web`. Recorded, never trusted for authorisation.
+  string source = 4;
+}
+
+message CreateUserResponse {
+  UserResponse user = 1;
+}
+
+message AuthenticateRequest {
+  // Exactly one of these identifies the caller.
+  string access_token = 1;
+  string session_id = 2;
+  string api_key = 3;
+}
+
+message AuthenticateResponse {
+  bool authenticated = 1;
+  UserResponse user = 2;
+  // Which credential proved the identity.
+  string strategy = 3;
+  string session_id = 4;
+}
+
+message UpdateUserStatusRequest {
+  string user_id = 1;
+  string status = 2;
+  string reason = 3;
+}

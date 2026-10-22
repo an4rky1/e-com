@@ -1,0 +1,26 @@
+{
+  "name": "@auth/platform/shutdown",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/platform/shutdown/src",
+  "projectType": "library",
+  "tags": [
+    "type:platform"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/platform/shutdown/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/platform/shutdown"
+      ],
+      "options": {
+        "jestConfig": "libs/platform/shutdown/jest.config.ts"
+      }
+    }
+  }
+}

@@ -1,0 +1,115 @@
+import { Module } from '@nestjs/common';
+import type { DynamicModule } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import { PrismaService } from '@auth/infra/prisma';
+import {
+  createOutboxModule,
+  PrismaOutboxRepository,
+  type EventPublisher,
+} from '@auth/infra/outbox';
+import { PrismaClient } from './generated/prisma/client';
+import { IssueTokensHandler } from './application/commands/issue-tokens.handler';
+import { RotateTokensHandler } from './application/commands/rotate-tokens.handler';
+import { RefreshTokenReuseGuard } from './application/commands/refresh-token-reuse.guard';
+import {
+  RevokeAllSessionsHandler,
+  RevokeSessionHandler,
+} from './application/commands/revoke-session.command';
+import { ValidateAccessTokenHandler } from './application/commands/validate-access-token.handler';
+import { GetSessionByIdHandler } from './application/queries/session.queries';
+import { SessionTokenService } from './application/facade/session-token.service';
+import { SESSION_REPOSITORY } from './domain/ports/session-repository.port';
+import { PrismaSessionRepository } from './infrastructure/persistence/prisma-session.repository';
+import { SessionTokenHealthIndicator } from './session-token.health';
+import {
+  SESSION_TOKEN_CONFIG,
+  SESSION_TOKEN_PRISMA,
+  sessionTokenSchema,
+  type SessionTokenConfig,
+} from './session-token.config';
+import { SessionController } from './presentation/session.controller';
+import { SessionTokenGrpcController } from './presentation/grpc/session-token.grpc.controller';
+
+@Module({})
+export class SessionTokenModule {}
+
+export interface SessionTokenModuleOptions {
+  /** Transport the outbox publishes through; supplied by the app, which owns process wiring. */
+  publisher: EventPublisher;
+}
+
+/**
+ * Assembles the session-token service.
+ *
+ * @remarks `SessionTokenGrpcController` is registered here but attached in the app's
+ * bootstrap with `mergeMicroservice`: a microservice has to join an existing HTTP server
+ * rather than open its own.
+ *
+ * @remarks The outbox is wired here rather than left to the host. `OutboxModule` is global,
+ * and a global module cannot see a provider declared by the module that imports it — so an
+ * outbox repository supplied "from outside" is never injected and the service fails to boot
+ * with `UnknownDependenciesException`.
+ */
+export function createSessionTokenModule(
+  options: SessionTokenModuleOptions,
+): DynamicModule {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    // Refusing to boot beats a wrong default: the session-token client must never be
+    // able to point at another service's database.
+    throw new Error('DATABASE_URL is required by the session-token module');
+  }
+
+  // ONE client shared by the repositories and the outbox. A second client opens a second
+  // connection and commits independently, which is precisely what the outbox exists to prevent.
+  const prisma = new PrismaService(new PrismaClient({ datasourceUrl: databaseUrl }));
+  const outboxRepository = new PrismaOutboxRepository(prisma);
+
+  return {
+    module: SessionTokenModule,
+    imports: [
+      CqrsModule.forRoot(),
+      createOutboxModule({ repository: outboxRepository, publisher: options.publisher }),
+    ],
+    controllers: [SessionController, SessionTokenGrpcController],
+    providers: [
+      { provide: SESSION_TOKEN_PRISMA, useValue: prisma },
+      { provide: SESSION_REPOSITORY, useClass: PrismaSessionRepository },
+      { provide: SESSION_TOKEN_CONFIG, useFactory: () => resolveSessionTokenConfig() },
+
+      IssueTokensHandler,
+      RefreshTokenReuseGuard,
+      RotateTokensHandler,
+      RevokeSessionHandler,
+      RevokeAllSessionsHandler,
+      ValidateAccessTokenHandler,
+      GetSessionByIdHandler,
+      SessionTokenService,
+      SessionTokenHealthIndicator,
+    ],
+    // The gRPC controller is deliberately not exported: it is attached to the microservice by
+    // the app's bootstrap, not injected by a consumer.
+    exports: [
+      SessionTokenService,
+      SessionTokenHealthIndicator,
+      SESSION_REPOSITORY,
+    ],
+  };
+}
+
+function resolveSessionTokenConfig(): SessionTokenConfig {
+  const env = readNamespacedEnv('SESSION', sessionTokenSchema, process.env);
+  return resolveModuleConfig(
+    {
+      accessTokenTtlSec: env.ACCESS_TOKEN_TTL_SEC,
+      refreshTokenTtlSec: env.REFRESH_TOKEN_TTL_SEC,
+      clockSkewSec: env.CLOCK_SKEW_SEC,
+      reuseRevokesFamily: env.REUSE_REVOKES_FAMILY,
+      accessTokenSigningKey: env.ACCESS_TOKEN_SIGNING_KEY,
+    },
+    {},
+  );
+}
+
+export { SESSION_TOKEN_CONFIG, SESSION_TOKEN_PRISMA };

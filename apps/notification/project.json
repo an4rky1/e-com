@@ -1,0 +1,23 @@
+{
+  "name": "@app/notification",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/notification/src",
+  "projectType": "application",
+  "tags": [
+    "type:app"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/notification/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/notification/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/notification/src/main.ts"
+      }
+    }
+  }
+}

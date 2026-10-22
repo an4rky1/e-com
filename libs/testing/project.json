@@ -1,0 +1,26 @@
+{
+  "name": "@auth/testing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/testing/src",
+  "projectType": "library",
+  "tags": [
+    "type:testing"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/testing/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/testing"
+      ],
+      "options": {
+        "jestConfig": "libs/testing/jest.config.ts"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@auth/domains/session-token",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/session-token/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:session-token"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/session-token/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/session-token"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/session-token/jest.config.ts"
+      }
+    }
+  }
+}

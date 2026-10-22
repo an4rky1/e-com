@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package access_control.v1;
+
+// Access control answers "what is this user allowed to do". It never authenticates.
+service AccessControlService {
+  rpc GetPermissions (GetPermissionsRequest) returns (GetPermissionsResponse);
+  rpc CheckPermission (CheckPermissionRequest) returns (CheckPermissionResponse);
+  rpc GrantRole (GrantRoleRequest) returns (GrantRoleResponse);
+  rpc RevokeRole (RevokeRoleRequest) returns (RevokeRoleResponse);
+  rpc EvaluatePolicy (EvaluatePolicyRequest) returns (EvaluatePolicyResponse);
+}
+
+message GetPermissionsRequest {
+  string user_id = 1;
+}
+
+message GetPermissionsResponse {
+  repeated string roles = 1;
+  repeated string permissions = 2;
+}
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string permission = 2;
+  // Subject attributes for ABAC rules. Deny wins over allow.
+  map<string, string> context = 3;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
+  // Why the decision went the way it did — surfaced to operators, not to end users.
+  string reason = 2;
+}
+
+message GrantRoleRequest {
+  string user_id = 1;
+  string role = 2;
+  string granted_by = 3;
+}
+
+message GrantRoleResponse {
+  repeated string roles = 1;
+}
+
+message RevokeRoleRequest {
+  string user_id = 1;
+  string role = 2;
+}
+
+message RevokeRoleResponse {
+  repeated string roles = 1;
+}
+
+message EvaluatePolicyRequest {
+  string user_id = 1;
+  string policy = 2;
+  map<string, string> resource = 3;
+  map<string, string> context = 4;
+}
+
+message EvaluatePolicyResponse {
+  bool allowed = 1;
+  string reason = 2;
+}
