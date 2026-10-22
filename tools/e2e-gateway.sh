@@ -33,6 +33,9 @@ export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
 export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
 export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
 export MFA_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
+# Shared by every process this script boots: the token each gRPC peer presents and each gRPC
+# controller checks. One value, because one trust boundary serves all of them.
+export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
 
 LOG=/tmp/opencode
 
@@ -209,7 +212,7 @@ echo "==> 7. sign in with the correct password, set directly in the vault"
 TS_NODE_PROJECT=tsconfig.backend.base.json \
   CREDENTIAL_VAULT_GRPC_URL=localhost:${GRPC[credential-vault]} IDENTITY_GRPC_URL=localhost:${GRPC[identity]} \
   SESSION_TOKEN_GRPC_URL=localhost:${GRPC[session-token]} MFA_GRPC_URL=localhost:39006 \
-  npx ts-node --transpile-only tools/e2e/grpc-flow.ts set-password "$USER_ID" "$PASSWORD" \
+  npx ts-node --transpile-only -r tsconfig-paths/register tools/e2e/grpc-flow.ts set-password "$USER_ID" "$PASSWORD" \
   > "$LOG/set-password.out" 2>&1 || printf '  (set-password output: %s)\n' "$(tr -d '\n' < "$LOG/set-password.out")"
 
 LOGIN=$(curl -s -m 15 -X POST "$GW/auth/login" -H 'Content-Type: application/json' \

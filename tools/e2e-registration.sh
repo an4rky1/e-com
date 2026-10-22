@@ -98,6 +98,10 @@ kafka_cli group delete "$KAFKA_GROUP_ID" --brokers localhost:9092 >/dev/null 2>&
 
 echo "==> booting notification (consumer) and identity (producer)"
 
+# identity serves gRPC, and a gRPC controller refuses to build without the token it presents to
+# and checks from its peers.
+export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
+
 DATABASE_URL="$NOTIFY_DB" SERVICE_NAME=notification PORT=$NOTIFY_PORT \
   KAFKA_GROUP_ID="$KAFKA_GROUP_ID" \
   NOTIFICATION_STORE_MODE=prisma \

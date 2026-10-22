@@ -34,6 +34,9 @@ export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
 export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
 export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
 export MFA_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
+# Shared by every process this script boots: the token each gRPC peer presents and each gRPC
+# controller checks.
+export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
 
 # Two randomised blocks, drawn independently: a fixed HTTP block and a fixed gRPC block derived
 # from it meant any other run that happened to share the base collided on every port, and the
@@ -111,7 +114,7 @@ export AUTH_GATEWAY_GRPC_URL="localhost:$GATEWAY_GRPC"
 flow() { # step arg1 arg2
   local out err
   out=$(TS_NODE_PROJECT="$ROOT/tsconfig.backend.base.json" \
-        npx ts-node --transpile-only "$FLOW" "$@" 2>/tmp/opencode/flow-err.log)
+        npx ts-node --transpile-only -r tsconfig-paths/register "$FLOW" "$@" 2>/tmp/opencode/flow-err.log)
   if [ -z "$out" ]; then
     # Surface the reason once: a silently empty response is the hardest failure to debug,
     # because every assertion downstream just reports "missing".

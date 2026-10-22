@@ -17,6 +17,9 @@ shell_source="$(dirname "$0")/preflight-stack.sh"
 
 export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
 export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
+# The edge presents this token on every peer call and refuses to boot without one; the value is
+# throwaway because nothing here reaches a real peer.
+export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
 
 # Low enough to trip quickly, high enough that the health checks and the two warm-up calls land
 # under it. A limit that only the test understands is a limit nothing else can reason about.

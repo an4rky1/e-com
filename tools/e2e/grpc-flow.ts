@@ -10,6 +10,7 @@
  * package loaded but not addressed, or a method path that names a service nobody declared.
  */
 import { createStaticGrpcChannel } from '../../libs/infra/grpc/src/static-grpc-channel';
+import { readServiceToken } from '../../libs/infra/grpc/src/service-token';
 import { join } from 'node:path';
 
 const PROTO_DIR = join(__dirname, '..', '..', 'libs', 'contracts', 'proto');
@@ -35,6 +36,9 @@ const channel = createStaticGrpcChannel({
   url: addresses['identity.v1'],
   addresses,
   defaultDeadlineMs: 10_000,
+  // The services this drives run the same guard as production: a call presenting nothing is
+  // refused. The script that boots them exports the token, so it is also the token they answer to.
+  serviceToken: readServiceToken(),
 });
 
 const call = async <TResponse>(

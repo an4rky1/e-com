@@ -58,6 +58,9 @@ export VAULT_PEPPER="$(head -c 32 /dev/urandom | base64)"
 export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
 export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
 export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
+# Every gRPC controller checks this token and every channel presents it, so a service with no
+# value refuses to boot on both ends. The check supplies a throwaway one, as above.
+export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
 
 pass=0; fail=0; failed=()
 
