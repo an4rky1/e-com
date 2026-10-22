@@ -5,6 +5,7 @@ import {
   type GrpcCallOptions,
   type GrpcStatusCode,
 } from './grpc-channel.port';
+import { withServiceToken } from './service-token';
 
 export interface HttpLikeResponse {
   status: number;
@@ -43,24 +44,38 @@ export class NestGrpcChannel implements GrpcChannel, OnModuleDestroy {
   private readonly logger = new Logger(NestGrpcChannel.name);
   private closed = false;
 
-  constructor(private readonly client: unknown) {}
+  /**
+   * @param serviceToken - presented on every call this channel makes. Optional because the
+   * channel is a transport and the token is a policy, but applied here so that no caller can
+   * omit it by accident: both implementations of {@link GrpcChannel} attach it the same way.
+   */
+  constructor(
+    private readonly client: unknown,
+    private readonly serviceToken?: string,
+  ) {}
 
   unary<TRequest extends object, TResponse>(
     method: string,
     request: TRequest,
     options: GrpcCallOptions,
   ): Promise<TResponse> {
-    const service = method.split('/')[2]?.split('.').slice(0, 2).join('.').replace('.', '');
-    const methodName = method.split('/')[2]?.split('.')[2];
+    // `/package.Service/Method` -> service, method. `ClientGrpc.getService` is keyed by the
+    // service name as the proto declares it (`IdentityService`), and the methods it returns
+    // are keyed by the method name — so the second segment is split on its *last* dot, and
+    // the two halves are kept apart. Assembling a name by stripping dots and re-casing
+    // guesses at a shape Nest never had, and produces a lookup that misses for no visible
+    // reason: the method is present in the proto and absent from the object.
+    const [, qualified = '', methodName = ''] = method.split('/');
+    const serviceName = qualified.slice(qualified.lastIndexOf('.') + 1);
 
-    if (!service || !methodName) {
+    if (!serviceName || !methodName) {
       return Promise.reject(new Error(`Malformed gRPC method path: "${method}"`));
     }
 
     const container = this.client as {
       getService(name: string): Record<string, ClientMethodDefinition>;
     };
-    const clientMethod = container.getService(service)?.[methodName];
+    const clientMethod = container.getService(serviceName)?.[methodName];
 
     if (!clientMethod) {
       return Promise.reject(
@@ -72,7 +87,7 @@ export class NestGrpcChannel implements GrpcChannel, OnModuleDestroy {
       clientMethod.call(
         clientMethod,
         request,
-        toMetadata(options.metadata),
+        toMetadata(withServiceToken(options.metadata, this.serviceToken)),
         { deadline: new Date(options.deadline) },
         (error, response) => {
           if (error) {

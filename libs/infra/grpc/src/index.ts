@@ -26,7 +26,14 @@ export {
   GrpcMethod,
   loadPackageDefinitionFor,
   loadServiceDefinition,
-} from './grpc-server';export {
+} from './grpc-server';
+export {
+  GRPC_SERVICE_TOKEN_METADATA_KEY,
+  readServiceToken,
+  withServiceToken,
+} from './service-token';
+export { GrpcServiceTokenGuard } from './service-token.guard';
+export {
   StaticGrpcChannel,
   createStaticGrpcChannel,
 } from './static-grpc-channel';

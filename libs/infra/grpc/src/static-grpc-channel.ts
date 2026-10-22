@@ -6,6 +6,7 @@ import {
 } from '@grpc/grpc-js';
 import { GrpcRetryRegistry, type GrpcCallOptions, type GrpcChannel, type ConnectivityState } from './grpc-channel.port';
 import { loadPackageDefinitionFor } from './grpc-server';
+import { withServiceToken } from './service-token';
 
 /**
  * A loaded client's methods, keyed by method name.
@@ -48,6 +49,12 @@ export class StaticGrpcChannel implements GrpcChannel {
     private readonly clientsByPackage: Map<string, PackageClients>,
     private readonly retryRegistry: GrpcRetryRegistry,
     private readonly defaultDeadlineMs: number,
+    /**
+     * Presented on every call. Optional for the same reason as on `NestGrpcChannel`: the token
+     * is policy, the channel is transport, and a channel that silently attaches nothing is how
+     * one of the two implementations ends up unauthenticated while the other is not.
+     */
+    private readonly serviceToken?: string,
   ) {}
 
   async unary<TRequest extends object, TResponse>(
@@ -96,7 +103,7 @@ export class StaticGrpcChannel implements GrpcChannel {
       // `(request, metadata, options, callback)` — the only form that carries a deadline.
       client[methodName](
         request,
-        toMetadata(options?.metadata),
+        toMetadata(withServiceToken(options?.metadata, this.serviceToken)),
         { deadline: new Date(deadline) },
         (error: Error | null, response: unknown) => {
           if (error) {
@@ -203,6 +210,8 @@ export function createStaticGrpcChannel(options: {
   retryRegistry?: GrpcRetryRegistry;
   defaultDeadlineMs?: number;
   insecure?: boolean;
+  /** The shared secret placed in `x-service-token` on every call this channel makes. */
+  serviceToken?: string;
 }): GrpcChannel {
   const paths = options.protoPaths ?? (options.protoPath ? [options.protoPath] : []);
   if (paths.length === 0) {
@@ -265,5 +274,6 @@ export function createStaticGrpcChannel(options: {
     clientsByPackage,
     registry,
     options.defaultDeadlineMs ?? 3_000,
+    options.serviceToken,
   );
 }

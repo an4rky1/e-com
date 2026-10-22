@@ -1,9 +1,10 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UseGuards } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import type { ServiceDefinition } from '@grpc/grpc-js';
 import { loadSync, type Options } from '@grpc/proto-loader';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
+import { GrpcServiceTokenGuard } from './service-token.guard';
 
 /**
  * Proto loading, done once and cached.
@@ -80,8 +81,16 @@ export function loadServiceDefinition(protoPath: string): ServiceDefinition {
  * `design:paramtypes`, so Nest constructs it with zero arguments and every injected dependency
  * is `undefined`. The service boots cleanly and fails on the first request — which is why this
  * note is here rather than only in the subclasses.
+ *
+ * @remarks The service-token guard is declared here rather than in each service's module, for
+ * the same reason the base class exists: authentication that can be forgotten is authentication
+ * that will be. `@UseGuards` is read through the prototype chain, so a subclass inherits it
+ * without declaring anything — `spec/service-token.guard.spec.ts` asserts exactly that against
+ * this repository's Nest version, because "Nest reads parent metadata" is the kind of claim that
+ * is true until a dependency moves.
  */
 @Controller()
+@UseGuards(GrpcServiceTokenGuard)
 export abstract class GrpcControllerBase {
   protected readonly logger = new Logger(this.constructor.name);
 }
