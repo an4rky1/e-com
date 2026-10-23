@@ -28,6 +28,8 @@ export function createKafkaPublisher(env: NodeJS.ProcessEnv = process.env): Even
     sessionTimeoutMs: parsed.SESSION_TIMEOUT_MS,
     maxAttempts: parsed.MAX_ATTEMPTS,
     retryBaseMs: parsed.RETRY_BASE_MS,
+    ssl: parsed.SSL,
+    saslMechanism: parsed.SASL_MECHANISM,
   };
 
   if (!config.enabled) {

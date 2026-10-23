@@ -1,8 +1,7 @@
-import { DynamicModule, Global, Module } from '@nestjs/common';
+import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readNamespacedEnv } from '@auth/platform/config';
 import {
-  Defaults,
   ENV_PREFIX,
   kafkaSchema,
   type KafkaConfig,
@@ -32,6 +31,8 @@ function mapEnv(env: KafkaEnvConfig): KafkaConfig {
     sessionTimeoutMs: env.SESSION_TIMEOUT_MS,
     maxAttempts: env.MAX_ATTEMPTS,
     retryBaseMs: env.RETRY_BASE_MS,
+    ssl: env.SSL,
+    saslMechanism: env.SASL_MECHANISM,
   };
 }
 

@@ -16,7 +16,7 @@ import {
 import { dlqTopicFor, retryTopicFor, type Topic } from '@auth/contracts';
 import type { EventPublisher } from '@auth/infra/outbox';
 import { KAFKA_CONFIG } from './kafka.tokens';
-import type { KafkaConfig } from './kafka.config';
+import { clientSecurity, type KafkaConfig } from './kafka.config';
 
 /**
  * Kafka producer, used as the outbox's transport.
@@ -41,6 +41,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy, Even
     const kafka = new Kafka({
       clientId: this.config.clientId,
       brokers: this.config.brokers,
+      ...clientSecurity(this.config),
       logLevel: logLevel.WARN,
     });
 
@@ -139,6 +140,7 @@ export class KafkaConsumerService implements OnApplicationBootstrap, OnModuleDes
     const kafka = new Kafka({
       clientId: `${this.config.clientId}-consumer`,
       brokers: this.config.brokers,
+      ...clientSecurity(this.config),
       logLevel: logLevel.WARN,
     });
 
