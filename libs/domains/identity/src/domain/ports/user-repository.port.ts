@@ -1,5 +1,5 @@
 import type { User } from '../user.aggregate';
-import type { ISpecification } from '@auth/ddd-core';
+import type { ISpecification } from '@auth/core';
 
 export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 

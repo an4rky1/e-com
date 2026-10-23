@@ -6,7 +6,7 @@
  * takes. It is never persisted: storage keeps {@link TokenDigester}'s SHA-256 digest, so a
  * database dump does not hand an attacker a set of live sessions.
  */
-import { Result } from '@auth/ddd-core';
+import { Result } from '@auth/core';
 import { randomBytes } from 'node:crypto';
 
 /** 32 bytes of entropy — the same order of magnitude as the ids in the table. */

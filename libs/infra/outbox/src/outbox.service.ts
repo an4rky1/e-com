@@ -3,7 +3,7 @@ import {
   EVENT_SCHEMA_VERSION,
   type IntegrationEvent,
 } from '@auth/contracts';
-import type { IIntegrationEventPublisher } from '@auth/ddd-core';
+import type { IIntegrationEventPublisher } from '@auth/core';
 import type { OutboxRepositoryPort, NewOutboxEntry } from './outbox.repository.port';
 import { OUTBOX_CONFIG, OUTBOX_REPOSITORY, type OutboxConfig } from './outbox.tokens';
 

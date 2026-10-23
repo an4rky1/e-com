@@ -16,7 +16,6 @@ import { Logger, Module, type DynamicModule, type Provider } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaService } from '@auth/infra/prisma';
-import type { KafkaConsumerService, KafkaProducerService } from '@auth/infra/kafka';
 import { PrismaClient } from './generated/prisma/client';
 import {
   NOTIFICATION_CONFIG,

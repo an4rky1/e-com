@@ -14,8 +14,13 @@
  * stored head no longer describes its contents.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@auth/infra/prisma';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client';
+import { type PrismaService } from '@auth/infra/prisma';
+import type {
+  AuditActorType,
+  AuditResult,
+  Prisma,
+  PrismaClient,
+} from '../../generated/prisma/client';
 import {
   AUDIT_REPOSITORY,
   AppendOutcome,
@@ -239,15 +244,25 @@ function withSequence(link: ChainLink, sequence: number): AuditEventProps {
   };
 }
 
-/** Maps the domain filter onto Prisma's `where`. Only present filters are applied. */
+/**
+ * Maps the domain filter onto Prisma's `where`. Only present filters are applied.
+ *
+ * @remarks `actor_type` and `result` are Postgres enums while the domain filter stays
+ * `string`, so the two vocabulary columns are narrowed here — the same boundary `withSequence`
+ * casts on the way out. An unknown value is passed through to Prisma, which fails its enum
+ * validation there; silently dropping it would widen the query instead of narrowing it, and an
+ * audit search that returns records the caller asked to exclude is the worse answer.
+ */
 function toWhere(filter: AuditFilter): Prisma.audit_eventsWhereInput {
   return {
     ...(filter.actorId === undefined ? {} : { actor_id: filter.actorId }),
-    ...(filter.actorType === undefined ? {} : { actor_type: filter.actorType }),
+    ...(filter.actorType === undefined
+      ? {}
+      : { actor_type: filter.actorType as AuditActorType }),
     ...(filter.action === undefined ? {} : { action: filter.action }),
     ...(filter.resourceType === undefined ? {} : { resource_type: filter.resourceType }),
     ...(filter.resourceId === undefined ? {} : { resource_id: filter.resourceId }),
-    ...(filter.result === undefined ? {} : { result: filter.result }),
+    ...(filter.result === undefined ? {} : { result: filter.result as AuditResult }),
     ...(filter.from === undefined && filter.to === undefined
       ? {}
       : {

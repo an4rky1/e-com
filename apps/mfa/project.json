@@ -4,7 +4,8 @@
   "sourceRoot": "apps/mfa/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:mfa"
   ],
   "targets": {
     "typecheck": {

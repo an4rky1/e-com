@@ -5,7 +5,7 @@
  * edge or an IP database and are routinely wrong by a city, so nothing here decides whether to
  * block anything; it only produces a distance for the scoring service to weigh.
  */
-import { Ensure, ValueObject } from '@auth/ddd-core';
+import { Ensure, ValueObject } from '@auth/core';
 
 /** Mean earth radius in kilometres — the value every published haversine uses. */
 export const EARTH_RADIUS_KM = 6371;

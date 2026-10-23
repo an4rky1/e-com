@@ -6,7 +6,7 @@
  * the outbox row is the announcement. The two commit together, which is what makes a signal
  * impossible to store without anyone being told about it, or to announce without a record.
  */
-import { AggregateRoot, DomainEvent, Ensure } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure } from '@auth/core';
 import type { SecurityEventPayload } from '@auth/contracts';
 import { RiskScore } from './value-objects/risk-score.vo';
 import {

@@ -13,6 +13,7 @@ import type { SessionTokenConfig } from '../../session-token.config';
 import type { IssuedTokenPair } from './issue-tokens.command';
 // Value import on purpose: the guard is resolved by type, not by `@Inject`, so
 // `design:paramtypes` has to name it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { RefreshTokenReuseGuard } from './refresh-token-reuse.guard';
 import {
   RotateTokensCommand,

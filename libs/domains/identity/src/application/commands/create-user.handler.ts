@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { Email } from '@auth/ddd-core';
+import { Email } from '@auth/core';
 import {
   ResourceAlreadyExistsException,
   ValidationException,

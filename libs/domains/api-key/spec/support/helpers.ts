@@ -6,7 +6,7 @@
  * here once means the assertion in the test body reads as an assertion instead of as a type
  * error, and means a change to the event shape breaks one file.
  */
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 
 /** Awaits a promise that is expected to reject, and returns the reason it rejected with. */
 export const rejection = async (promise: Promise<unknown>): Promise<unknown> => {

@@ -15,7 +15,7 @@
  * the redelivery would find a claim nobody can take.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@auth/infra/prisma';
+import { type PrismaService } from '@auth/infra/prisma';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 import {
   ClaimRefusal,

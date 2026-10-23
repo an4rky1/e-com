@@ -12,7 +12,7 @@
  * that reaches the domain directly, and the domain is reached by gRPC, Kafka and tests.
  */
 
-import { Result, ValueObject } from '@auth/ddd-core';
+import { Result, ValueObject } from '@auth/core';
 
 /** `users:write`, `billing:invoice.read`. Lower snake case, exactly one colon. */
 export const PERMISSION_SLUG_PATTERN =

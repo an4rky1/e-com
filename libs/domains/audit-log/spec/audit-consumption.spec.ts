@@ -15,7 +15,7 @@
  * ports. A test that stubbed the handler would prove the stub is idempotent.
  */
 import { Topics } from '@auth/contracts';
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import { AuditEventProcessor } from '../src/application/consumers/audit-event.processor';
 import { RecordAuditEventHandler } from '../src/application/commands/record-audit-event.handler';
 import { AuditKafkaConsumer } from '../src/infrastructure/messaging/audit.kafka.consumer';

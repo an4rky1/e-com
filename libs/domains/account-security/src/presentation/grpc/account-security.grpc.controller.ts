@@ -17,6 +17,7 @@ import type { LoginAttemptInput } from '../../application/commands/login-attempt
 import type { DeviceReadModel } from '../../application/queries/account-security.queries';
 // Value import: constructor-injected facade — see the note in credential-vault's gRPC
 // controller. A type-only import erases the token Nest needs to resolve it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { AccountSecurityService } from '../../application/facade/account-security.service';
 
 const SERVICE = 'AccountSecurityService';

@@ -12,7 +12,7 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type { RecoveryCodeSetRepositoryPort } from '../../domain/ports/recovery-code-set-repository.port';
 import {
   RecoveryCodeSet,

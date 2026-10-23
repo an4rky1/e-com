@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, Email, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Email, Ensure, type IDomainEvent } from '@auth/core';
 import type { UserStatus } from './value-objects/user-status.vo';
 
 export interface UserProps {

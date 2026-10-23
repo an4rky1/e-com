@@ -4,7 +4,8 @@
   "sourceRoot": "apps/credential-vault/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:credential-vault"
   ],
   "targets": {
     "typecheck": {

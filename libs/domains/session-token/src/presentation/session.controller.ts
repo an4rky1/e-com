@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 // A value import on purpose: `design:paramtypes` has to resolve the injected class at
 // runtime, and a type-only specifier is erased before the metadata is emitted.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { SessionTokenService } from '../application/facade/session-token.service';
 import {
   toSessionResponse,

@@ -13,7 +13,7 @@
  * keeps the index useful and the raw user agent out of every backup of the database.
  */
 import { createHash } from 'node:crypto';
-import { ValueObject } from '@auth/ddd-core';
+import { ValueObject } from '@auth/core';
 
 /**
  * The device attributes the fingerprint is derived from.

@@ -288,7 +288,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
     this.start();
   }
 
-  start(intervalMs = this.config.pollIntervalMs): void {
+  start(): void {
     if (this.running) return;
     this.running = true;
     this.schedule(0);

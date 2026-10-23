@@ -11,7 +11,7 @@
  * three base64url segments and an HMAC, and a dependency that owns a signing key is a
  * dependency worth one fewer of.
  */
-import { Ensure, Result } from '@auth/ddd-core';
+import { Ensure, Result } from '@auth/core';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** Registered header for this implementation. A private claim set must never say `none`. */

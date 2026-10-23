@@ -25,7 +25,7 @@ export class Result<TValue, TError extends ResultError = string> {
   }
 
   /** Fails with a `DomainError`, which is what most invariant paths want. */
-  static invalid<TError extends string = string>(
+  static invalid(
     code: DomainError['code'],
     message: string,
     context?: Record<string, unknown>,

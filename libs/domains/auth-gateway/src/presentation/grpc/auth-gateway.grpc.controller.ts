@@ -20,6 +20,7 @@ import type {
 } from '@auth/contracts';
 // Value import: constructor-injected, and `emitDecoratorMetadata` reads the value
 // binding — a type-only import leaves Nest with `Object` and an undefined facade.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { AuthGatewayService } from '../../application/facade/auth-gateway.service';
 import { toFlowResponse } from '../dto/auth-flow.dto';
 

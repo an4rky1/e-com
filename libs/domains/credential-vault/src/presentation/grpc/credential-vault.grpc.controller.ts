@@ -17,6 +17,7 @@ import type {
 } from '@auth/contracts';
 // Value import: constructor-injected facade. `emitDecoratorMetadata` reads the value
 // binding, so a type-only import leaves Nest with `Object` and no resolvable token.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CredentialVaultService } from '../../application/facade/credential-vault.service';
 
 const SERVICE = 'CredentialVaultService';

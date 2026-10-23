@@ -8,7 +8,7 @@
  */
 
 import 'reflect-metadata';
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import {
   API_KEY_SCOPES,
   ApiKeyScope,

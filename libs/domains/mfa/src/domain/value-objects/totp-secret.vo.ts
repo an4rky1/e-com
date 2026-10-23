@@ -17,7 +17,7 @@
  * infrastructure; this object only validates and guards.
  */
 
-import { Ensure } from '@auth/ddd-core';
+import { Ensure } from '@auth/core';
 
 /**
  * RFC 4648 base32, no padding, upper case.

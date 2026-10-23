@@ -61,7 +61,7 @@ export async function enqueueEvents(
   events: readonly EnqueueableEvent[],
   options: EnqueueOptions,
 ): Promise<void> {
-  const rows = events.flatMap((event) => {
+  const rows: Prisma.outbox_eventsCreateManyInput[] = events.flatMap((event) => {
     const topic = TOPIC_BY_EVENT[event.eventType];
 
     if (!topic) {

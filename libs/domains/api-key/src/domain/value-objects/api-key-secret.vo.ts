@@ -11,7 +11,7 @@
  * output, so there is no dictionary to attack and a fast digest is exactly what is wanted —
  * it runs on every single machine-authenticated request.
  */
-import { Result } from '@auth/ddd-core';
+import { Result } from '@auth/core';
 import {
   API_KEY_MIN_LENGTH,
   API_KEY_PATTERN,

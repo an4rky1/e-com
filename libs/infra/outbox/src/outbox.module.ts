@@ -1,5 +1,4 @@
-import { DynamicModule, Global, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
 import { Defaults, ENV_PREFIX, outboxSchema, type OutboxEnvConfig } from './outbox.config';
 import { OutboxHealthIndicator, OutboxRelay } from './prisma-outbox.repository';
@@ -8,7 +7,6 @@ import { OutboxService } from './outbox.service';
 import {
   OUTBOX_CONFIG,
   OUTBOX_PUBLISHER,
-  OUTBOX_RELAY,
   OUTBOX_REPOSITORY,
   type OutboxConfig,
 } from './outbox.tokens';
@@ -37,8 +35,7 @@ export function createOutboxModule(options: OutboxModuleOptions): DynamicModule 
     providers: [
       {
         provide: OUTBOX_CONFIG,
-        inject: [ConfigService],
-        useFactory: (config: ConfigService) => {
+        useFactory: () => {
           const env = readNamespacedEnv<typeof outboxSchema>(
             ENV_PREFIX,
             outboxSchema,

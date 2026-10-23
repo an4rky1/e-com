@@ -4,7 +4,8 @@
   "sourceRoot": "apps/account-security/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:account-security"
   ],
   "targets": {
     "typecheck": {

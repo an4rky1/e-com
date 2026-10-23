@@ -6,7 +6,7 @@
  * a notification id arrives from a *client* as part of a "mark this read" request, and a raw
  * `string` at that boundary means a session id, a user id or a typo all reach the same query.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class NotificationId {
   private constructor(readonly value: string) {}

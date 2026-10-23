@@ -8,12 +8,13 @@ const { mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const LIBS = [
-  ['ddd-core', ['type:ddd-core'], false],
+  ['core', ['type:core'], false],
   ['contracts', ['type:contracts'], false],
 
   ['platform/config', ['type:platform'], true],
   ['platform/logger', ['type:platform'], true],
   ['platform/error-handling', ['type:platform'], true],
+  ['platform/feature-flags', ['type:platform'], true],
   ['platform/health', ['type:platform'], true],
   ['platform/context', ['type:platform'], true],
   ['platform/shutdown', ['type:platform'], true],
@@ -25,6 +26,7 @@ const LIBS = [
   ['infra/outbox', ['type:infra'], true],
   ['infra/grpc', ['type:infra'], true],
   ['infra/queue', ['type:infra'], true],
+  ['infra/rate-limit', ['type:infra'], true],
 
   ['domains/identity', ['type:domain', 'domain:identity'], true],
   ['domains/access-control', ['type:domain', 'domain:access-control'], true],
@@ -42,7 +44,7 @@ const LIBS = [
 
 /**
  * Path from a lib's directory back to the workspace root.
- * `libs/ddd-core` is two levels deep; `libs/platform/config` is three.
+ * `libs/core` is two levels deep; `libs/platform/config` is three.
  */
 const depth = (p) => (p.includes('/') ? '../../..' : '../..');
 

@@ -16,6 +16,7 @@ import {
   Get,
   Query,
 } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { AuditLogService } from '../application/facade/audit-log.service';
 import { toAuditFilter, toPageNumbers, type AuditQueryDto } from './dto/audit-query.dto';
 

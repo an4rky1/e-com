@@ -10,7 +10,7 @@
  * `notification-announcement.ts`. Keeping them on the aggregate is what lets a channel adapter
  * deliver them, and keeping them off the announcement is what stops them reaching a topic.
  */
-import { AggregateRoot, DomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent } from '@auth/core';
 import {
   DeliveryStatus,
   NotificationChannel,

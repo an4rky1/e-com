@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import { PermissionSlug } from './value-objects/permission-slug.vo';
 import { RoleName } from './value-objects/role-name.vo';
 

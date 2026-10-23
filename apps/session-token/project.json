@@ -4,7 +4,8 @@
   "sourceRoot": "apps/session-token/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:session-token"
   ],
   "targets": {
     "typecheck": {

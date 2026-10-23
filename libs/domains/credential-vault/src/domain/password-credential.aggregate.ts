@@ -7,7 +7,7 @@
  * A credential row that could answer them would make the two inseparable, and every sign-in
  * would become a cross-database join.
  */
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import type {
   CredentialFailedPayload,
   CredentialVerifiedPayload,

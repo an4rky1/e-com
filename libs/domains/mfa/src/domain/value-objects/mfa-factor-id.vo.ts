@@ -10,7 +10,7 @@
  * guard has to hold when the gRPC entry point is used instead of the HTTP one.
  */
 
-import { UUID_PATTERN, type Brand } from '@auth/ddd-core';
+import { UUID_PATTERN, type Brand } from '@auth/core';
 
 /** Compile-time marker distinguishing a factor id from every other identifier. */
 export type MfaFactorId = Brand<string, 'MfaFactorId'>;

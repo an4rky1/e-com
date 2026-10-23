@@ -25,6 +25,7 @@ import {
 } from '@nestjs/common';
 // Value import: constructor-injected. `emitDecoratorMetadata` reads the emitted value
 // binding, so a type-only import erases the DI token and Nest cannot resolve it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { MfaService } from '../application/facade/mfa.service';
 import { MfaGuard } from './guards/mfa.guard';
 import { SkipMfa } from './decorators/skip-mfa.decorator';

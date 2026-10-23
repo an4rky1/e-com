@@ -14,7 +14,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
 import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 import { AuthFlow, type AuthFlowStepRow } from '../../domain/auth-flow.aggregate';
 import {

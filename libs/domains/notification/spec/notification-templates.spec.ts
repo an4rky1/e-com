@@ -10,7 +10,7 @@
  * because it is the property that makes `UserRegisteredPayload.email` safe: Zod drops unknown
  * keys, so a value a producer invents cannot reach a variable and from there a published event.
  */
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import {
   TEMPLATES,
   compileTemplate,

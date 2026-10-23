@@ -7,7 +7,7 @@ Architecture, DDD + CQRS, and publishes facts through a transactional outbox to 
 
 ```
 apps/<service>/        thin bootstrap only — process concerns, no business logic
-libs/ddd-core/         kernel: AggregateRoot, DomainEvent, Result, Ensure, ports
+libs/core/         kernel: AggregateRoot, DomainEvent, Result, Ensure, ports
 libs/contracts/        shared types, topic catalogue, .proto contracts
 libs/platform/*        config, error-handling, health, shutdown
 libs/infra/*           prisma, kafka, outbox, grpc

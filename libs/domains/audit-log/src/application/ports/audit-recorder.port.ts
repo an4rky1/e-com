@@ -6,6 +6,7 @@
  * a local command bus, a stub in a test), and the thing worth testing — that a failure to
  * store propagates — does not depend on which one is bound.
  */
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus } from '@nestjs/cqrs';
 import { Injectable } from '@nestjs/common';
 import type { RecordAuditEventInput } from '../commands/record-audit-event.command';

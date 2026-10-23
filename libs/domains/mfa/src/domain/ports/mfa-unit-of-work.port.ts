@@ -16,7 +16,7 @@
  * guarantee this interface exists to provide would quietly stop holding.
  */
 
-import type { IClock, IUnitOfWork } from '@auth/ddd-core';
+import type { IClock, IUnitOfWork } from '@auth/core';
 
 export const MFA_UNIT_OF_WORK = Symbol('MFA_UNIT_OF_WORK');
 export const CLOCK = Symbol('CLOCK');

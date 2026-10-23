@@ -7,6 +7,7 @@
  * no test behind it.
  */
 import { Injectable } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   toRecordAuditEventCommand,

@@ -11,7 +11,7 @@
  * happens to be holding. It also exercises `fromRow` on every read.
  */
 
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import { AuthFlow, type AuthFlowRow } from '../../src/domain/auth-flow.aggregate';
 import type { AuthGatewayConfig } from '../../src/auth-gateway.config';
 import type { AuthFlowRepositoryPort } from '../../src/domain/ports/auth-flow-repository.port';

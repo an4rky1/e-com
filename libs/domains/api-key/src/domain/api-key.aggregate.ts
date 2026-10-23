@@ -12,7 +12,7 @@
  * non-secret `prefix`; the secret exists only in the command result, long enough to be shown
  * once and then forgotten.
  */
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import { ApiKeyId } from './value-objects/api-key-id.vo';
 import {
   composePrefix,

@@ -12,6 +12,7 @@
 import { Injectable } from '@nestjs/common';
 // Value import, not `import type`: these are constructor-injected, and
 // `emitDecoratorMetadata` reads the emitted value binding to resolve them.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   LockAccountCommand,

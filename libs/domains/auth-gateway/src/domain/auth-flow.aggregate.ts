@@ -20,7 +20,7 @@
  * raising one type from one place is worth more here than the extra hop buys.
  */
 
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import { InvalidStateTransitionException } from '@auth/platform/error-handling';
 import type { AuthFlowChangedPayload } from '@auth/contracts';
 import {

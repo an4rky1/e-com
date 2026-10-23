@@ -8,7 +8,7 @@
  * boundary (see `application/commands/session-error-mapping.ts`), so the refusal keeps its
  * meaning while gaining a status code on the way out.
  */
-import { DomainError, type DomainErrorCode } from '@auth/ddd-core';
+import { DomainError, type DomainErrorCode } from '@auth/core';
 
 export const SessionRefusal = {
   /** The session is revoked, expired, or otherwise not in a state that allows the operation. */

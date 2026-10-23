@@ -4,7 +4,8 @@
   "sourceRoot": "apps/access-control/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:access-control"
   ],
   "targets": {
     "typecheck": {

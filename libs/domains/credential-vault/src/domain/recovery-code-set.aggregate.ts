@@ -10,7 +10,7 @@
  * result and is never stored, never logged and never re-readable, so a regeneration replaces
  * the whole set and the old codes simply stop existing.
  */
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import {
   RecoveryCode,
   RECOVERY_CODE_COUNT_DEFAULT,

@@ -5,7 +5,7 @@ import type {
   ISpecification,
   PaginatedResult,
   PaginationOptions,
-} from '@auth/ddd-core';
+} from '@auth/core';
 import type { PrismaClientLike, PrismaService } from './prisma.service';
 
 /**

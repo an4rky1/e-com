@@ -7,7 +7,7 @@
  * the business. Everything below therefore ends in evidence (a signal, a counter, an event) and
  * nothing ends in a refusal.
  */
-import { AggregateRoot, DomainEvent, Ensure } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure } from '@auth/core';
 import { DeviceFingerprint } from './value-objects/device-fingerprint.vo';
 import { GeoLocation } from './value-objects/geo-location.vo';
 import { EMPTY_COUNTERS, type FailureCounters } from './value-objects/failure-counters.vo';

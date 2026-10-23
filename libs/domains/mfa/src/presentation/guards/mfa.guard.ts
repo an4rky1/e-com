@@ -23,6 +23,7 @@ import {
 } from '@nestjs/common';
 // Value import: `Reflector` is constructor-injected and `emitDecoratorMetadata`
 // reads the value binding, so a type-only import erases the DI token.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { Reflector } from '@nestjs/core';
 import { MfaRequiredException } from '@auth/platform/error-handling';
 import {

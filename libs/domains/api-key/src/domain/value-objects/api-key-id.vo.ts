@@ -10,7 +10,7 @@
  * values: it is a shape, validated once at the boundary and then trusted. The closed-set
  * treatment belongs to {@link ApiKeyPrefix}, {@link ApiKeyScope} and {@link ApiKeyStatus}.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class ApiKeyId {
   private constructor(readonly value: string) {}

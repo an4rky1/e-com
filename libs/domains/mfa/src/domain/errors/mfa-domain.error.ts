@@ -17,7 +17,7 @@
  * logs; the message does not.
  */
 
-import { DomainError, type DomainErrorCode } from '@auth/ddd-core';
+import { DomainError, type DomainErrorCode } from '@auth/core';
 
 /** Why a check failed, in the domain's own vocabulary. */
 export const MfaErrorReason = {

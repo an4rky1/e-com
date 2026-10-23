@@ -18,7 +18,7 @@ import { enqueueEvents } from '../src/infrastructure/persistence/outbox-enqueue'
 import { ApiKey } from '../src/domain/api-key.aggregate';
 import { ApiKeyPrefix } from '../src/domain/value-objects/api-key-prefix.vo';
 import { ApiKeyScope } from '../src/domain/value-objects/api-key-scope.vo';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import { FakeApiKeyCrypto, USER_ID } from './support/fakes';
 
 const TOPICS = {

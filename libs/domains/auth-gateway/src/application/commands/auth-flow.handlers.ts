@@ -24,7 +24,7 @@ import {
   ResourceNotFoundException,
   ValidationException,
 } from '@auth/platform/error-handling';
-import type { IClock } from '@auth/ddd-core';
+import type { IClock } from '@auth/core';
 import { AuthFlow } from '../../domain/auth-flow.aggregate';
 import {
   AUTH_FLOW_REPOSITORY,

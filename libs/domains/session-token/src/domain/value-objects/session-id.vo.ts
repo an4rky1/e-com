@@ -6,7 +6,7 @@
  * session sharing a family id, which means swapping the two does not fail loudly — it
  * silently revokes the wrong sessions. Branding them keeps that a compile error.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class SessionId {
   private constructor(readonly value: string) {}

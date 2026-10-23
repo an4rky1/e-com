@@ -18,7 +18,7 @@
  * verifications from spending the same code.
  */
 
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import { MfaDomainError, MfaErrorReason } from './errors/mfa-domain.error';
 import type { MfaMethod } from './value-objects/mfa-method.vo';
 import { MfaMethod as Method } from './value-objects/mfa-method.vo';

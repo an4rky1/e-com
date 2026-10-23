@@ -1,8 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@auth/infra/prisma';
+import { type PrismaService } from '@auth/infra/prisma';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { OutboxService } from '@auth/infra/outbox';
 import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 import {
   USER_REPOSITORY,

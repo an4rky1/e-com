@@ -6,7 +6,7 @@
  * there, and the failure would not be loud — the step row would simply attach itself to some
  * other flow's history. Branding the two keeps that a compile error.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class AuthFlowId {
   private constructor(readonly value: string) {}

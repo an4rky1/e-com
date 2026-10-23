@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 // Value import on purpose: these are constructor-injected classes, and a type-only import
 // would erase them before `design:paramtypes` could name them.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   toIssueTokensCommand,

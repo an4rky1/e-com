@@ -18,7 +18,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { ValidationException } from '@auth/platform/error-handling';
-import type { IClock } from '@auth/ddd-core';
+import type { IClock } from '@auth/core';
 import {
   MfaDomainError,
   MfaErrorReason,

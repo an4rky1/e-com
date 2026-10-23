@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
 // Value import: the outbox is constructor-injected, and `emitDecoratorMetadata`
 // reads the emitted value binding — a type-only import erases the DI token.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { OutboxService } from '@auth/infra/outbox';
 import type { PrismaClient } from '../../generated/prisma/client';
 import {

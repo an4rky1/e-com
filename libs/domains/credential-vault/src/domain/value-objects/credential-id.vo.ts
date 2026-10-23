@@ -6,7 +6,7 @@
  * id cannot be passed where a credential id is expected — the mix-up that matters most here is
  * revoking "credential `<user id>`" and silently revoking nothing.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class CredentialId {
   private constructor(readonly value: string) {}

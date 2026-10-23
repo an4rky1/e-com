@@ -12,7 +12,7 @@
  * are reported by different means on purpose.
  */
 import { HealthIndicator } from '@auth/platform/health';
-import type { IClock } from '@auth/ddd-core';
+import type { IClock } from '@auth/core';
 import {
   AUTH_FLOW_REPOSITORY,
   type AuthFlowRepositoryPort,

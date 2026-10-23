@@ -4,7 +4,8 @@
   "sourceRoot": "apps/audit-log/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:audit-log"
   ],
   "targets": {
     "typecheck": {

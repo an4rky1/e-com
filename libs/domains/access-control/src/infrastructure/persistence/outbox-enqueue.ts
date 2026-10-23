@@ -9,7 +9,7 @@
 
 import { type Logger } from '@nestjs/common';
 import { type OutboxService } from '@auth/infra/outbox';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 
 /** Domain event name -> integration topic, per aggregate. */
 export type TopicMap = Readonly<Record<string, string>>;

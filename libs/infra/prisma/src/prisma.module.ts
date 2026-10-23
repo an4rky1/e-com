@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { type DynamicModule, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaHealthIndicator } from './prisma.health';
 import { PrismaService, type PrismaClientLike } from './prisma.service';

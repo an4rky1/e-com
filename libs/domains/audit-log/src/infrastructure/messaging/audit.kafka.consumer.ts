@@ -20,19 +20,13 @@ import { dlqTopicFor, type Topic } from '@auth/contracts';
 // Value imports for the two injected services: `emitDecoratorMetadata` reads the emitted value
 // binding, so a type-only import erases the token and DI fails at boot. `ConsumedMessage` is
 // only a type and stays erased.
-import {
-  KafkaConsumerService,
-  KafkaProducerService,
-  type ConsumedMessage,
-} from '@auth/infra/kafka';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
+import { KafkaConsumerService, KafkaProducerService, type ConsumedMessage } from '@auth/infra/kafka';
 import { SUBSCRIBED_TOPICS } from '../../domain/audit-routing';
 import { AUDIT_LOG_CONFIG, type AuditLogConfig } from '../../audit-log.config';
 // Value import: the processor is constructor-injected and its token comes from metadata.
-import {
-  AuditEventProcessor,
-  ConsumerOutcomeKind,
-  type ConsumerOutcome,
-} from '../../application/consumers/audit-event.processor';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
+import { AuditEventProcessor, ConsumerOutcomeKind, type ConsumerOutcome } from '../../application/consumers/audit-event.processor';
 
 @Injectable()
 export class AuditKafkaConsumer implements OnModuleInit {

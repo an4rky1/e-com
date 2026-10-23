@@ -11,7 +11,7 @@
  * object the handler happens to be holding. It also exercises `fromRow` on every write.
  */
 
-import type { IUnitOfWork } from '@auth/ddd-core';
+import type { IUnitOfWork } from '@auth/core';
 import type { MfaMethod } from '../../src/domain/value-objects/mfa-method.vo';
 import type { MfaFactorRepositoryPort } from '../../src/domain/ports/mfa-factor-repository.port';
 import type { RecoveryCodeSetRepositoryPort } from '../../src/domain/ports/recovery-code-set-repository.port';

@@ -4,7 +4,8 @@
   "sourceRoot": "apps/notification/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:notification"
   ],
   "targets": {
     "typecheck": {

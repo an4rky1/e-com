@@ -15,7 +15,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ConsumedMessage } from '@auth/infra/kafka';
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import {
   CONSUMER_CLAIM_STORE,
   claimKeyFor,

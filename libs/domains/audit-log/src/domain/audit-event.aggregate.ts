@@ -10,7 +10,7 @@
  * system was down" and "the system was lying about the time", and hashing both makes the
  * distinction survive tampering.
  */
-import type { AuditEventId } from '@auth/ddd-core';
+import type { AuditEventId } from '@auth/core';
 import type { ActorType, AuditResult, ResourceType } from './value-objects/audit-result.vo';
 import type { ChainLink } from './audit-chain';
 

@@ -8,6 +8,7 @@ import type {
   ValidateAccessTokenResponse,
 } from '@auth/contracts';
 // Value import on purpose — see the note in `session.controller.ts`.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { SessionTokenService } from '../../application/facade/session-token.service';
 
 const SERVICE = 'SessionTokenService';

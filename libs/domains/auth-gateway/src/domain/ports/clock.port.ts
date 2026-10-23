@@ -6,7 +6,7 @@
  * a suite that reaches for `new Date()` can only wait for it. It also comes from the kernel —
  * the gateway did not need a second clock abstraction, so it did not invent one.
  */
-import type { IClock } from '@auth/ddd-core';
+import type { IClock } from '@auth/core';
 
 export const CLOCK = Symbol('CLOCK');
 

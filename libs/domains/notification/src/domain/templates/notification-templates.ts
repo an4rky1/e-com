@@ -18,7 +18,7 @@
  * schema". Narrowing happens in {@link compileTemplate}, which is the single place a parsed
  * value becomes a `NotificationVariables`.
  */
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import { z } from 'zod';
 import {
   NOTIFICATION_CHANNELS,

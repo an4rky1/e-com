@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, EntityId, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, EntityId, Ensure, type IDomainEvent } from '@auth/core';
 import { PermissionSlug } from './value-objects/permission-slug.vo';
 import { PolicyEffect, isPolicyEffect } from './value-objects/policy-effect.vo';
 import {

@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, EntityId, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, EntityId, Ensure, type IDomainEvent } from '@auth/core';
 import type { RoleChangedPayload } from '@auth/contracts';
 import { RoleName } from './value-objects/role-name.vo';
 

@@ -8,7 +8,7 @@
  */
 import { type Logger } from '@nestjs/common';
 import { EVENT_SCHEMA_VERSION } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 
 /**

@@ -10,7 +10,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { DomainError, EntityId } from '@auth/ddd-core';
+import { DomainError, EntityId } from '@auth/core';
 // Value import: `@CommandHandler` reads the emitted value binding, so a type-only
 // import erases the command token and the handler never registers.
 import { RecordAuditEventCommand } from './record-audit-event.command';

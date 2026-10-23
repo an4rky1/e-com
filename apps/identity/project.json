@@ -4,7 +4,8 @@
   "sourceRoot": "apps/identity/src",
   "projectType": "application",
   "tags": [
-    "type:app"
+    "type:app",
+    "domain:identity"
   ],
   "targets": {
     "typecheck": {

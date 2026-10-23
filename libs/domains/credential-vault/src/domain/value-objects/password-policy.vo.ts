@@ -9,7 +9,7 @@
  * @remarks This service never *stores* a policy. It decides whether a candidate password is
  * acceptable; where the thresholds come from is the caller's business.
  */
-import { Result, type DomainError } from '@auth/ddd-core';
+import { Result, type DomainError } from '@auth/core';
 
 /**
  * The reasons a candidate password can be refused.

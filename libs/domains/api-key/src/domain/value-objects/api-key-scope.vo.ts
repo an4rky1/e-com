@@ -10,7 +10,7 @@
  * business rules in a string that no test can hold stable.
  */
 
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 
 export const ApiKeyScope = {
   READ: 'read',

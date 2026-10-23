@@ -6,7 +6,7 @@
  * rather than a `SessionId` so that a family can never be persisted into `sessions.id`, and
  * so the repository's family-wide queries read as what they are.
  */
-import { EntityId } from '@auth/ddd-core';
+import { EntityId } from '@auth/core';
 
 export class TokenFamilyId {
   private constructor(readonly value: string) {}

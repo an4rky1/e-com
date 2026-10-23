@@ -19,7 +19,7 @@ import {
 } from '../../src/domain/ports/password-hasher.port';
 import { type PasswordCredential } from '../../src/domain/password-credential.aggregate';
 import { type RecoveryCodeSet } from '../../src/domain/recovery-code-set.aggregate';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 
 export const CURRENT_PARAMETERS: HashParameters = {
   algorithm: 'argon2id',

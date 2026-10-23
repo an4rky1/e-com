@@ -11,6 +11,7 @@ import type {
   UserResponse,
   UpdateUserStatusRequest,
 } from '@auth/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { IdentityService } from '../../application/facade/identity.service';
 
 const SERVICE = 'IdentityService';

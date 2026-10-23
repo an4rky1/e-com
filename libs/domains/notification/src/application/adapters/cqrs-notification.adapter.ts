@@ -8,6 +8,7 @@
 import { Injectable } from '@nestjs/common';
 // Value import, not `import type`: constructor-injected, and Nest resolves the
 // token from the emitted value binding via `emitDecoratorMetadata`.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus } from '@nestjs/cqrs';
 import type { NotificationDispatcherPort } from '../ports/notification-dispatcher.port';
 import type {

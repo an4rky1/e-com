@@ -8,7 +8,7 @@
  * session's usefulness to authenticate precisely so that its re-presentation can be
  * detected.
  */
-import { Ensure } from '@auth/ddd-core';
+import { Ensure } from '@auth/core';
 import type { RefreshToken } from './value-objects/refresh-token.vo';
 import { TokenDigester } from './value-objects/token-digester.vo';
 import {

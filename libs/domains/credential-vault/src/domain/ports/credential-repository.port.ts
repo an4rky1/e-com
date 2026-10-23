@@ -5,7 +5,7 @@
  * to be persisted without knowing that Postgres exists — and so the unit tests can use a
  * plain object instead of a database.
  */
-import type { ISpecification } from '@auth/ddd-core';
+import type { ISpecification } from '@auth/core';
 import type { PasswordCredential } from '../password-credential.aggregate';
 import type { RecoveryCodeSet } from '../recovery-code-set.aggregate';
 

@@ -12,6 +12,7 @@ import type {
   RevokeRoleRequest,
 } from '@auth/contracts';
 // Value import: constructor-injected; a type-only import erases the DI token.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { AccessControlService } from '../../application/facade/access-control.service';
 
 const SERVICE = 'AccessControlService';

@@ -6,7 +6,7 @@
  * both need a cast the compiler does not offer. Wrapping the cast once means the assertion
  * reads as an assertion instead of as a type error.
  */
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 
 /** Awaits a promise that is expected to reject, and returns the reason it rejected with. */
 export const rejection = async (promise: Promise<unknown>): Promise<unknown> => {

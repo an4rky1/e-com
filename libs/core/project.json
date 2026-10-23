@@ -1,16 +1,16 @@
 {
-  "name": "@auth/ddd-core",
+  "name": "@auth/core",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/ddd-core/src",
+  "sourceRoot": "libs/core/src",
   "projectType": "library",
   "tags": [
-    "type:ddd-core"
+    "type:core"
   ],
   "targets": {
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p libs/ddd-core/tsconfig.lib.json --noEmit"
+        "command": "tsc -p libs/core/tsconfig.lib.json --noEmit"
       }
     }
   }

@@ -10,7 +10,7 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type { MfaMethod } from '../../domain/value-objects/mfa-method.vo';
 import type { MfaFactorRepositoryPort } from '../../domain/ports/mfa-factor-repository.port';
 import { MfaFactor, type MfaFactorRow } from '../../domain/mfa-factor.aggregate';

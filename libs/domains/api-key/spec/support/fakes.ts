@@ -14,7 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { IDomainEvent } from '@auth/ddd-core';
+import type { IDomainEvent } from '@auth/core';
 import type {
   ApiKeyRepositoryPort,
   ApiKeySpecification,

@@ -7,7 +7,7 @@
  * {@link FixedClock} instead.
  */
 import { Injectable } from '@nestjs/common';
-import type { IClock } from '@auth/ddd-core';
+import type { IClock } from '@auth/core';
 
 @Injectable()
 export class SystemClock implements IClock {

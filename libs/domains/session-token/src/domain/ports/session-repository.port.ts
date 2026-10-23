@@ -1,4 +1,4 @@
-import type { ISpecification } from '@auth/ddd-core';
+import type { ISpecification } from '@auth/core';
 import type { IssuedRefreshToken } from '../refresh-token.entity';
 import type { Session } from '../session.aggregate';
 

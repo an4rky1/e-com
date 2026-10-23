@@ -20,7 +20,7 @@
  * without its counter would be a hole straight through the middle of it.
  */
 
-import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/ddd-core';
+import { AggregateRoot, DomainEvent, Ensure, type IDomainEvent } from '@auth/core';
 import { MfaDomainError, MfaErrorReason } from './errors/mfa-domain.error';
 import type { MfaPolicy } from './mfa-policy';
 import {

@@ -1,4 +1,3 @@
-import { OUTBOX_REPOSITORY_CONFIG } from '../src/prisma-outbox.repository';
 import { PrismaOutboxRepository } from '../src/prisma-outbox.repository';
 import type { OutboxRecord } from '../src/outbox.repository.port';
 

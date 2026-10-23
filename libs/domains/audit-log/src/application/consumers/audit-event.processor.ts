@@ -14,7 +14,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ConsumedMessage } from '@auth/infra/kafka';
-import { DomainError } from '@auth/ddd-core';
+import { DomainError } from '@auth/core';
 import { redact } from '@auth/platform/error-handling';
 import { routeFor, resultFor, stringOfField, type AuditRoute } from '../../domain/audit-routing';
 import { ActorType, UNKNOWN_RESOURCE_ID } from '../../domain/value-objects/audit-result.vo';

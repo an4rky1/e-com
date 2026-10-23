@@ -1,5 +1,5 @@
-import { Email } from '@auth/ddd-core';
-import { User, UserCreated, UserEmailVerified, UserSuspended } from '../src/domain/user.aggregate';
+import { Email } from '@auth/core';
+import { User, type UserCreated, type UserEmailVerified, type UserSuspended } from '../src/domain/user.aggregate';
 import { AUTHENTICATABLE, UserStatus } from '../src/domain/value-objects/user-status.vo';
 
 const email = (value = 'user@example.com') => Email.fromTrusted(value);

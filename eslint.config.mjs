@@ -1,4 +1,10 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import nx from '@nx/eslint-plugin';
+
+// ESM has no `__dirname`; the config is the workspace root's own file.
+const ROOT = fileURLToPath(new URL('.', import.meta.url));
 
 /**
  * Layer rules are enforced twice:
@@ -8,42 +14,42 @@ import nx from '@nx/eslint-plugin';
  *     are therefore invisible to NX tags.
  */
 const NON_DOMAIN_TAGS = [
-  'type:ddd-core',
+  'type:core',
   'type:contracts',
   'type:platform',
   'type:infra',
   'type:testing',
 ];
 
-const DOMAINS = [
-  'identity',
-  'access-control',
-  'credential-vault',
-  'session-token',
-  'auth-gateway',
-  'notification',
-  'audit-log',
-  'account-security',
-];
+/**
+ * Derived from the filesystem rather than hand-listed. A hand list rots silently: `api-key`
+ * and `mfa` were missing from it, and for as long as nobody noticed those two services had
+ * no cross-service boundary at all — any domain could import either of them. A new service
+ * directory is now a new boundary, automatically.
+ */
+const DOMAINS = readdirSync(join(ROOT, 'libs/domains'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
 
 const domainTags = DOMAINS.map((d) => `domain:${d}`);
 
 const depConstraints = [
   {
     // The kernel knows nothing about the application.
-    sourceTag: 'type:ddd-core',
-    onlyDependOnLibsWithTags: ['type:ddd-core'],
+    sourceTag: 'type:core',
+    onlyDependOnLibsWithTags: ['type:core'],
   },
   {
     // Contracts are pure types shared across service boundaries.
     sourceTag: 'type:contracts',
-    onlyDependOnLibsWithTags: ['type:ddd-core', 'type:contracts'],
+    onlyDependOnLibsWithTags: ['type:core', 'type:contracts'],
   },
   {
     // Platform services may only build on the kernel and each other.
     sourceTag: 'type:platform',
     onlyDependOnLibsWithTags: [
-      'type:ddd-core',
+      'type:core',
       'type:contracts',
       'type:platform',
     ],
@@ -52,7 +58,7 @@ const depConstraints = [
     // Infrastructure may use platform, but never reaches into a domain.
     sourceTag: 'type:infra',
     onlyDependOnLibsWithTags: [
-      'type:ddd-core',
+      'type:core',
       'type:contracts',
       'type:platform',
       'type:infra',
@@ -62,7 +68,7 @@ const depConstraints = [
     // A domain service composes everything below it.
     sourceTag: 'type:domain',
     onlyDependOnLibsWithTags: [
-      'type:ddd-core',
+      'type:core',
       'type:contracts',
       'type:platform',
       'type:infra',
@@ -73,12 +79,14 @@ const depConstraints = [
     // The edge is a proxy, not a participant. It may reach down to the kernel, the contracts
     // and the platform/infra plumbing, and nothing else — crucially not `type:domain`, so a
     // gateway can never import a service's internals and quietly become a second copy of it.
+    // `type:gateway` is allowed so the api-gateway app can assemble the gateway lib itself.
     sourceTag: 'type:gateway',
     onlyDependOnLibsWithTags: [
-      'type:ddd-core',
+      'type:core',
       'type:contracts',
       'type:platform',
       'type:infra',
+      'type:gateway',
     ],
   },
   {
@@ -94,7 +102,7 @@ const depConstraints = [
   ...DOMAINS.map((domain) => ({
     sourceTag: `domain:${domain}`,
     onlyDependOnLibsWithTags: [
-      'type:ddd-core',
+      'type:core',
       'type:contracts',
       'type:platform',
       'type:infra',
@@ -196,6 +204,9 @@ export default [
       '**/out-tsc',
       '**/test-output',
       '**/generated/**',
+      // Next.js build output: compiled chunks, not sources. Linting them floods the report
+      // with `no-explicit-any` from minified bundles and buries real findings.
+      '**/.next',
     ],
   },
   {
@@ -240,6 +251,31 @@ export default [
       'no-restricted-imports': ['error', { patterns: GATEWAY_FORBIDDEN_IMPORTS }],
     },
   },
+  // ---- The web edge talks HTTP, not the backend's internals ----
+  {
+    files: ['apps/front/**/*.[jt]s', 'apps/front/**/*.[jt]sx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@auth/domains/**',
+                '@auth/infra/**',
+                '@auth/gateway',
+                '@auth/platform/**',
+                '@prisma/client',
+                '**/generated/prisma/**',
+              ],
+              message:
+                'The web app is a browser client: it reaches the backend over HTTP, never by importing a server-side layer.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.cts', '**/*.mts', '**/*.js', '**/*.jsx'],
     rules: {
@@ -250,6 +286,16 @@ export default [
       ],
       eqeqeq: ['error', 'smart'],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  // ---- CLIs under tools/: stdout is their output stream ----
+  // A harness script that reports a result with `console.log` is doing its job, not leaking
+  // debug output — but the workspace-wide rule cannot tell one from the other, so the
+  // exception is scoped to the directory where printing *is* the behaviour.
+  {
+    files: ['tools/**/*.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 ];

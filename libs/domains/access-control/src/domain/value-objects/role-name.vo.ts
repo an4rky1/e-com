@@ -9,7 +9,7 @@
  * not offer one.
  */
 
-import { Result, ValueObject } from '@auth/ddd-core';
+import { Result, ValueObject } from '@auth/core';
 
 /** Lower snake case, 2-64 characters. Starts with a letter so it can never be a keyword. */
 export const ROLE_NAME_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;

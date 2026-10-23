@@ -1,9 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { IdentityService } from '../application/facade/identity.service';
 import {
-  UserResponseDto,
-  CreateUserRequestDto,
-  UpdateUserStatusRequestDto,
+  type UserResponseDto,
+  type CreateUserRequestDto,
+  type UpdateUserStatusRequestDto,
   toUserResponse,
 } from './dto/user.dto';
 

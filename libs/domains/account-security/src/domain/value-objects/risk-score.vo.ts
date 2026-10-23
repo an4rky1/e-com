@@ -8,7 +8,7 @@
  * `security_signals.signal_type`, into `SecurityEventPayload.riskLevel`, and into the gRPC
  * `level` field, and none of those can drift from a generated `enum` member.
  */
-import { ValueObject } from '@auth/ddd-core';
+import { ValueObject } from '@auth/core';
 
 export const RiskLevel = {
   LOW: 'low',
