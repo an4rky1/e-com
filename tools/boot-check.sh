@@ -100,4 +100,9 @@ echo "================================================"
 printf "  booted: %d   failed: %d\n" "$pass" "$fail"
 [ "$fail" -gt 0 ] && printf "  failing: %s\n" "${failed[*]}"
 echo "================================================"
+# The summary above is worthless if the exit code stays green: CI and `make boot-check`
+# both decide on this status, so a service that did not come up must fail the run.
+if [ "$fail" -gt 0 ]; then
+  exit 1
+fi
 exit 0
