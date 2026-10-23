@@ -9,9 +9,9 @@
 import 'reflect-metadata';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RATE_LIMIT, RateLimit } from '../src/presentation/decorators/rate-limit';
+import { RateLimit } from '../src/presentation/decorators/rate-limit';
 import { RateLimitGuard } from '../src/presentation/guards/rate-limit.guard';
-import { RATE_LIMIT_CONFIG, type RateLimitConfig } from '@auth/infra/rate-limit';
+import type { RateLimitConfig } from '@auth/infra/rate-limit';
 import type { RateLimiter, RateLimitResult } from '@auth/infra/rate-limit';
 import { TooManyRequestsException } from '@auth/platform/error-handling';
 import type { GatewayRequest } from '../src/presentation/gateway-request';
@@ -61,7 +61,6 @@ class TestRoutes {
 const contextFor = (
   request: Partial<GatewayRequest>,
   handler: keyof TestRoutes = 'plain',
-  headers: Record<string, string> = {},
 ): { context: ExecutionContext; setHeader: jest.Mock } => {
   const setHeader = jest.fn();
   const context = {

@@ -122,6 +122,7 @@ describe('the library reaches only the layers its tag allows', () => {
       '@auth/infra/rate-limit',
       '@auth/platform/config',
       '@auth/platform/error-handling',
+      '@auth/platform/feature-flags',
       '@auth/platform/health',
     ]);
   });

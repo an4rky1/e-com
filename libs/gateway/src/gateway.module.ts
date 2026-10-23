@@ -21,6 +21,7 @@ import {
 import { APP_PIPE } from '@nestjs/core';
 import { GRPC_CHANNEL, createStaticGrpcChannel } from '@auth/infra/grpc';
 import type { GrpcChannel } from '@auth/infra/grpc';
+import { FeatureFlagsModule } from '@auth/platform/feature-flags';
 import { RateLimitModule } from '@auth/infra/rate-limit';
 import { HealthModule, HealthService } from '@auth/platform/health';
 import { join, resolve } from 'node:path';
@@ -52,6 +53,7 @@ import { UsersController } from './presentation/users.controller';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { PermissionsGuard } from './presentation/guards/permissions.guard';
 import { RateLimitGuard } from './presentation/guards/rate-limit.guard';
+import { FeatureFlagGuard } from './presentation/guards/feature-flag.guard';
 
 @Module({})
 export class GatewayModule {}
@@ -136,7 +138,11 @@ export function createGatewayModule(
     // `forRoot` rather than the bare module: this call is what provides `HealthService`, and
     // taking it here guarantees exactly one instance. Importing it again from the app would
     // register `/health` twice.
-    imports: [HealthModule.forRoot('api-gateway'), RateLimitModule.register()],
+    imports: [
+      HealthModule.forRoot('api-gateway'),
+      FeatureFlagsModule.register(),
+      RateLimitModule.register(),
+    ],
     controllers: [AuthController, UsersController],
     providers: [
       { provide: GATEWAY_CONFIG, useValue: config },
@@ -154,6 +160,7 @@ export function createGatewayModule(
       { provide: CREDENTIAL_VAULT_CLIENT, useClass: GrpcCredentialVaultClient },
 
       GatewayService,
+      FeatureFlagGuard,
       RateLimitGuard,
       JwtAuthGuard,
       PermissionsGuard,

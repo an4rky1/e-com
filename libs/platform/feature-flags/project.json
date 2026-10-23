@@ -1,0 +1,26 @@
+{
+  "name": "@auth/platform/feature-flags",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/platform/feature-flags/src",
+  "projectType": "library",
+  "tags": [
+    "type:platform"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/platform/feature-flags/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/platform/feature-flags"
+      ],
+      "options": {
+        "jestConfig": "libs/platform/feature-flags/jest.config.ts"
+      }
+    }
+  }
+}

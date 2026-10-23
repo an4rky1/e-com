@@ -65,6 +65,7 @@ export { UsersController } from './presentation/users.controller';
 export { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 export { PermissionsGuard } from './presentation/guards/permissions.guard';
 export { RateLimitGuard } from './presentation/guards/rate-limit.guard';
+export { FeatureFlagGuard } from './presentation/guards/feature-flag.guard';
 export {
   IS_PUBLIC_ROUTE,
   Public,
@@ -73,6 +74,7 @@ export {
 } from './presentation/decorators/route-metadata';
 export { RATE_LIMIT, RateLimit } from './presentation/decorators/rate-limit';
 export type { RateLimitOptions } from './presentation/decorators/rate-limit';
+export { FEATURE_FLAG, FeatureFlag } from './presentation/decorators/feature-flag';
 export {
   ClientIp,
   ClientUserAgent,
