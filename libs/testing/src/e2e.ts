@@ -6,6 +6,11 @@
  * rows fails in CI and passes locally, which is the worst possible failure mode.
  */
 
+// Type-only: erased at compile time, so nothing here pulls Nest into the runtime module graph —
+// the deferred `require`s below stay the only place that happens.
+import type * as NestCommon from '@nestjs/common';
+import type * as NestTesting from '@nestjs/testing';
+
 export interface PrismaLike {
   $queryRawUnsafe(query: string): Promise<unknown>;
   $executeRawUnsafe(query: string): Promise<number>;
@@ -47,7 +52,7 @@ type NestApplication = {
 };
 
 type TestModuleInput = NonNullable<
-  Parameters<typeof import('@nestjs/testing').Test.createTestingModule>[0]['imports']
+  Parameters<typeof NestTesting.Test.createTestingModule>[0]['imports']
 >[number];
 
 /**
@@ -60,8 +65,8 @@ export async function bootstrapE2E<TModule>(
   module: TModule,
   options: BootstrapOptions = {},
 ): Promise<TestApp> {
-  const { Test } = require('@nestjs/testing') as typeof import('@nestjs/testing');
-  const { ValidationPipe } = require('@nestjs/common') as typeof import('@nestjs/common');
+  const { Test } = require('@nestjs/testing') as typeof NestTesting;
+  const { ValidationPipe } = require('@nestjs/common') as typeof NestCommon;
 
   const builder = Test.createTestingModule({
     imports: [module as TestModuleInput],

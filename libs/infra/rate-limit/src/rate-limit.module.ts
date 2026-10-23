@@ -1,5 +1,5 @@
-import { DynamicModule, Global, Logger, Module } from '@nestjs/common';
-import { Redis, type RedisOptions } from 'ioredis';
+import { type DynamicModule, Global, Logger, Module } from '@nestjs/common';
+import { Redis } from 'ioredis';
 import {
   RATE_LIMIT_CONFIG,
   resolveRateLimitConfig,
