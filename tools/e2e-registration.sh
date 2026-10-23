@@ -120,6 +120,13 @@ for _ in $(seq 1 40); do
   curl -sf -m 2 "http://127.0.0.1:$IDENTITY_PORT/health" >/dev/null 2>&1 && break
   sleep 1
 done
+# The consumer binds after identity: subscribing to its topics is part of its boot, so under
+# load it can answer a second or two later than the producer. Polling it the same way as
+# identity turns that window from a failed run into a wait.
+for _ in $(seq 1 40); do
+  curl -sf -m 2 "http://127.0.0.1:$NOTIFY_PORT/health" >/dev/null 2>&1 && break
+  sleep 1
+done
 
 echo
 echo "==> 1. services are up"
