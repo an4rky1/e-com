@@ -7,8 +7,6 @@
  * in the same commit or the compiler will not catch the drift for you.
  */
 
-import type { User } from '../auth.types';
-
 // ---- identity.v1 --------------------------------------------------------------
 
 export interface GetUserRequest {

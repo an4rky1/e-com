@@ -33,7 +33,7 @@ async function bootstrap(): Promise<void> {
 bootstrap().catch((error: unknown) => {
   // Logging and a non-zero exit, never a silent swallow: a service that dies during bootstrap
   // must be visibly dead to its orchestrator.
-  // eslint-disable-next-line no-console
+   
   console.error('Bootstrap failed', error);
   process.exit(1);
 });
