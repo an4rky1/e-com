@@ -1,0 +1,21 @@
+# Keep the build context to what the images actually need: context size decides how long
+# every rebuild takes, and none of the following is readable inside a container anyway.
+.git
+.github
+.nx
+node_modules
+dist
+**/dist
+.next
+**/.next
+out-tsc
+**/out-tsc
+coverage
+**/coverage
+*.log
+.env
+.env.*
+infra
+terraform.tfstate*
+.terraform
+*.tfplan
