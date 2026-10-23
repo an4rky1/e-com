@@ -1,4 +1,4 @@
-import { AppException, type AppExceptionOptions } from './app.exception';
+import { AppException } from './app.exception';
 
 /**
  * Typed exceptions for the auth domain.

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { GrpcRetryRegistry } from './grpc-channel.port';
 import type { GrpcCallOptions, GrpcChannel } from './grpc-channel.port';
-import { NestGrpcChannel, pushbackOf, statusCodeOf } from './nest-grpc-channel';
+import { NestGrpcChannel, statusCodeOf } from './nest-grpc-channel';
 
 export const GRPC_RETRY_REGISTRY = Symbol('GRPC_RETRY_REGISTRY');
 export const GRPC_CHANNEL = Symbol('GRPC_CHANNEL');

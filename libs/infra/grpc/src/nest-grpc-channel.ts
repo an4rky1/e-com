@@ -1,4 +1,8 @@
 import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+// Type-only, so the deferred `require` below remains the sole runtime edge to gRPC: services
+// that never call out still do not load it, while the annotation stays a top-level import the
+// linter can see instead of an inline `import()`.
+import type * as GrpcJs from '@grpc/grpc-js';
 import {
   GrpcStatus,
   type GrpcChannel,
@@ -166,7 +170,7 @@ export function pushbackOf(response: HttpLikeResponse | undefined): number | und
 function toMetadata(metadata?: Record<string, string>): unknown {
   if (!metadata) return undefined;
   // Deferred import keeps gRPC out of the module graph of services that never call out.
-  const { Metadata } = require('@grpc/grpc-js') as typeof import('@grpc/grpc-js');
+  const { Metadata } = require('@grpc/grpc-js') as typeof GrpcJs;
   const instance = new Metadata();
   for (const [key, value] of Object.entries(metadata)) instance.set(key, value);
   return instance;

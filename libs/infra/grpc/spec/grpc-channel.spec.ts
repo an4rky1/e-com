@@ -6,7 +6,7 @@
  * authenticated in some paths and open in others, with nothing in the type system or at boot to
  * say which. The same assertions are made against both classes for that reason.
  */
-import { Metadata } from '@grpc/grpc-js';
+import { type Metadata } from '@grpc/grpc-js';
 import { GrpcRetryRegistry } from '../src/grpc-channel.port';
 import { GRPC_SERVICE_TOKEN_METADATA_KEY } from '../src/service-token';
 import { NestGrpcChannel } from '../src/nest-grpc-channel';

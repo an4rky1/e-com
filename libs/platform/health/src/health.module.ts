@@ -1,4 +1,4 @@
-import { Controller, DynamicModule, Get, Inject, Module } from '@nestjs/common';
+import { Controller, type DynamicModule, Get, Inject, Module } from '@nestjs/common';
 import { HealthService } from './health.service';
 import type { HealthReport } from './health.types';
 

@@ -80,7 +80,7 @@ export function installShutdownHandlers(
       .then(() => options.app.close())
       .then(() => process.exit(0))
       .catch((error: unknown) => {
-        // eslint-disable-next-line no-console
+         
         console.error('Graceful shutdown failed; forcing exit', error);
         process.exit(1);
       });

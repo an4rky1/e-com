@@ -15,8 +15,8 @@
  * equal-length buffers and spends the comparison on content alone.
  */
 import {
-  CanActivate,
-  ExecutionContext,
+  type CanActivate,
+  type ExecutionContext,
   Injectable,
   Optional,
   UnauthorizedException,
