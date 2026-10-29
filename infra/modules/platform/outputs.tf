@@ -79,3 +79,41 @@ output "service_wiring" {
   }
 }
 
+output "listener_shape" {
+  description = <<-EOT
+    What the balancer answers on 80, and what on 443 when TLS is on. Everything here is
+    configuration-derived, so it is known at plan — which is what lets an offline test
+    assert the shape without a certificate, a zone or an account. Exposed for tests.
+  EOT
+  value = {
+    http_action = local.tls_enabled ? "redirect" : "forward"
+    https = local.tls_enabled ? {
+      port       = 443
+      domain     = var.tls.domain_name
+      ssl_policy = var.tls.ssl_policy
+      zone       = var.tls.route53_zone_name != null ? var.tls.route53_zone_name : var.tls.route53_zone_id
+    } : null
+  }
+}
+
+output "autoscaling_wiring" {
+  description = <<-EOT
+    Per service: the scaling target and its bounds, as registered with Application Auto
+    Scaling. Configuration-derived (known at plan) except nothing — exposed for tests.
+  EOT
+  value = {
+    enabled            = var.autoscaling.enabled
+    cpu_target_percent = var.autoscaling.cpu_target_percent
+    scale_in_cooldown  = var.autoscaling.scale_in_cooldown
+    scale_out_cooldown = var.autoscaling.scale_out_cooldown
+    services = {
+      for name, target in aws_appautoscaling_target.services :
+      name => {
+        resource_id  = target.resource_id
+        min_capacity = target.min_capacity
+        max_capacity = target.max_capacity
+      }
+    }
+  }
+}
+

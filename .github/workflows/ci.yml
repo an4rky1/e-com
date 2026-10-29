@@ -139,3 +139,30 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
         run: bash tools/e2e-rate-limit.sh
+
+  terraform:
+    # The offline plan is the only test that sees a wrong peer address in the balancer's
+    # rules, a TLS listener wired to no certificate, or a scaling target naming a service
+    # ECS does not have — `terraform validate` alone does not, and an apply needs an AWS
+    # account this repository does not have yet. `tools/local-infra-test.sh` runs the
+    # apply against an emulator on a laptop; this job gates the two cheap halves on every
+    # push so a broken plan never waits for someone's machine.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          filter: tree:0
+
+      # Pinned to the version the local runs use: mock-provider behaviour is version
+      # sensitive (override_during is a 1.7+ feature restated per resource), and a
+      # silent major bump would change what the assertions can see.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+
+      - name: Format and validate every directory
+        run: make infra-validate
+
+      - name: Plan the dev stack on mock providers
+        run: make infra-test

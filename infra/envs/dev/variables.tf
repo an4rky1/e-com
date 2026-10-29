@@ -170,3 +170,48 @@ variable "gateway_jwt_secret" {
   type        = string
   default     = null
 }
+
+variable "tls" {
+  description = "Balancer TLS. Passed through to the platform module, which owns the semantics: domain_name plus a Route53 zone (existing by id, or created by name) opens 443 behind a DNS-validated ACM certificate and turns port 80 into a 301 to https. Empty keeps the stack HTTP-only."
+  type = object({
+    domain_name       = optional(string)
+    route53_zone_id   = optional(string)
+    route53_zone_name = optional(string)
+    ssl_policy        = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")
+  })
+  default = {}
+
+  # The domain/zone pairing, validated here rather than inside the module: a child
+  # module's variable failures are not addressable by expect_failures, and the offline
+  # suite asserts exactly this refusal.
+  validation {
+    condition = (
+      var.tls.domain_name == null ||
+      var.tls.route53_zone_id != null || var.tls.route53_zone_name != null
+    )
+    error_message = "tls.domain_name needs a zone: set route53_zone_id (existing) or route53_zone_name (create one)."
+  }
+
+  validation {
+    condition     = var.tls.domain_name != null || (var.tls.route53_zone_id == null && var.tls.route53_zone_name == null)
+    error_message = "a route53 zone without tls.domain_name names a zone for no certificate; set the domain or drop the zone."
+  }
+
+  validation {
+    condition     = !(var.tls.route53_zone_id != null && var.tls.route53_zone_name != null)
+    error_message = "give exactly one zone: route53_zone_id for one that exists, route53_zone_name for one to create."
+  }
+}
+
+variable "autoscaling" {
+  description = "ECS target-tracking autoscaling, passed through to the platform module. On by default; enabled = false pins desired_count as the whole story."
+  type = object({
+    enabled            = optional(bool, true)
+    min_capacity       = optional(number, 1)
+    max_capacity       = optional(number, 4)
+    cpu_target_percent = optional(number, 60)
+    scale_in_cooldown  = optional(number, 300)
+    scale_out_cooldown = optional(number, 60)
+  })
+  default = {}
+}

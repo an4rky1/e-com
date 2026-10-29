@@ -48,6 +48,12 @@ trap 'rm -rf "$WORK"' EXIT
 # attributes in AWS, so both come back empty here and would rewrite on every plan — the
 # drift check would fail for a reason that has nothing to do with this repository.
 #
+# And one behaviour it cannot model at all: ACM's DNS validation. A real certificate sits
+# in PENDING_VALIDATION until the CNAME it published is observed in public DNS, and an
+# emulator has no resolver to watch — so `request_certificate` is wrapped to answer ISSUED,
+# what the same API returns minutes after validation completed. Without it the validation
+# resource polls to its timeout and the TLS wiring behind it would go untested.
+#
 # The patch runs as sitecustomize inside the (pinned) container and synthesizes what the real
 # API returns; it changes no Terraform and no moto, and a bump of MOTO_IMAGE that breaks it
 # fails loudly here rather than silently.
@@ -134,6 +140,43 @@ except Exception as exc:
     import sys
 
     print("moto health check grace period patch failed: %s" % exc, file=sys.stderr)
+
+try:
+    import moto.acm.models as _acm
+
+    _orig_request_certificate = _acm.AWSCertificateManagerBackend.request_certificate
+
+    def _request_certificate(self, *args, **kwargs):
+        arn = _orig_request_certificate(self, *args, **kwargs)
+        cert = self._certificates.get(arn)
+        if cert is not None and cert.status != "ISSUED":
+            cert.status = "ISSUED"
+        return arn
+
+    _acm.AWSCertificateManagerBackend.request_certificate = _request_certificate
+except Exception as exc:
+    import sys
+
+    print("moto ACM validation patch failed: %s" % exc, file=sys.stderr)
+
+try:
+    import json as _json
+    import moto.applicationautoscaling.responses as _aar
+
+    # The provider reads a resource's tags right after creating it, and this backend has
+    # no tag API at all: every ListTagsForResource came back as an unhandled 500, and the
+    # AWS SDK answers a 500 with its full 25-attempt retry ladder — twelve services times
+    # that ladder looks like a hung apply rather than a missing method. The empty body is
+    # shaped the way *this* service models tags: a key→value map, not a list — Application
+    # Auto Scaling's serializer would reject a list with "expected '{', got [".
+    def _list_tags_for_resource(self) -> str:
+        return _json.dumps({"Tags": {}})
+
+    _aar.ApplicationAutoScalingResponse.list_tags_for_resource = _list_tags_for_resource
+except Exception as exc:
+    import sys
+
+    print("moto application-autoscaling tag patch failed: %s" % exc, file=sys.stderr)
 PY
 
 echo "==> starting the emulator ($MOTO_IMAGE on $ENDPOINT)"

@@ -271,3 +271,78 @@ run "flipping_the_event_bus_on_reaches_every_backend" {
     error_message = "the front's env is GATEWAY_URL and nothing else — no bus, no database, no peers."
   }
 }
+
+run "http_only_is_the_default_and_scaling_is_not" {
+  command = plan
+
+  assert {
+    condition     = module.platform.listener_shape.http_action == "forward" && module.platform.listener_shape.https == null
+    error_message = "without tls.domain_name the balancer stays HTTP-only on port 80; a 443 listener must not appear out of nothing."
+  }
+
+  assert {
+    condition = (
+      module.platform.autoscaling_wiring.enabled &&
+      length(module.platform.autoscaling_wiring.services) == 12 &&
+      module.platform.autoscaling_wiring.cpu_target_percent == 60
+    )
+    error_message = "autoscaling is on by default for all twelve services, tracking 60% CPU."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, target in module.platform.autoscaling_wiring.services :
+      target.min_capacity == 1 && target.max_capacity == 4 &&
+      target.resource_id == "service/auth-platform-dev/auth-platform-dev-${name}"
+    ])
+    error_message = "each target must address service/<cluster>/<service> with the default bounds — anything else is a scaling entity ECS does not have."
+  }
+}
+
+run "a_domain_turns_80_into_a_redirect_and_opens_443" {
+  command = plan
+
+  variables {
+    tls = {
+      domain_name       = "dev.auth.test"
+      route53_zone_name = "auth.test."
+    }
+  }
+
+  assert {
+    condition = (
+      module.platform.listener_shape.http_action == "redirect" &&
+      module.platform.listener_shape.https.port == 443 &&
+      module.platform.listener_shape.https.domain == "dev.auth.test" &&
+      module.platform.listener_shape.https.zone == "auth.test."
+    )
+    error_message = "with a domain and a zone: port 80 redirects, 443 answers, and both names are the configured ones — not derived from an ARN the plan cannot see."
+  }
+}
+
+run "a_domain_without_a_zone_is_refused" {
+  command = plan
+
+  variables {
+    tls = {
+      domain_name = "dev.auth.test"
+    }
+  }
+
+  expect_failures = [var.tls]
+}
+
+run "autoscaling_can_be_switched_off" {
+  command = plan
+
+  variables {
+    autoscaling = {
+      enabled = false
+    }
+  }
+
+  assert {
+    condition     = length(module.platform.autoscaling_wiring.services) == 0
+    error_message = "enabled = false must register nothing, not merely set bounds nobody reads."
+  }
+}

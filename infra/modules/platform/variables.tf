@@ -184,3 +184,57 @@ variable "gateway_jwt_secret" {
   default     = null
   sensitive   = true
 }
+
+variable "tls" {
+  description = <<-EOT
+    TLS for the balancer. Empty (the default) keeps the stack HTTP-only on port 80, which
+    is how the MVP ships. To turn it on, set `domain_name` and point it at a Route53 zone:
+    `route53_zone_id` for a zone that already exists, or `route53_zone_name` for one this
+    configuration should create. The certificate is requested with DNS validation, its
+    validation records land in that zone, and port 443 opens only through
+    `aws_acm_certificate_validation` — so the listener can never present a certificate
+    nobody has proven control of. Port 80 then answers with a 301 to the same host on
+    HTTPS, because an OAuth redirect that bounces through http:// loses the callback.    A domain without a zone is refused at validation time rather than left pending: a
+    certificate nobody can validate never reaches a listener, and a plan-time error says
+    which half of the pair is missing. The pairing itself is validated on the environment's
+    passthrough variable (`envs/*/variables.tf`), not here: a child module's variable
+    failures are not addressable by the offline tests, and a refusal nobody can test is a
+    refusal that quietly stops existing.
+  EOT
+  type = object({
+    domain_name       = optional(string)
+    route53_zone_id   = optional(string)
+    route53_zone_name = optional(string)
+    ssl_policy        = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")
+  })
+  default = {}
+}
+
+variable "autoscaling" {
+  description = <<-EOT
+    Target-tracking autoscaling for every ECS service: one policy per service that holds
+    average CPU at `cpu_target_percent` between `min_capacity` and `max_capacity` tasks.
+    On by default — a platform that only scales by hand is one incident away from a fixed
+    ceiling — and switchable off with `enabled = false` for an environment that wants a
+    predictable bill instead.
+  EOT
+  type = object({
+    enabled            = optional(bool, true)
+    min_capacity       = optional(number, 1)
+    max_capacity       = optional(number, 4)
+    cpu_target_percent = optional(number, 60)
+    scale_in_cooldown  = optional(number, 300)
+    scale_out_cooldown = optional(number, 60)
+  })
+  default = {}
+
+  validation {
+    condition     = var.autoscaling.min_capacity <= var.autoscaling.max_capacity
+    error_message = "autoscaling.min_capacity must not exceed max_capacity."
+  }
+
+  validation {
+    condition     = var.autoscaling.cpu_target_percent > 0 && var.autoscaling.cpu_target_percent <= 100
+    error_message = "autoscaling.cpu_target_percent is a percentage: 1..100."
+  }
+}

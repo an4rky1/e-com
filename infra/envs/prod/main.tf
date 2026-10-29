@@ -86,6 +86,8 @@ module "platform" {
   kafka_enabled            = var.kafka_enabled
   enable_service_discovery = var.enable_service_discovery
   oauth                    = var.oauth
+  tls                      = var.tls
+  autoscaling              = var.autoscaling
 
   grpc_service_token               = var.grpc_service_token
   session_access_token_signing_key = var.session_access_token_signing_key

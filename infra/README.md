@@ -11,6 +11,10 @@ make infra-validate   # fmt -check + init -backend=false + validate, for all thr
 make infra-test       # terraform test on mock providers: a full plan without AWS
 ```
 
+The last two also run in CI (`.github/workflows/ci.yml`, the `terraform` job) on every
+push and pull request — the cheap halves gate every change, and only an apply needs an
+account.
+
 ```bash
 make bootstrap         # once per account: state backend + ECR (needs AWS)
 make init plan apply   # ENV=dev by default; ENV=prod for the other one
@@ -43,10 +47,21 @@ three values in both environments keeps the coupling visible.
 
 ## The shape it builds
 
-- **ALB on HTTP/80 only.** TLS terminates at a certificate the MVP does not own yet — the
-  front's `PUBLIC_ORIGIN` must become `https://` before any OAuth provider accepts a
-  callback. Two rules: the default action to the front's target group, and `/auth/*` to the
-  gateway's. Health checks are `/` for the front and `/health` for the gateway.
+- **ALB, HTTP first and HTTPS once `tls.domain_name` is set.** Without a domain the
+  balancer is what the MVP ships: port 80 answers, `/auth/*` goes to the gateway's target
+  group and everything else to the front's. With one, the certificate is requested with DNS
+  validation in the given zone (`route53_zone_id` for an existing one, `route53_zone_name`
+  for one the stack creates), port 443 opens only after `aws_acm_certificate_validation`
+  reports ISSUED — the listener's `certificate_arn` reads the *validation* resource — and
+  port 80 answers every request with a 301 to the same host on HTTPS. The front's
+  `PUBLIC_ORIGIN` must become `https://` to match: OAuth providers refuse a callback that
+  arrives over plain http. Health checks are `/` for the front and `/health` for the
+  gateway.
+- **Application Auto Scaling** — one target-tracking policy per service, holding average
+  CPU at `autoscaling.cpu_target_percent` between `min_capacity` and `max_capacity`
+  (1..4 tasks by default; prod sets 2..8 explicitly so a quiet week cannot shrink the
+  fleet `terraform.tfvars` chose). `autoscaling.enabled = false` pins `desired_count` as
+  the whole story.
 - **ECS Fargate, tasks in public subnets** with `assign_public_ip`: there is no NAT, so a
   private task could not reach ECR. The security groups are what make it safe — nothing
   reaches a task except the load balancer and its siblings.

@@ -125,3 +125,42 @@ resource "aws_ecs_service" "services" {
     Environment = var.environment
   }
 }
+
+# ---- autoscaling -----------------------------------------------------------------
+#
+# One target per service, registered against the service that already exists (the
+# reference below is the ordering), and one target-tracking policy holding average CPU.
+# Desired count is what ECS runs; these bounds are what may change it without a human —
+# which is why they live next to the service they bound rather than in a runbook.
+
+resource "aws_appautoscaling_target" "services" {
+  for_each = var.autoscaling.enabled ? aws_ecs_service.services : {}
+
+  max_capacity       = var.autoscaling.max_capacity
+  min_capacity       = var.autoscaling.min_capacity
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${each.value.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "services" {
+  for_each = aws_appautoscaling_target.services
+
+  name               = "${var.name_prefix}-${each.key}-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = each.value.resource_id
+  scalable_dimension = each.value.scalable_dimension
+  service_namespace  = each.value.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+
+    target_value       = var.autoscaling.cpu_target_percent
+    scale_in_cooldown  = var.autoscaling.scale_in_cooldown
+    scale_out_cooldown = var.autoscaling.scale_out_cooldown
+  }
+
+  depends_on = [aws_appautoscaling_target.services]
+}
