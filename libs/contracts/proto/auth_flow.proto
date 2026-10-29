@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package auth_flow.v1;
+
+// auth-flow answers "walk this person through the authentication flow". It owns the
+// state machine, not the storage: identity, vault and sessions stay independent.
+service AuthFlowService {
+  rpc StartFlow (StartFlowRequest) returns (FlowResponse);
+  rpc AdvanceFlow (AdvanceFlowRequest) returns (FlowResponse);
+  rpc GetFlow (GetFlowRequest) returns (FlowResponse);
+  rpc CancelFlow (CancelFlowRequest) returns (FlowResponse);
+}
+
+message StartFlowRequest {
+  // Flow names: login, register, reset_password, magic_link, step_up.
+  string flow = 1;
+  string email = 2;
+  string ip_address = 3;
+  string user_agent = 4;
+  string device_fingerprint = 5;
+  map<string, string> metadata = 6;
+}
+
+message AdvanceFlowRequest {
+  string flow_id = 1;
+  // Password, otp, backup_code, magic_token, depending on the flow's current state.
+  string credential = 2;
+  string ip_address = 3;
+  string device_fingerprint = 4;
+}
+
+message GetFlowRequest {
+  string flow_id = 1;
+}
+
+message CancelFlowRequest {
+  string flow_id = 1;
+  string reason = 2;
+}
+
+// Flow states: awaiting_credential, awaiting_2fa, awaiting_step_up, completed, failed,
+// expired, cancelled.
+message FlowResponse {
+  string flow_id = 1;
+  string state = 2;
+  string flow = 3;
+  // Populated only in `completed`.
+  string access_token = 4;
+  string refresh_token = 5;
+  string session_id = 6;
+  int32 expires_in = 7;
+  // Explains a transition — shown to the user, so it must not leak internals.
+  string message = 8;
+  bool retryable = 9;
+  // Set on a refusal that ran the account out of attempts. A lock is a state of the walk, not
+  // a transport failure: gRPC has no status for it, and sending one would lose the seconds below.
+  bool locked = 10;
+  // Whole seconds until the lock lifts; 0 when there is none.
+  int32 retry_after_seconds = 11;
+}

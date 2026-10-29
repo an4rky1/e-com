@@ -19,19 +19,19 @@ const addresses = {
   'identity.v1': process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
   'credential_vault.v1':
     process.env.CREDENTIAL_VAULT_GRPC_URL ?? 'localhost:31003',
-  'session_token.v1': process.env.SESSION_TOKEN_GRPC_URL ?? 'localhost:31004',
+  'session.v1': process.env.SESSION_GRPC_URL ?? 'localhost:31004',
   'mfa.v1': process.env.MFA_GRPC_URL ?? 'localhost:31006',
-  // The test drives auth-gateway directly, so its proto has to be loaded too.
-  'auth_gateway.v1': process.env.AUTH_GATEWAY_GRPC_URL ?? 'localhost:31005',
+  // The test drives auth-flow directly, so its proto has to be loaded too.
+  'auth_flow.v1': process.env.AUTH_FLOW_GRPC_URL ?? 'localhost:31005',
 };
 
 const channel = createStaticGrpcChannel({
   protoPaths: [
     join(PROTO_DIR, 'identity.proto'),
     join(PROTO_DIR, 'credential_vault.proto'),
-    join(PROTO_DIR, 'session_token.proto'),
+    join(PROTO_DIR, 'session.proto'),
     join(PROTO_DIR, 'mfa.proto'),
-    join(PROTO_DIR, 'auth_gateway.proto'),
+    join(PROTO_DIR, 'auth_flow.proto'),
   ],
   url: addresses['identity.v1'],
   addresses,
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
 
   if (step === 'start-flow') {
     const response = await call<{ flowId: string; state: string; flow: string }>(
-      '/auth_gateway.v1.AuthGatewayService/StartFlow',
+      '/auth_flow.v1.AuthFlowService/StartFlow',
       { flow: 'login', email, ipAddress: clientIp },
     );
     console.log(JSON.stringify(response));
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
       sessionId: string;
       message: string;
     }>(
-      '/auth_gateway.v1.AuthGatewayService/AdvanceFlow',
+      '/auth_flow.v1.AuthFlowService/AdvanceFlow',
       { flowId: process.argv[3], credential: password, ipAddress: clientIp },
     );
     console.log(JSON.stringify(response));
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
       sessionId: string;
       revocationReason: string;
     }>(
-      '/session_token.v1.SessionTokenService/ValidateAccessToken',
+      '/session.v1.SessionService/ValidateAccessToken',
       { accessToken: process.argv[3] },
     );
     console.log(JSON.stringify(response));

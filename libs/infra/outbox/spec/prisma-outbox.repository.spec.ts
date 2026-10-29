@@ -1,5 +1,5 @@
 import { PrismaOutboxRepository } from '../src/prisma-outbox.repository';
-import type { OutboxRecord } from '../src/outbox.repository.port';
+import type { OutboxRecord } from '../src/outbox.config';
 
 /**
  * The claim path of the Prisma outbox repository.
@@ -32,7 +32,7 @@ class RecordingClient {
         return [];
       },
       update: jest.fn(),
-      updateMany: async (args: Record<string, unknown>) => {
+      updateMany: async (args: { where: Record<string, unknown> }) => {
         this.updated.push(args);
         return { count: 0 };
       },

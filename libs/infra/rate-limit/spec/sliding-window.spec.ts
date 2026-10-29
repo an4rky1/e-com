@@ -15,7 +15,9 @@ import { Defaults, type RateLimitConfig } from '../src/rate-limit.config';
  * always still false when it is read. The variable is set by whoever can set it — CI, or a
  * developer with the stack up — which is the same decision, made where it can be made.
  */
-const REDIS_URL = process.env.REDIS_URL ?? null;
+// Empty string rather than `null`: the gate below tests presence, and an empty URL is never
+// used for a connection because a test with an empty URL is skipped.
+const REDIS_URL = process.env.REDIS_URL ?? '';
 
 const config: RateLimitConfig = {
   enabled: true,
@@ -24,7 +26,6 @@ const config: RateLimitConfig = {
   failOpen: false,
   headers: true,
   keyPrefix: 'rl-test',
-  redisUrl: REDIS_URL ?? 'redis://localhost:6379',
 };
 
 /** `it.skipIf` is not in this Jest version; this is the same guard spelled the old way. */

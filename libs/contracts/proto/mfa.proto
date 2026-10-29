@@ -3,7 +3,7 @@ syntax = "proto3";
 package mfa.v1;
 
 // MFA answers "can this person prove a second factor". It does not decide whether one is
-// required — auth-gateway owns that, so a policy change never needs an mfa deploy.
+// required — auth-flow owns that, so a policy change never needs an mfa deploy.
 service MfaService {
   // Whether the account has any usable factor. Cheap, and called on every login that reaches
   // the credential step.

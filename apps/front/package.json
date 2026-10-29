@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "nx": {
-    "sourceRoot": "apps/front/src"
+    "sourceRoot": "apps/front/src",
+    "tags": ["type:web"]
   },
   "dependencies": {
     "next": "~16.1.6",

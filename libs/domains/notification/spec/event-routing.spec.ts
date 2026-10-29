@@ -71,7 +71,7 @@ const EXPECTED: readonly {
     payload: { userId: USER_ID, sessionId: 's-1', reason: 'user_initiated', allSessions: true },
   },
   {
-    topic: Topics.SESSION_TOKEN_REUSE_DETECTED,
+    topic: Topics.SESSION_REUSE_DETECTED,
     template: NotificationTemplate.SUSPICIOUS_REUSE,
     payload: { userId: USER_ID, sessionId: 's-1', revokedCount: 3 },
   },
@@ -277,7 +277,7 @@ describe('channel overrides', () => {
   });
 
   it('widens a replayed refresh token to every channel', () => {
-    const route = required(routeFor(Topics.SESSION_TOKEN_REUSE_DETECTED), 'route');
+    const route = required(routeFor(Topics.SESSION_REUSE_DETECTED), 'route');
     const resolution = resolveRoute(route, { userId: USER_ID, revokedCount: 2 });
 
     expect(resolution.ok).toBe(true);

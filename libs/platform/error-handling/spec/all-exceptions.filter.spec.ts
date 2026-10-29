@@ -45,9 +45,12 @@ describe('AllExceptionsFilter over gRPC', () => {
 
   it('keeps an unrecognised error loud rather than mapping it to a client code', async () => {
     const filter = new AllExceptionsFilter();
-    const error = await firstValueFrom(
+    // The cast lives on the awaited result rather than in the callback: `firstValueFrom` over
+    // `never` gives `Promise<unknown>`, and `Promise<unknown>.catch` still resolves to
+    // `unknown`, so a callback-local assertion would be swallowed by that union.
+    const error = (await firstValueFrom(
       filter.catch(new Error('connection string leaked'), rpcHost()) as never,
-    ).catch((e: unknown) => e as { code: number; message: string });
+    ).catch((e: unknown) => e)) as { code: number; message: string };
 
     expect(error.code).toBe(2);
     expect(error.message).not.toContain('connection string');
@@ -55,9 +58,9 @@ describe('AllExceptionsFilter over gRPC', () => {
 
   it('maps a plain HttpException by its status', async () => {
     const filter = new AllExceptionsFilter();
-    const error = await firstValueFrom(
+    const error = (await firstValueFrom(
       filter.catch(new NotFoundException('gone'), rpcHost()) as never,
-    ).catch((e: unknown) => e as { code: number });
+    ).catch((e: unknown) => e)) as { code: number };
 
     expect(error.code).toBe(5);
   });

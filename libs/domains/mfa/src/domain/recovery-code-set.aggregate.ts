@@ -82,7 +82,7 @@ export class MfaRecoveryCodesRegenerated extends DomainEvent {
  * A recovery code was spent, so a second factor was satisfied.
  *
  * @remarks Carries the `mfa.verified` event type rather than a bespoke one: to every
- * consumer downstream — the audit log, the notification service, auth-gateway's own view of
+ * consumer downstream — the audit log, the notification service, auth-flow's own view of
  * "this session is now second-factor verified" — spending a backup code and typing a TOTP
  * code are the same fact. Splitting them would force every consumer to learn that recovery
  * codes exist and where in the flow they are accepted.

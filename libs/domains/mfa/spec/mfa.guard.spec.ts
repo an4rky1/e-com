@@ -1,5 +1,5 @@
 /**
- * @fileoverview The guard auth-gateway reuses.
+ * @fileoverview The guard auth-flow reuses.
  *
  * @remarks The guard's whole contract is "a route either opts out, or the request carries a
  * proven second factor". Every branch below exists because a mistake in one of them is a

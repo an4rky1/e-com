@@ -37,22 +37,30 @@
       "@auth/domains/account-security": ["./libs/domains/account-security/src/index.ts"],
       "@auth/domains/api-key": ["./libs/domains/api-key/src/index.ts"],
       "@auth/domains/audit-log": ["./libs/domains/audit-log/src/index.ts"],
-      "@auth/domains/auth-gateway": ["./libs/domains/auth-gateway/src/index.ts"],
+      "@auth/domains/auth-flow": ["./libs/domains/auth-flow/src/index.ts"],
       "@auth/domains/credential-vault": ["./libs/domains/credential-vault/src/index.ts"],
       "@auth/domains/identity": ["./libs/domains/identity/src/index.ts"],
       "@auth/domains/mfa": ["./libs/domains/mfa/src/index.ts"],
       "@auth/domains/notification": ["./libs/domains/notification/src/index.ts"],
-      "@auth/domains/session-token": ["./libs/domains/session-token/src/index.ts"],
+      "@auth/domains/session": ["./libs/domains/session/src/index.ts"],
+      "@auth/platform/api-versioning": ["./libs/platform/api-versioning/src/index.ts"],
       "@auth/platform/config": ["./libs/platform/config/src/index.ts"],
+      "@auth/platform/context": ["./libs/platform/context/src/index.ts"],
       "@auth/platform/error-handling": ["./libs/platform/error-handling/src/index.ts"],
       "@auth/platform/feature-flags": ["./libs/platform/feature-flags/src/index.ts"],
       "@auth/platform/health": ["./libs/platform/health/src/index.ts"],
+      "@auth/platform/observability": ["./libs/platform/observability/src/index.ts"],
       "@auth/platform/shutdown": ["./libs/platform/shutdown/src/index.ts"],
+      "@auth/infra/cache": ["./libs/infra/cache/src/index.ts"],
       "@auth/infra/grpc": ["./libs/infra/grpc/src/index.ts"],
+      "@auth/infra/idempotency": ["./libs/infra/idempotency/src/index.ts"],
       "@auth/infra/kafka": ["./libs/infra/kafka/src/index.ts"],
       "@auth/infra/outbox": ["./libs/infra/outbox/src/index.ts"],
       "@auth/infra/prisma": ["./libs/infra/prisma/src/index.ts"],
-      "@auth/infra/rate-limit": ["./libs/infra/rate-limit/src/index.ts"]
+      "@auth/infra/queue": ["./libs/infra/queue/src/index.ts"],
+      "@auth/infra/rate-limit": ["./libs/infra/rate-limit/src/index.ts"],
+      "@auth/infra/redis": ["./libs/infra/redis/src/index.ts"],
+      "@auth/infra/saga": ["./libs/infra/saga/src/index.ts"]
     }
   }
 }

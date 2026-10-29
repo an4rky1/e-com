@@ -6,6 +6,7 @@
  * graceful shutdown order.
  */
 import 'reflect-metadata';
+import './tracing';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';

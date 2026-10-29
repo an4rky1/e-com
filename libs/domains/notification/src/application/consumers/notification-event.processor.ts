@@ -12,6 +12,11 @@
  * partition down with it and every event behind that message stops being processed. The
  * *only* failures that propagate are the ones a retry could fix, and those release the claim
  * first.
+ *
+ * @remarks The processor does not deliver. It resolves the event to a dispatch instruction,
+ * validates the template against it, and hands the instruction to BullMQ. Delivery — the
+ * provider call with its own deadline and retry policy — is the dispatch worker's job, on
+ * the worker's budget rather than the broker's.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ConsumedMessage } from '@auth/infra/kafka';
@@ -22,14 +27,12 @@ import {
   type ConsumerClaimStorePort,
 } from '../../domain/ports/consumer-claim.port';
 import {
-  NOTIFICATION_DISPATCHER,
-  type NotificationDispatcherPort,
-} from '../ports/notification-dispatcher.port';
+  NOTIFICATION_DISPATCH_QUEUE,
+  type NotificationDispatchJob,
+  type NotificationDispatchQueuePort,
+} from '../ports/notification-dispatch-queue.port';
 import { resolveRoute, routeFor } from '../../domain/event-routing';
-import {
-  toSendNotificationCommand,
-  type SendNotificationResult,
-} from '../commands/notification.commands';
+import { compileTemplate } from '../../domain/templates/notification-templates';
 
 /** The envelope fields this service reads. Everything else in a message is ignored. */
 interface Envelope {
@@ -43,7 +46,7 @@ interface Envelope {
  * guess whether it should commit an offset is a consumer whose offsets are wrong.
  */
 export const ConsumerOutcomeKind = {
-  /** A notification was dispatched. Safe to commit the offset. */
+  /** A dispatch job was enqueued. Safe to commit the offset. */
   PROCESSED: 'processed',
   /** Somebody already holds the claim; this delivery is a duplicate. Safe to commit. */
   DUPLICATE: 'duplicate',
@@ -65,9 +68,10 @@ export type ConsumerOutcomeKind =
 export type ConsumerOutcome =
   | {
       readonly kind: typeof ConsumerOutcomeKind.PROCESSED;
-      readonly notificationId: string;
+      /** The BullMQ job id, or `null` when the queue was absent and the claim was released. */
+      readonly jobId: string | null;
       readonly template: string;
-      readonly result: SendNotificationResult;
+      readonly claimKey: string;
     }
   | { readonly kind: typeof ConsumerOutcomeKind.DUPLICATE; readonly claimKey: string }
   | {
@@ -115,7 +119,7 @@ export class NotificationEventProcessor {
 
   constructor(
     @Inject(CONSUMER_CLAIM_STORE) private readonly claims: ConsumerClaimStorePort,
-    @Inject(NOTIFICATION_DISPATCHER) private readonly dispatcher: NotificationDispatcherPort,
+    @Inject(NOTIFICATION_DISPATCH_QUEUE) private readonly queue: NotificationDispatchQueuePort,
   ) {}
 
   /**
@@ -129,7 +133,7 @@ export class NotificationEventProcessor {
    * on every redelivery.
    *
    * @remarks Conversely the claim is released the moment anything throws. The alternative —
-   * keeping it — turns a 30-second database blip into a permanently lost notification, and the
+   * keeping it — turns a 30-second Redis blip into a permanently lost notification, and the
    * loss is invisible: no error, no event, just a user who never got the email.
    */
   async process(message: ConsumedMessage<unknown>): Promise<ConsumerOutcome> {
@@ -173,25 +177,13 @@ export class NotificationEventProcessor {
       };
     }
 
+    // Validate the template against the variables *now*, while the claim is held and a
+    // permanent failure can still be dead-lettered to the topic's DLQ. A template that
+    // rejects its variables is a producer bug that a retry cannot fix, and the consumer is
+    // the layer that can still name it on the record.
     try {
-      const result = await this.dispatcher.send(
-        toSendNotificationCommand({
-          ...resolution.instruction,
-          correlationId: message.traceId,
-        }),
-      );
-
-      return {
-        kind: 'processed',
-        notificationId: result.notificationId,
-        template: result.template,
-        result,
-      };
+      compileTemplate(resolution.instruction.template, resolution.instruction.variables);
     } catch (error) {
-      // A `DomainError` here is the template's Zod schema refusing the variables, and that is
-      // permanent: the same payload fails identically on every redelivery. Keeping the claim
-      // and dead-lettering it is what turns "a retry loop that never converges" into "a named
-      // reason on a topic somebody reads".
       if (error instanceof DomainError) {
         this.logger.warn(
           `dead-lettering ${message.topic}/${envelope.eventId}: ${error.message}`,
@@ -202,11 +194,50 @@ export class NotificationEventProcessor {
           detail: error.message,
         };
       }
+      throw error;
+    }
 
+    const job: NotificationDispatchJob = {
+      claimKey,
+      template: resolution.instruction.template,
+      userId: resolution.instruction.userId,
+      recipient: resolution.instruction.recipient,
+      variables: resolution.instruction.variables,
+      ...(resolution.instruction.channels
+        ? { channels: resolution.instruction.channels }
+        : {}),
+      ...(message.traceId ? { correlationId: message.traceId } : {}),
+    };
+
+    try {
+      const jobId = await this.queue.enqueue(job);
+
+      if (jobId === null) {
+        // The queue was absent — Redis unprovisioned at boot. Release so the broker
+        // redelivers once the platform catches up; keeping the claim would lose the
+        // notification silently.
+        await this.releaseQuietly(claimKey, 'dispatch queue absent');
+        return {
+          kind: 'released',
+          reason: 'dispatch-queue-absent',
+          detail: 'the notification dispatch queue is not registered in this process',
+        };
+      }
+
+      return {
+        kind: 'processed',
+        jobId,
+        template: resolution.instruction.template,
+        claimKey,
+      };
+    } catch (error) {
+      // An enqueue that threw is a Redis outage, not a poison message. The claim is
+      // released so the broker redelivers; the alternative is a notification that is lost
+      // with no error and no event.
       const detail = describe(error);
       await this.releaseQuietly(claimKey, detail);
 
-      return { kind: 'released', reason: 'dispatch-failed', detail };
+      return { kind: 'released', reason: 'enqueue-failed', detail };
     }
   }
 
@@ -228,7 +259,7 @@ export class NotificationEventProcessor {
   /**
    * A failed release must not replace the original failure.
    *
-   * @remarks If the release throws, the caller would see *that* error, decide the dispatch had
+   * @remarks If the release throws, the caller would see *that* error, decide the enqueue had
    * failed for a different reason, and act on that — while the claim it just lost track of is
    * still held and the notification is now permanently suppressed. Swallowing and logging
    * keeps the original reason, which is the one that describes what actually happened.

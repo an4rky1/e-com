@@ -1,6 +1,5 @@
-/**
- * @fileoverview Command handlers: the dispatch loop and read-state transitions.
- *
+/** @fileoverview Command handlers: the dispatch loop and read-state transitions.
+
  * @remarks The dispatch loop is the whole service, and it is built around one rule: a channel
  * that fails costs exactly its own channel. Everything else here follows from that — each
  * attempt is inside its own `try`, the outcome is recorded per channel rather than thrown,
@@ -12,8 +11,9 @@ import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { ResourceNotFoundException } from '@auth/platform/error-handling';
 import {
   NOTIFICATION_CHANNELS,
+  type NotificationChannelPort,
   type NotificationChannelRegistry,
-  type NotificationMessage,
+  type NotificationDeliveryReceipt,
 } from '../../domain/ports/notification-channel.port';
 import {
   NOTIFICATION_STORE,
@@ -25,14 +25,15 @@ import {
   type NotificationOutcome,
 } from '../../domain/notification.aggregate';
 import {
-  redactVariables,
   sanitiseDeliveryError,
 } from '../../domain/notification-announcement';
 import {
   compileTemplate,
   orderedChannels,
 } from '../../domain/templates/notification-templates';
+import { redactVariables } from '../../domain/templates/notification-redaction';
 import {
+  channelRequiresAddress,
   DeliveryStatus,
   NotificationChannel,
 } from '../../domain/value-objects/notification-channel.vo';
@@ -80,6 +81,16 @@ export class SendNotificationHandler
       command.channels ?? compiled.definition.channels,
     );
 
+    // The aggregate is built once, with the already-redacted payload on it. The handler does
+    // not reach back in and mutate the aggregate's own copy of the variables: it builds the
+    // notification from the payload it already checked, then lets the aggregate keep that copy
+    // as the one, authoritative, renderable payload.
+    // The report surface is the union of what the schema stripped and what the content guard
+    // dropped: both are names a producer needs to see, and neither carries a value.
+    const reportedRedacted = [
+      ...new Set([...compiled.redacted, ...safe.redacted]),
+    ].sort();
+
     const notification = Notification.request({
       userId: command.userId,
       template: command.template,
@@ -87,14 +98,18 @@ export class SendNotificationHandler
       body: compiled.body,
       severity: compiled.definition.severity,
       variables: safe.variables,
-      redactedVariables: safe.redacted,
+      redactedVariables: reportedRedacted,
       recipient: command.recipient,
       channels: requested,
       correlationId: command.correlationId,
     });
 
+    const receipts: NotificationDeliveryReceipt[] = [];
+
     for (const channel of requested) {
-      await this.attempt(notification, channel, requested.length);
+      receipts.push(
+        await this.attempt(notification, channel, this.channels.resolve(channel)),
+      );
     }
 
     const outcome: NotificationOutcome = notification.settle(command.correlationId);
@@ -115,58 +130,81 @@ export class SendNotificationHandler
       notificationId: notification.id.value,
       template: command.template,
       outcome,
-      deliveries: notification.deliveries.map((delivery) => ({
-        channel: delivery.channel,
-        status: delivery.status,
-        ...(delivery.error ? { error: delivery.error } : {}),
+      deliveries: receipts.map((receipt) => ({
+        channel: receipt.channel,
+        status: receipt.status,
+        ...(receipt.error ? { error: receipt.error } : {}),
       })),
       redactedVariables: notification.redactedVariables,
     };
   }
 
   /**
-   * One channel, fully isolated.
+   * Attempts one channel on a notification that has already been built and redacted.
    *
-   * @remarks Three distinct "not sent" paths, each with its own record, because they need
-   * different follow-ups:
+   * @remarks Mutates the notification through its own interface rather than by assigning to
+   * private fields. The order of the guards is load-bearing: an unbound or unreachable adapter
+   * is a deployment fact and is checked first, while a missing address is a recipient fact and
+   * only matters for channels that route to one — `inapp` never has an address, and treating
+   * its `null` as "unreachable" would silently drop every in-app notification.
    *
-   * - no adapter for this channel — the deployment cannot deliver here (`skipped`);
-   * - an adapter that exists but has no address for this recipient — nothing to send to;
-   * - an adapter that threw — our problem, and a retry may fix it.
-   *
-   * @remarks `address` is passed rather than the whole recipient so a channel adapter cannot
-   * reach an address belonging to a *different* channel by accident.
+   * @remarks A channel that throws is recorded as failed and the loop keeps going; a channel
+   * that is skipped is recorded as skipped rather than left unrecorded.
    */
   private async attempt(
     notification: Notification,
     channel: NotificationChannel,
-    total: number,
-  ): Promise<void> {
-    const adapter = this.channels.resolve(channel);
-    const address = addressFor(notification.recipient, channel);
-    // `inapp` has no address to have: it is delivered to whoever opens the app. Every other
-    // channel without one has nothing to send to, which is a `skip` and not a `failure`.
-    const addressRequired = channel !== NotificationChannel.INAPP;
+    channelAdapter: NotificationChannelPort | null,
+  ): Promise<NotificationDeliveryReceipt> {
+    const attemptedAt = new Date();
 
-    if (!adapter) {
-      this.record(notification, {
+    // An unbound adapter is a deployment fact: the registry explains why the channel is not
+    // available, and that explanation is what a support conversation needs.
+    if (channelAdapter === null) {
+      const unboundReceipt: NotificationDeliveryReceipt = {
         channel,
         status: DeliveryStatus.SKIPPED,
+        deliveredAt: attemptedAt,
         error: this.channels.unavailableReason,
-      });
-      return;
+      };
+
+      notification.recordDelivery(unboundReceipt);
+      return unboundReceipt;
     }
 
-    if (addressRequired && (address === null || !adapter.supports(notification.recipient))) {
-      this.record(notification, {
+    // A missing address is a recipient fact, and it is checked before `supports()` so the
+    // reason a channel was skipped reads "nowhere to send" rather than "deployment is not
+    // configured" — an adapter can be bound and willing while the recipient still has no
+    // address to receive on. `inapp` never needs one.
+    const address = addressFor(notification.recipient, channel);
+    if (channelRequiresAddress(channel) && address === null) {
+      const skippedReceipt: NotificationDeliveryReceipt = {
         channel,
         status: DeliveryStatus.SKIPPED,
-        error: 'no address for this channel on the recipient',
-      });
-      return;
+        deliveredAt: attemptedAt,
+        error: `no address for channel ${channel}`,
+      };
+
+      notification.recordDelivery(skippedReceipt);
+      return skippedReceipt;
     }
 
-    const message: NotificationMessage = {
+    // A bound adapter that is not currently delivering reads as a skip, not a failure —
+    // there is nowhere to send the message in this deployment, rather than a provider that
+    // refused one. The throw path below is for providers that threw.
+    if (!channelAdapter.supports()) {
+      const unsupportedReceipt: NotificationDeliveryReceipt = {
+        channel,
+        status: DeliveryStatus.SKIPPED,
+        deliveredAt: attemptedAt,
+        error: `channel ${channel} is not enabled in this deployment`,
+      };
+
+      notification.recordDelivery(unsupportedReceipt);
+      return unsupportedReceipt;
+    }
+
+    const message = {
       notificationId: notification.id.value,
       userId: notification.userId,
       template: notification.template,
@@ -178,52 +216,24 @@ export class SendNotificationHandler
       address,
     };
 
+    let receipt: NotificationDeliveryReceipt;
     try {
-      const receipt = await adapter.deliver(message);
-      this.record(notification, {
-        channel,
-        status: receipt.status,
-        ...(receipt.providerMessageId
-          ? { providerMessageId: receipt.providerMessageId }
-          : {}),
-        ...(receipt.error ? { error: receipt.error } : {}),
-      });
+      receipt = await channelAdapter.deliver(message);
     } catch (error) {
-      // Swallowed on purpose. Rethrowing would abandon the channels that have not been
-      // attempted yet, and the whole reason this loop is written per channel is that one
-      // provider being down must not cost a user their push notification.
-      const message_ = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `channel ${channel} failed for notification ${notification.id.value} (${notification.deliveries.length + 1}/${total})`,
-      );
-      this.record(notification, {
+      const failedReceipt: NotificationDeliveryReceipt = {
         channel,
         status: DeliveryStatus.FAILED,
-        error: message_,
-      });
-    }
-  }
+        error: sanitiseDeliveryError(error instanceof Error ? error.message : String(error)),
+        deliveredAt: attemptedAt,
+      };
 
-  private record(
-    notification: Notification,
-    delivery: {
-      channel: NotificationChannel;
-      status: DeliveryStatus;
-      providerMessageId?: string;
-      error?: string;
-    },
-  ): void {
-    notification.recordDelivery({
-      channel: delivery.channel,
-      status: delivery.status,
-      ...(delivery.providerMessageId
-        ? { providerMessageId: delivery.providerMessageId }
-        : {}),
-      // Scrubbed, not merely truncated: a provider error is the least predictable string this
-      // service stores, and the one most likely to quote a key or an address verbatim.
-      ...(delivery.error ? { error: sanitiseDeliveryError(delivery.error) } : {}),
-      deliveredAt: new Date(),
-    });
+      notification.recordDelivery(failedReceipt);
+
+      return failedReceipt;
+    }
+
+    notification.recordDelivery(receipt);
+    return receipt;
   }
 }
 

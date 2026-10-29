@@ -2,7 +2,7 @@
  * @fileoverview The single question the transport layer may ask about a second factor.
  *
  * @remarks Declared as a port rather than depending on {@link MfaService} directly, because
- * the guard is the piece auth-gateway reuses — and a gateway that imported a command handler
+ * the guard is the piece auth-flow reuses — and a gateway that imported a command handler
  * would drag the vault, the repositories and a Prisma client into its own module graph. The
  * interface is four lines wide on purpose: "does this code prove possession?" is all a guard
  * can act on.

@@ -29,12 +29,16 @@ import {
 import { MfaService } from '../application/facade/mfa.service';
 import { MfaGuard } from './guards/mfa.guard';
 import { SkipMfa } from './decorators/skip-mfa.decorator';
+// Request DTOs are values on purpose: `emitDecoratorMetadata` reads the *value* binding of
+// each `@Body()` parameter's type — a type-only binding emits `Function`, and
+// ValidationPipe then strips the body to `{}` instead of validating it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
-  type BeginEnrollmentRequestDto,
-  type ConfirmEnrollmentRequestDto,
-  type DisableMfaRequestDto,
-  type RegenerateRecoveryCodesRequestDto,
-  type VerifyFactorRequestDto,
+  BeginEnrollmentRequestDto,
+  ConfirmEnrollmentRequestDto,
+  DisableMfaRequestDto,
+  RegenerateRecoveryCodesRequestDto,
+  VerifyFactorRequestDto,
   toEnrollmentSecretResponse,
   toFactorResponse,
   toMfaStatusResponse,

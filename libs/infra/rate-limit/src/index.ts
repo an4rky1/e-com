@@ -1,7 +1,6 @@
 export {
   Defaults,
   RATE_LIMIT_CONFIG,
-  RATE_LIMIT_REDIS,
   resolveRateLimitConfig,
   type RateLimitConfig,
   type RateLimitEnvConfig,

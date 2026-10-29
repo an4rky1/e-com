@@ -40,6 +40,19 @@ export function isNotificationChannel(value: unknown): value is NotificationChan
 }
 
 /**
+ * Whether a channel needs a concrete address on the recipient to deliver.
+ *
+ * @remarks `inapp` is the exception: it is delivered to whoever opens the app, so
+ * {@link addressFor} returning `null` for it is the normal case rather than an unreachable
+ * recipient. Every other channel routes to something the recipient must have supplied — an
+ * email, a phone number, a device token — and a dispatch that reaches one of them without an
+ * address has nowhere to send.
+ */
+export function channelRequiresAddress(channel: NotificationChannel): boolean {
+  return channel !== NotificationChannel.INAPP;
+}
+
+/**
  * What happened on one channel.
  *
  * @remarks `failed` and `skipped` are both "not delivered", and keeping them apart is what

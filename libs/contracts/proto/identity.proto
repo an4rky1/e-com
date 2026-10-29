@@ -10,6 +10,11 @@ service IdentityService {
   // Creates the account record, and nothing else: no credential, no session, no role. The
   // edge in front of this service calls it so registration is reachable from one origin.
   rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+  // Resolves an identity-provider account to a local user: the (provider, subject) linkage
+  // is looked up, linked to the account behind the address, or a new account is created —
+  // one round trip, one decision, made where the linkage lives. The caller has already
+  // proved possession of the provider session; this is account resolution, not authn.
+  rpc ResolveOauthUser (ResolveOauthUserRequest) returns (ResolveOauthUserResponse);
   // Resolves an opaque principal (a verified token, a session id, an internal caller)
   // into the user behind it. Used by the gateway on every authenticated request.
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
@@ -43,10 +48,36 @@ message CreateUserRequest {
   string locale = 3;
   // Where the signup came from, e.g. `web`. Recorded, never trusted for authorisation.
   string source = 4;
+  // True when the address came from a provider that already vouched for it (an OAuth
+  // sign-up); false is the default and means "still pending the verification letter".
+  bool email_verified = 5;
+  // Caller-chosen id for the new account; empty lets identity generate one. Registration
+  // pre-chooses it so the password can be stored against the very id the account will have
+  // — a refusal on the account then orphans a credential that gets revoked, rather than a
+  // policy refusal on the password orphaning an account nobody can finish.
+  string id = 6;
 }
 
 message CreateUserResponse {
   UserResponse user = 1;
+}
+
+message ResolveOauthUserRequest {
+  // The provider's own name: `google`, `github` or `telegram`.
+  string provider = 1;
+  // The provider's stable subject for the account — Google's `sub`, GitHub's numeric id.
+  string subject = 2;
+  string email = 3;
+  // Whether the provider asserts the address is verified. Recorded as the account's
+  // `email_verified`; identity does not re-prove what the provider stated.
+  bool email_verified = 4;
+  string display_name = 5;
+}
+
+message ResolveOauthUserResponse {
+  UserResponse user = 1;
+  // True when this call created the account rather than finding an existing one.
+  bool created = 2;
 }
 
 message AuthenticateRequest {

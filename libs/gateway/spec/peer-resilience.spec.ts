@@ -20,7 +20,7 @@ import {
 } from '../src/infrastructure/grpc/grpc-peer-clients';
 import { testGatewayConfig, ScriptedChannel, grpcError } from './testing/peer-doubles';
 
-const START_FLOW = '/auth_gateway.v1.AuthGatewayService/StartFlow';
+const START_FLOW = '/auth_flow.v1.AuthFlowService/StartFlow';
 const CREATE_USER = '/identity.v1.IdentityService/CreateUser';
 
 const callerFor = (channel: ScriptedChannel, deadlineMs = 500) =>

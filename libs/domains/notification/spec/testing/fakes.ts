@@ -10,6 +10,10 @@
  *
  * @remarks No Nest bootstrap and no database. Every test below constructs its handlers
  * directly, which is what keeps the idempotency tests fast enough to actually run.
+ *
+ * @remarks The worker tests add their own doubles for the BullMQ side — `TestBullQueue`,
+ * `TestWorker` and a couple of job-shaped helpers — because those tests exercise the retry
+ * policy and the enqueue contract rather than the Kafka consumer.
  */
 import type { ConsumedMessage } from '@auth/infra/kafka';
 import type {
@@ -33,12 +37,71 @@ import type {
   NotificationDispatcherPort,
 } from '../../src/application/ports/notification-dispatcher.port';
 import type {
-  MarkNotificationReadCommand,
-  MarkNotificationReadResult,
-  SendNotificationCommand,
-  SendNotificationResult,
+  NotificationDispatchJob,
+  NotificationDispatchQueuePort,
+} from '../../src/application/ports/notification-dispatch-queue.port';
+import {
+  toSendNotificationCommand,
+  type MarkNotificationReadCommand,
+  type MarkNotificationReadResult,
+  type SendNotificationCommand,
+  type SendNotificationResult,
 } from '../../src/application/commands/notification.commands';
 import type { NotificationConfig } from '../../src/notification.config';
+
+/**
+ * A BullMQ `Job` shape thin enough for the worker tests to build by hand.
+ *
+ * @remarks A structural type, not an import of `bullmq`'s `Job`, because the real class opens
+ * its own Redis connection and resolves its handlers against the running server. The worker
+ * tests construct these directly and pass them to `handleJob`, which reads only `.data` and
+ * `.updateProgress`.
+ */
+export interface TestJob<P = unknown> {
+  readonly id: string;
+  readonly data: P;
+  readonly progress: Record<string, unknown> | undefined;
+  updateProgress(value: Record<string, unknown>): Promise<void>;
+}
+
+/**
+ * Builds the shape the notification worker expects for a resend or cancel job.
+ *
+ * @remarks A helper, not a mock: it exists so the worker tests assert on *real* payload
+ * shapes rather than on whatever `{ id: 1 }` the test author reached for.
+ */
+export function notificationJob(
+  payload: {
+    readonly notificationId: string;
+    readonly kind: 'resend' | 'cancel';
+    readonly userId: string;
+    readonly scheduleAt?: string;
+    readonly correlationId?: string;
+  },
+  id = crypto.randomUUID(),
+): TestJob<{
+  readonly notificationId: string;
+  readonly kind: 'resend' | 'cancel';
+  readonly userId: string;
+  readonly scheduleAt?: string;
+  readonly correlationId?: string;
+}> {
+  let progress: Record<string, unknown> | undefined;
+  return {
+    get id() {
+      return id;
+    },
+    get data() {
+      return payload;
+    },
+    get progress() {
+      return progress;
+    },
+    async updateProgress(value: Record<string, unknown>) {
+      progress = value;
+    },
+  };
+}
 
 /** A user id that is a valid v4 UUID, so the kernel's `EntityId` accepts it. */
 export const USER_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
@@ -56,6 +119,8 @@ export const testNotificationConfig = (
   logBodies: false,
   deadLetterEnabled: true,
   storeMode: 'prisma',
+  resendRateLimitPerMinute: 10,
+  dispatchConcurrency: 5,
   ...overrides,
 });
 
@@ -160,6 +225,15 @@ export class TestChannelRegistry implements NotificationChannelRegistry {
         adapter instanceof RecordingChannel && adapter.delivered.length > 0,
       )
       .map(([channel]) => channel);
+  }
+
+  /** Returns a bound adapter for a channel, so a test can cast to a recording one without guarding. */
+  bound(channel: NotificationChannel): NotificationChannelPort {
+    const adapter = this.adapters.get(channel);
+    if (!adapter) {
+      throw new Error(`no adapter for channel ${channel}`);
+    }
+    return adapter;
   }
 }
 
@@ -275,6 +349,65 @@ export class RecordingDispatcher implements NotificationDispatcherPort {
       readAt: new Date().toISOString(),
       changed: true,
     };
+  }
+}
+
+// ---- dispatch queue ------------------------------------------------------------
+
+/**
+ * The queue the processor enqueues onto, in memory.
+ *
+ * @remarks The interesting assertion about the consume side is "this instruction was ordered
+ * exactly once", so the fake records the jobs rather than delivering them. {@link drainDispatches}
+ * plays the dispatch worker's part when a test needs the notification to actually exist.
+ *
+ * @remarks `jobId` is the claim key, the identity the Bull adapter deduplicates on. The
+ * adapter itself percent-encodes it before handing it to Redis (BullMQ forbids `:` in a custom
+ * id), so the rendering differs while the identity — and therefore the dedup contract a test
+ * sees when it enqueues the same event twice — does not.
+ */
+export class RecordingDispatchQueue implements NotificationDispatchQueuePort {
+  /** Every job handed to this queue, in call order. */
+  readonly enqueued: NotificationDispatchJob[] = [];
+
+  /** Thrown from `enqueue` when set, so a test can simulate a Redis outage. */
+  failNextEnqueue: Error | null = null;
+
+  /** When true, `enqueue` reports the queue as absent — Redis unprovisioned at boot. */
+  absent = false;
+
+  async enqueue(job: NotificationDispatchJob): Promise<string | null> {
+    if (this.failNextEnqueue) {
+      const error = this.failNextEnqueue;
+      this.failNextEnqueue = null;
+      throw error;
+    }
+
+    if (this.absent) {
+      return null;
+    }
+
+    this.enqueued.push(job);
+    return job.claimKey;
+  }
+}
+
+/**
+ * Runs every enqueued dispatch job through the real handler — the dispatch worker's job,
+ * inlined.
+ *
+ * @remarks The processor's contract ends at the enqueue; a test that asserts on *what was
+ * sent* therefore has to play the worker. Draining splices the queue, so a second drain is a
+ * no-op and a test cannot accidentally deliver the same instruction twice.
+ */
+export async function drainDispatches(
+  queue: RecordingDispatchQueue,
+  handler: {
+    execute(command: SendNotificationCommand): Promise<SendNotificationResult>;
+  },
+): Promise<void> {
+  for (const job of queue.enqueued.splice(0)) {
+    await handler.execute(toSendNotificationCommand(job));
   }
 }
 

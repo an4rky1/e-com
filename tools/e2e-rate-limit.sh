@@ -20,6 +20,10 @@ export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 # The edge presents this token on every peer call and refuses to boot without one; the value is
 # throwaway because nothing here reaches a real peer.
 export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
+# The key the edge verifies access tokens with. Also throwaway — this run never mints a token
+# — but required: a guard with no key could not say yes to anything, and the boot error is
+# where that is caught rather than as a wall of 401s.
+export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
 
 # Low enough to trip quickly, high enough that the health checks and the two warm-up calls land
 # under it. A limit that only the test understands is a limit nothing else can reason about.
@@ -51,8 +55,8 @@ DATABASE_URL="" SERVICE_NAME=api-gateway PORT="$PORT" REDIS_URL="$REDIS_URL" \
   GATEWAY_IDENTITY_URL=localhost:1 \
   GATEWAY_ACCESS_CONTROL_URL=localhost:1 \
   GATEWAY_CREDENTIAL_VAULT_URL=localhost:1 \
-  GATEWAY_SESSION_TOKEN_URL=localhost:1 \
-  GATEWAY_AUTH_GATEWAY_URL=localhost:1 \
+  GATEWAY_SESSION_URL=localhost:1 \
+  GATEWAY_AUTH_FLOW_URL=localhost:1 \
   TS_NODE_PROJECT=apps/api-gateway/tsconfig.app.json \
     npx ts-node --transpile-only -r tsconfig-paths/register apps/api-gateway/src/main.ts \
     > "$LOG/rate-limit.log" 2>&1 &

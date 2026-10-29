@@ -11,8 +11,8 @@ export const ServiceNames = {
   IDENTITY: 'identity',
   ACCESS_CONTROL: 'access-control',
   CREDENTIAL_VAULT: 'credential-vault',
-  SESSION_TOKEN: 'session-token',
-  AUTH_GATEWAY: 'auth-gateway',
+  SESSION: 'session',
+  AUTH_FLOW: 'auth-flow',
   NOTIFICATION: 'notification',
   AUDIT_LOG: 'audit-log',
   ACCOUNT_SECURITY: 'account-security',
@@ -25,8 +25,8 @@ export const GrpcPackages = {
   IDENTITY: 'identity.v1',
   ACCESS_CONTROL: 'access_control.v1',
   CREDENTIAL_VAULT: 'credential_vault.v1',
-  SESSION_TOKEN: 'session_token.v1',
-  AUTH_GATEWAY: 'auth_gateway.v1',
+  SESSION: 'session.v1',
+  AUTH_FLOW: 'auth_flow.v1',
   ACCOUNT_SECURITY: 'account_security.v1',
 } as const;
 

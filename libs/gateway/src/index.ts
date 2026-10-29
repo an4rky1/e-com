@@ -25,8 +25,23 @@ export {
   type CurrentUser,
   type LoginInput,
   type LoginResult,
+  type RegisterInput,
   type SessionSummary,
 } from './application/facade/gateway.service';
+export { OAuthService } from './application/oauth/oauth.service';
+export { OAUTH_HTTP, type OAuthHttpPort } from './application/oauth/oauth.port';
+export {
+  OAUTH_STATE_TTL_MS,
+  signOAuthState,
+  verifyOAuthState,
+  type OAuthStateClaims,
+} from './application/oauth/oauth-state';
+export {
+  TELEGRAM_AUTH_FUTURE_TOLERANCE_SEC,
+  TELEGRAM_AUTH_MAX_AGE_SEC,
+  verifyTelegramAuth,
+  type TelegramAuthProfile,
+} from './application/oauth/telegram-auth';
 export {
   ACCESS_CONTROL_CLIENT,
   AUTH_FLOW_CLIENT,
@@ -37,7 +52,6 @@ export {
   SESSION_CLIENT,
   TERMINAL_FAILURES,
   type AccessControlClientPort,
-  type AccessTokenValidation,
   type AuthFlowClientPort,
   type AuthorizationDecision,
   type CredentialVaultClientPort,
@@ -60,8 +74,10 @@ export {
   GrpcIdentityClient,
   GrpcSessionClient,
 } from './infrastructure/grpc/grpc-peer-clients';
+export { FetchOAuthHttp } from './infrastructure/oauth/fetch-oauth-http';
 export { AuthController } from './presentation/auth.controller';
 export { UsersController } from './presentation/users.controller';
+export { IdempotencyInterceptor } from './presentation/interceptors/idempotency.interceptor';
 export { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 export { PermissionsGuard } from './presentation/guards/permissions.guard';
 export { RateLimitGuard } from './presentation/guards/rate-limit.guard';
@@ -74,23 +90,30 @@ export {
 } from './presentation/decorators/route-metadata';
 export { RATE_LIMIT, RateLimit } from './presentation/decorators/rate-limit';
 export type { RateLimitOptions } from './presentation/decorators/rate-limit';
+export { IDEMPOTENT, Idempotent } from './presentation/decorators/idempotent';
 export { FEATURE_FLAG, FeatureFlag } from './presentation/decorators/feature-flag';
 export {
   ClientIp,
   ClientUserAgent,
   CurrentPrincipal,
 } from './presentation/decorators/current-principal.decorator';
-export { bearerTokenOf, type GatewayRequest } from './presentation/gateway-request';
+export {
+  bearerTokenOf,
+  clientIpOf,
+  type GatewayRequest,
+} from './presentation/gateway-request';
 export {
   CreateUserRequestDto,
   LoginRequestDto,
   LogoutRequestDto,
   RefreshRequestDto,
+  RegisterRequestDto,
   SetPasswordRequestDto,
   toTokenPairResponse,
   toUserResponse,
   type CurrentUserResponseDto,
   type LogoutResponseDto,
+  type OAuthProvidersResponseDto,
   type TokenPairResponseDto,
   type UserResponseDto,
 } from './presentation/dto/gateway.dto';

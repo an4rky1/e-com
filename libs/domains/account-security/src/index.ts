@@ -1,7 +1,6 @@
 export {
   ACCOUNT_SECURITY_CONFIG,
   ACCOUNT_SECURITY_PRISMA,
-  ACCOUNT_SECURITY_REDIS,
   Defaults,
   accountSecuritySchema,
   resolveAccountSecurityConfig,

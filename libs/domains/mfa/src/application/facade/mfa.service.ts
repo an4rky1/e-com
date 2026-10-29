@@ -1,7 +1,7 @@
 /**
  * @fileoverview The only public surface of the MFA module.
  *
- * @remarks Controllers, the auth-gateway guard and other services depend on this class and
+ * @remarks Controllers, the auth-flow guard and other services depend on this class and
  * nothing else. They therefore cannot reach the repository, the CQRS bus, the vault or the
  * aggregate — which is what makes this service's internals replaceable without touching a
  * single caller.

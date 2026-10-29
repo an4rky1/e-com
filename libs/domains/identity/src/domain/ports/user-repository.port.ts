@@ -33,6 +33,29 @@ export interface UserRepositoryPort {
 
   existsByEmail(email: string): Promise<boolean>;
 
+  /**
+   * The user an identity-provider account is linked to, if any.
+   *
+   * @remarks Looks up the unique `(provider, subject)` pair — the thing a returning OAuth
+   * sign-in actually presents. Address lookup cannot substitute for it: addresses change,
+   * get reassigned, and are not unique across providers.
+   */
+  findAuthIdentity(provider: string, subject: string): Promise<string | null>;
+
+  /**
+   * Attaches an identity-provider account to a user.
+   *
+   * @remarks The pair is unique platform-wide, so a concurrent callback that linked the same
+   * provider account first surfaces as a unique violation here — the caller decides whether
+   * that is a refusal or a race to re-read, which is a policy this port does not have.
+   */
+  linkAuthIdentity(link: {
+    readonly provider: string;
+    readonly subject: string;
+    readonly userId: string;
+    readonly email?: string;
+  }): Promise<void>;
+
   find(spec: UserSpecification): Promise<User[]>;
 
   count(spec: UserSpecification): Promise<number>;

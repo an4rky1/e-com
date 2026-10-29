@@ -41,7 +41,7 @@ export class AccountSecurityService {
   /**
    * Records one sign-in and reports what it looks like.
    *
-   * @remarks Returns the lock state rather than enforcing it. auth-gateway is the entity that
+   * @remarks Returns the lock state rather than enforcing it. auth-flow is the entity that
    * refuses a login, and this service's whole value is that it can disagree with a refusal
    * rather than make one.
    *

@@ -98,7 +98,7 @@ export class DeviceFingerprint extends ValueObject<{ value: string }> {
    * Rehydration path: a fingerprint supplied by a caller that already computed one.
    *
    * @remarks Validated rather than trusted. `device_fingerprint` arrives over gRPC from
-   * auth-gateway, and an unvalidated string in an indexed column is both an index-size problem
+   * auth-flow, and an unvalidated string in an indexed column is both an index-size problem
    * and an invitation to make one account's "devices" collide with another's.
    */
   static fromValue(value: string): DeviceFingerprint {

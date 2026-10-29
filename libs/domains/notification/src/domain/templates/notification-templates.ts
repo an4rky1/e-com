@@ -29,7 +29,7 @@ import {
   NotificationTemplate,
   type NotificationVariables,
 } from '../value-objects/notification-template.vo';
-import { toVariableMap } from '../notification-announcement';
+import { toVariableMap, redactVariables } from '../notification-announcement';
 
 /** A template's variable schema. Deliberately opaque about its output shape. */
 export type NotificationVariableSchema = z.ZodType<unknown, unknown>;
@@ -84,7 +84,12 @@ const VARIABLES: Readonly<
     lockedUntil: optionalString(),
   }),
   [NotificationTemplate.ACCOUNT_UNLOCKED]: z.object({}),
-  [NotificationTemplate.ACCOUNT_DELETED]: z.object({}),
+  [NotificationTemplate.ACCOUNT_DELETED]: z.object({
+    // Not rendered, but the content guard still gets a chance to name it when a producer
+    // sends one: an address arriving as a "display name" is the accident this template's
+    // single-purpose schema exists to surface rather than swallow.
+    displayName: optionalString(),
+  }),
   [NotificationTemplate.SESSION_REVOKED]: z.object({
     reason: requiredString(),
     allSessions: z.string().default('false'),
@@ -345,6 +350,7 @@ export function resolveTemplate(name: string): NotificationTemplateDefinition {
 export interface CompiledTemplate {
   readonly definition: NotificationTemplateDefinition;
   readonly variables: NotificationVariables;
+  readonly redacted: readonly string[];
   readonly subject: string;
   readonly body: string;
 }
@@ -382,13 +388,23 @@ export function compileTemplate(
     );
   }
 
-  const variables = toVariableMap(parsed.data);
+  const rawVariables = toVariableMap(parsed.data);
+  const { variables: kept, redacted } = redactVariables(rawVariables);
+
+  // Keys the schema stripped are reported alongside the content guard's drops. Zod removes an
+  // undeclared key silently, and a producer that sent `resetToken` deserves to see it named in
+  // `redacted` rather than to infer it from a message that arrived without one.
+  const stripped = Object.keys(raw).filter(
+    (key) => !Object.prototype.hasOwnProperty.call(parsed.data as object, key),
+  );
+  const reported = [...new Set([...redacted, ...stripped])].sort();
 
   return {
     definition,
-    variables,
+    variables: kept,
+    redacted: reported,
     subject: clamp(definition.subject, TITLE_MAX),
-    body: definition.body(variables),
+    body: definition.body(kept),
   };
 }
 

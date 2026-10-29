@@ -73,7 +73,26 @@ model users {
   deleted_at     DateTime? @db.Timestamptz(6)
   deleted_reason String?
 
+  auth_identities user_auth_identities[]
+
   @@index([status, created_at(sort: Desc)], map: "users_status_created_idx")
+}
+
+/// An identity-provider account linked to a user: what a person *returns* with on every
+/// OAuth sign-in. `(provider, subject)` is unique platform-wide, so one provider account
+/// can never be attached to two local users, and one user may carry several links.
+model user_auth_identities {
+  id         String   @id @db.Uuid
+  user_id    String   @db.Uuid
+  provider   String
+  subject    String
+  email      String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject], map: "user_auth_identities_provider_subject_idx")
+  @@index([user_id], map: "user_auth_identities_user_idx")
 }
 
 enum UserStatus {

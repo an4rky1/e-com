@@ -97,6 +97,14 @@ const depConstraints = [
     sourceTag: 'type:app',
     onlyDependOnLibsWithTags: ['*'],
   },
+  {
+    // The browser client speaks HTTP and nothing else. Its one library is the contract file
+    // that describes that HTTP surface — never a service, never the gateway itself. The
+    // file-scoped `no-restricted-imports` below says the same thing with a readable message;
+    // this is the graph-level half of the same rule.
+    sourceTag: 'type:web',
+    onlyDependOnLibsWithTags: ['type:contracts'],
+  },
   // Microservice boundary: services never import each other's internals.
   // Cross-service traffic goes through gRPC (question) or Kafka (fact).
   ...DOMAINS.map((domain) => ({

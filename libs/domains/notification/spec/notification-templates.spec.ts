@@ -145,7 +145,7 @@ describe('required variables', () => {
   });
 
   it('coerces a numeric variable that the payload sent as a string', () => {
-    // `revokedCount` arrives as a number from session-token and as a string from anything
+    // `revokedCount` arrives as a number from session and as a string from anything
     // that round-tripped through a log; the template must not care which.
     const compiled = compileTemplate(NotificationTemplate.SUSPICIOUS_REUSE, {
       revokedCount: '5',

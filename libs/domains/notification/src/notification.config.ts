@@ -62,6 +62,22 @@ export const Defaults = {
    * nobody ships it by accident.
    */
   STORE_MODE: 'prisma',
+  /**
+   * How many resends a user may request per minute, per worker.
+   *
+   * @remarks Enforced by the notification worker's BullMQ limiter. Ten a minute is generous
+   * for a human clicking "resend" and stingy for a buggy client replaying a queue.
+   */
+  RESEND_RATE_LIMIT_PER_MINUTE: 10,
+  /**
+   * How many dispatch jobs one worker runs concurrently.
+   *
+   * @remarks The dispatch queue is the hot path — one job per consumed Kafka event — so the
+   * resend worker's concurrency of 1 would throttle every welcome email behind a provider
+   * round-trip. Five is enough to keep one replica busy without opening five provider
+   * connections that a small deployment does not need.
+   */
+  DISPATCH_CONCURRENCY: 5,
 } as const;
 
 export const StoreMode = {
@@ -77,6 +93,18 @@ export const notificationSchema = z.object({
   LOG_BODIES: envBoolean(Defaults.LOG_BODIES),
   DEAD_LETTER_ENABLED: envBoolean(Defaults.DEAD_LETTER_ENABLED),
   STORE_MODE: envString(Defaults.STORE_MODE),
+  /**
+   * How many resends a user may request per minute across the platform.
+   *
+   * @remarks Per-user, per-worker, enforced by the notification worker's limiter. A lower bound
+   * of 1 keeps the config valid even when the intent is "no rate limit", because a worker whose
+   * limit is 0 would reject every job.
+   */
+  RESEND_RATE_LIMIT_PER_MINUTE: envInt(
+    Defaults.RESEND_RATE_LIMIT_PER_MINUTE,
+    { min: 1, max: 600 },
+  ),
+  DISPATCH_CONCURRENCY: envInt(Defaults.DISPATCH_CONCURRENCY, { min: 1, max: 50 }),
 });
 
 export type NotificationEnvConfig = z.infer<typeof notificationSchema>;
@@ -87,6 +115,8 @@ export interface NotificationConfig {
   logBodies: boolean;
   deadLetterEnabled: boolean;
   storeMode: StoreMode;
+  resendRateLimitPerMinute: number;
+  dispatchConcurrency: number;
 }
 
 /**
@@ -109,6 +139,8 @@ export function resolveNotificationConfig(
     logBodies: Defaults.LOG_BODIES,
     deadLetterEnabled: Defaults.DEAD_LETTER_ENABLED,
     storeMode: Defaults.STORE_MODE,
+    resendRateLimitPerMinute: Defaults.RESEND_RATE_LIMIT_PER_MINUTE,
+    dispatchConcurrency: Defaults.DISPATCH_CONCURRENCY,
   };
 
   return resolveModuleConfig(defaults, {
@@ -119,6 +151,8 @@ export function resolveNotificationConfig(
     logBodies: parsed.LOG_BODIES,
     deadLetterEnabled: parsed.DEAD_LETTER_ENABLED,
     storeMode: toStoreMode(parsed.STORE_MODE),
+    resendRateLimitPerMinute: parsed.RESEND_RATE_LIMIT_PER_MINUTE,
+    dispatchConcurrency: parsed.DISPATCH_CONCURRENCY,
   });
 }
 

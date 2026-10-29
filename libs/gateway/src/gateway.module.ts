@@ -13,17 +13,22 @@
  * this service keeps none.
  */
 import {
+  type DynamicModule,
+  type MiddlewareConsumer,
+  type NestModule,
   Module,
   ValidationPipe,
-  type DynamicModule,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { APP_PIPE } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { GRPC_CHANNEL, createStaticGrpcChannel } from '@auth/infra/grpc';
 import type { GrpcChannel } from '@auth/infra/grpc';
 import { FeatureFlagsModule } from '@auth/platform/feature-flags';
+import { IdempotencyModule } from '@auth/infra/idempotency';
 import { RateLimitModule } from '@auth/infra/rate-limit';
+import { RedisHealthIndicator } from '@auth/infra/redis';
 import { HealthModule, HealthService } from '@auth/platform/health';
+import { RequestContextMiddleware, RequestContextModule } from '@auth/platform/context';
 import { join, resolve } from 'node:path';
 import {
   GATEWAY_CONFIG,
@@ -48,22 +53,39 @@ import {
   SESSION_CLIENT,
 } from './application/ports/peer-clients.port';
 import { GatewayService } from './application/facade/gateway.service';
+import { OAUTH_HTTP } from './application/oauth/oauth.port';
+import { OAuthService } from './application/oauth/oauth.service';
+import { FetchOAuthHttp } from './infrastructure/oauth/fetch-oauth-http';
 import { AuthController } from './presentation/auth.controller';
 import { UsersController } from './presentation/users.controller';
+import { IdempotencyInterceptor } from './presentation/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { PermissionsGuard } from './presentation/guards/permissions.guard';
 import { RateLimitGuard } from './presentation/guards/rate-limit.guard';
 import { FeatureFlagGuard } from './presentation/guards/feature-flag.guard';
 
 @Module({})
-export class GatewayModule {}
+export class GatewayModule implements NestModule {
+  /**
+   * Opens the request context around every request, before any guard.
+   *
+   * @remarks Middleware rather than an interceptor because the ordering is the feature: a 401
+   * answered by `JwtAuthGuard` is one of the responses whose logs most need a correlation id,
+   * and a context opened at interceptor level would start after the guards have already run.
+   * `/` rather than a controller list so the context also covers `/health` and any path added
+   * later — a probe nobody can trace is still a request.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes('/');
+  }
+}
 
 /** The peer protos, in one place so a sixth service is a one-line change here. */
 const PROTO_FILES = [
-  'auth_gateway.proto',
+  'auth_flow.proto',
   'identity.proto',
   'access_control.proto',
-  'session_token.proto',
+  'session.proto',
   'credential_vault.proto',
 ] as const;
 
@@ -98,6 +120,7 @@ export class GatewayChannelLifecycle implements OnApplicationShutdown {
  * registry outlives it.
  */
 const GATEWAY_HEALTH_REGISTRATION = Symbol('GATEWAY_HEALTH_REGISTRATION');
+const REDIS_HEALTH_REGISTRATION = Symbol('REDIS_HEALTH_REGISTRATION');
 
 /**
  * The workspace's proto directory.
@@ -141,7 +164,9 @@ export function createGatewayModule(
     imports: [
       HealthModule.forRoot('api-gateway'),
       FeatureFlagsModule.register(),
+      IdempotencyModule.register(),
       RateLimitModule.register(),
+      RequestContextModule.register(),
     ],
     controllers: [AuthController, UsersController],
     providers: [
@@ -160,6 +185,11 @@ export function createGatewayModule(
       { provide: CREDENTIAL_VAULT_CLIENT, useClass: GrpcCredentialVaultClient },
 
       GatewayService,
+      // The provider walk: a service that sequences it, and the one adapter that reaches
+      // providers over HTTP. The port exists so neither the service nor a test ever calls
+      // `fetch` directly — the same reason the five gRPC peers sit behind ports.
+      OAuthService,
+      { provide: OAUTH_HTTP, useClass: FetchOAuthHttp },
       FeatureFlagGuard,
       RateLimitGuard,
       JwtAuthGuard,
@@ -177,12 +207,33 @@ export function createGatewayModule(
         },
       },
 
+      // Reported, not required. The limiter fails open when Redis is unreachable, so an
+      // outage there degrades the limit without taking the edge out of rotation — and
+      // readiness that pulled every pod for a cache would trade a soft degradation for a
+      // hard outage, which is the trade the limiter's own fail-open exists to avoid.
+      {
+        provide: REDIS_HEALTH_REGISTRATION,
+        inject: [HealthService, RedisHealthIndicator],
+        useFactory: (
+          health: HealthService,
+          indicator: RedisHealthIndicator,
+        ): boolean => {
+          health.register('redis', () => indicator.check(), { required: false });
+          return true;
+        },
+      },
+
       // Dropped before a handler sees them. For `/auth/login` this is what keeps a body full
       // of undeclared fields from travelling to a peer that only needs two of them.
       {
         provide: APP_PIPE,
         useValue: new ValidationPipe({ whitelist: true, transform: true }),
       },
+
+      // Global, opted into per route: the interceptor reads `@Idempotent()` first and does
+      // nothing at all without it, so mounting it here costs every other route one metadata
+      // lookup while guaranteeing a decorated route can never be mounted unprotected.
+      { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     ],
     exports: [GatewayService, GatewayHealthIndicator],
   };

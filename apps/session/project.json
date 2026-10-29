@@ -1,0 +1,24 @@
+{
+  "name": "@app/session",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/session/src",
+  "projectType": "application",
+  "tags": [
+    "type:app",
+    "domain:session"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/session/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/session/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/session/src/main.ts"
+      }
+    }
+  }
+}

@@ -76,7 +76,7 @@ export class RecordLoginAttemptHandler
    * Records one sign-in: scores it, moves the counters, and raises whatever signals it earned.
    *
    * @remarks The read model this assembles is deliberately *everything the caller knows* and
-   * nothing it does not: it reports the lock and the score and lets auth-gateway decide. The
+   * nothing it does not: it reports the lock and the score and lets auth-flow decide. The
    * service refuses nothing, because the one thing it cannot see — whether the person on the
    * other end is the account's owner — is the thing a block would hinge on.
    *

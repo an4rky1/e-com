@@ -157,6 +157,31 @@ export class PrismaUserRepository implements UserRepositoryPort {
     return count > 0;
   }
 
+  async findAuthIdentity(provider: string, subject: string): Promise<string | null> {
+    const row = await this.prisma.tx.user_auth_identities.findUnique({
+      where: { provider_subject: { provider, subject } },
+      select: { user_id: true },
+    });
+    return row?.user_id ?? null;
+  }
+
+  async linkAuthIdentity(link: {
+    readonly provider: string;
+    readonly subject: string;
+    readonly userId: string;
+    readonly email?: string;
+  }): Promise<void> {
+    await this.prisma.tx.user_auth_identities.create({
+      data: {
+        id: crypto.randomUUID(),
+        user_id: link.userId,
+        provider: link.provider,
+        subject: link.subject,
+        email: link.email ?? null,
+      },
+    });
+  }
+
   async find(spec: UserSpecification): Promise<User[]> {
     const rows = await this.prisma.tx.users.findMany({ orderBy: { created_at: 'desc' } });
     return rows.map(User.fromRow).filter((user) => spec.isSatisfiedBy(user));

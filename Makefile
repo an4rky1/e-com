@@ -28,7 +28,7 @@ AWS_GATEWAY_URL = http://api-gateway.$(ENV).auth.internal:3000
 
 # The eleven stateful/edge services plus the front. Single source for image builds;
 # api-gateway is stateless but still ships as a container.
-SERVICES := identity access-control credential-vault session-token auth-gateway \
+SERVICES := identity access-control credential-vault session auth-flow \
 	mfa api-key account-security notification audit-log api-gateway
 
 TF_BOOTSTRAP := terraform -chdir=infra/bootstrap
@@ -142,6 +142,7 @@ infra-validate: ## Offline fmt -check + init -backend=false + validate (no AWS n
 	done
 
 infra-test: ## Offline terraform test on mock providers (plan without AWS)
+	terraform -chdir=infra/envs/dev init -backend=false -input=false >/dev/null
 	terraform -chdir=infra/envs/dev test
 
 bootstrap: ## Create the Terraform state backend (needs AWS; once per account/region)
@@ -204,7 +205,7 @@ stub-logs: ## Tail stub stack logs
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.stub.yml logs -f
 
 stub-migrate: ## Apply migrations inside the stub network
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.stub.yml run --rm migrate
+	TAG=$(TAG) $(COMPOSE) -f docker-compose.yml -f docker-compose.stub.yml run --rm migrate
 
 stub-smoke: ## Assert every stub service answers /health and the login path works
 	bash tools/stub-smoke.sh

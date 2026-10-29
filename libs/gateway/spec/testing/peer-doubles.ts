@@ -26,7 +26,9 @@ import type {
 } from '../../src/application/ports/peer-clients.port';
 import { FlowState } from '../../src/application/ports/peer-clients.port';
 import type { GatewayPrincipal } from '../../src/application/ports/gateway-principal';
-import type { GatewayConfig } from '../../src/gateway.config';
+import type { GatewayConfig, OAuthConfig } from '../../src/gateway.config';
+import type { OAuthHttpPort } from '../../src/application/oauth/oauth.port';
+import { OAuthService } from '../../src/application/oauth/oauth.service';
 import type { GrpcChannel, GrpcStatusCode } from '@auth/infra/grpc';
 
 export const USER_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
@@ -37,6 +39,24 @@ export const ACCESS_TOKEN = 'access.token.value';
 export const REFRESH_TOKEN = 'refresh.token.value';
 export const SESSION_ID = 'session-1';
 
+/** An OAuth walk with every provider off — the unconfigured deployment. */
+export const closedOAuth: OAuthConfig = {
+  publicOrigin: '',
+  stateSecret: '',
+  google: null,
+  github: null,
+  telegram: null,
+};
+
+/** An OAuth walk with every provider configured, for the suites that exercise the walk. */
+export const openOAuth: OAuthConfig = {
+  publicOrigin: 'http://front.test:37000',
+  stateSecret: 'state-secret-for-tests',
+  google: { clientId: 'google-client-id', clientSecret: 'google-client-secret' },
+  github: { clientId: 'github-client-id', clientSecret: 'github-client-secret' },
+  telegram: { botToken: '7000000001:test-telegram-bot-token', botUsername: 'front_test_bot' },
+};
+
 /** A config built literally, so no test ever reads `process.env`. */
 export const testGatewayConfig = (
   overrides: Partial<GatewayConfig> = {},
@@ -45,8 +65,12 @@ export const testGatewayConfig = (
   identityUrl: 'identity.test:13001',
   accessControlUrl: 'access-control.test:13002',
   credentialVaultUrl: 'credential-vault.test:13003',
-  sessionTokenUrl: 'session-token.test:13004',
-  authGatewayUrl: 'auth-gateway.test:13005',
+  sessionUrl: 'session.test:13004',
+  authFlowUrl: 'auth-flow.test:13005',
+  oauth: closedOAuth,
+  grpcServiceToken: 'test-service-token',
+  accessTokenSigningKey: 'test-access-token-signing-key',
+  clockSkewSec: 0,
   ...overrides,
 });
 
@@ -130,9 +154,19 @@ export class FakeIdentityClient implements IdentityClientPort {
   user: GatewayUser = userOf();
   createError: unknown;
   getError: unknown;
+  resolveError: unknown;
+  /** What `ResolveOauthUser` answers with. Defaults to "found the account behind the link". */
+  resolved: { user: GatewayUser; created: boolean } | null = null;
 
   readonly created: GatewayUserInput[] = [];
   readonly fetchedById: string[] = [];
+  readonly resolvedFor: {
+    provider: string;
+    subject: string;
+    email: string;
+    emailVerified: boolean;
+    displayName?: string;
+  }[] = [];
 
   async createUser(input: GatewayUserInput): Promise<GatewayUser> {
     this.created.push(input);
@@ -144,6 +178,18 @@ export class FakeIdentityClient implements IdentityClientPort {
     this.fetchedById.push(userId);
     if (this.getError) throw this.getError;
     return this.user;
+  }
+
+  async resolveOauthUser(input: {
+    provider: string;
+    subject: string;
+    email: string;
+    emailVerified: boolean;
+    displayName?: string;
+  }): Promise<{ user: GatewayUser; created: boolean }> {
+    this.resolvedFor.push(input);
+    if (this.resolveError) throw this.resolveError;
+    return this.resolved ?? { user: this.user, created: false };
   }
 }
 
@@ -181,16 +227,6 @@ export class FakeAccessControlClient implements AccessControlClientPort {
 }
 
 export class FakeSessionClient implements SessionClientPort {
-  validation = {
-    valid: true,
-    userId: USER_ID,
-    email: EMAIL,
-    roles: ['member'],
-    permissions: ['users:read'],
-    sessionId: SESSION_ID,
-    revocationReason: '',
-  };
-
   rotateResult = {
     accessToken: 'access.rotated',
     refreshToken: 'refresh.rotated',
@@ -200,24 +236,34 @@ export class FakeSessionClient implements SessionClientPort {
   };
 
   revokedCount = 2;
-  validateError: unknown;
   rotateError: unknown;
   revokeError: unknown;
+  issueError: unknown;
+  /** What `IssueTokens` answers with — the pair a fresh registration or OAuth walk lands on. */
+  issueResult = {
+    accessToken: 'access.issued',
+    refreshToken: 'refresh.issued',
+    expiresIn: 900,
+    sessionId: 'session-issued',
+  };
   readonly revokedOne: { sessionId: string; reason: string }[] = [];
 
-  /** Every token string this client has been handed. Proves none of it was logged. */
-  readonly validated: string[] = [];
   readonly rotated: string[] = [];
+  readonly issued: { userId: string; email: string; ipAddress?: string }[] = [];
   readonly revoked: {
     userId: string;
     reason: string;
     exceptSessionId?: string;
   }[] = [];
 
-  async validateAccessToken(accessToken: string) {
-    this.validated.push(accessToken);
-    if (this.validateError) throw this.validateError;
-    return this.validation;
+  async issueTokens(input: {
+    userId: string;
+    email: string;
+    ipAddress?: string;
+  }) {
+    this.issued.push(input);
+    if (this.issueError) throw this.issueError;
+    return this.issueResult;
   }
 
   async rotateTokens(input: { refreshToken: string; ipAddress?: string }) {
@@ -246,6 +292,8 @@ export class FakeSessionClient implements SessionClientPort {
 export class FakeCredentialVaultClient implements CredentialVaultClientPort {
   credentialId = 'cred-1';
   error: unknown;
+  revokeError: unknown;
+  revokeResult = 1;
 
   /**
    * Every plaintext this port was asked to hold.
@@ -255,6 +303,8 @@ export class FakeCredentialVaultClient implements CredentialVaultClientPort {
    * test asserting the password is confined to this call.
    */
   readonly stored: { userId: string; newPassword: string }[] = [];
+  /** Every compensation this port was asked to perform, and under what reason. */
+  readonly revoked: { userId: string; reason?: string }[] = [];
 
   async setPassword(input: {
     userId: string;
@@ -264,7 +314,84 @@ export class FakeCredentialVaultClient implements CredentialVaultClientPort {
     if (this.error) throw this.error;
     return { credentialId: this.credentialId };
   }
+
+  async revokeAll(input: { userId: string; reason?: string }): Promise<number> {
+    this.revoked.push(input);
+    if (this.revokeError) throw this.revokeError;
+    return this.revokeResult;
+  }
 }
+
+/**
+ * The provider walk's HTTP room, with a scriptable answer per room.
+ *
+ * @remarks Answers are keyed by URL *prefix*, so a test reads as "the token endpoint said
+ * this" — the same reason `ScriptedChannel` keys by method name.
+ */
+export class FakeOAuthHttp implements OAuthHttpPort {
+  postError: unknown;
+  getError: unknown;
+
+  private readonly postAnswers = new Map<string, unknown>();
+  private readonly getAnswers = new Map<string, unknown>();
+
+  readonly posts: { url: string; form: Readonly<Record<string, string>> }[] = [];
+  readonly gets: { url: string; bearer?: string }[] = [];
+
+  answerPost(urlPrefix: string, answer: unknown): this {
+    this.postAnswers.set(urlPrefix, answer);
+    return this;
+  }
+
+  answerGet(urlPrefix: string, answer: unknown): this {
+    this.getAnswers.set(urlPrefix, answer);
+    return this;
+  }
+
+  async postForm(
+    url: string,
+    form: Readonly<Record<string, string>>,
+  ): Promise<unknown> {
+    this.posts.push({ url, form });
+    if (this.postError) throw this.postError;
+    return this.lookup(this.postAnswers, url);
+  }
+
+  async getJson(url: string, bearer?: string): Promise<unknown> {
+    this.gets.push({ url, bearer });
+    if (this.getError) throw this.getError;
+    return this.lookup(this.getAnswers, url);
+  }
+
+  /**
+   * The most specific prefix wins, so `.../user` and `.../user/emails` can both be
+   * scripted without the shorter one swallowing the longer URL.
+   */
+  private lookup(table: Map<string, unknown>, url: string): unknown {
+    let best: { prefix: string; answer: unknown } | null = null;
+    for (const [prefix, answer] of table) {
+      if (url.startsWith(prefix) && (best === null || prefix.length > best.prefix.length)) {
+        best = { prefix, answer };
+      }
+    }
+    return best === null ? null : best.answer;
+  }
+}
+
+/**
+ * An `OAuthService` over doubles, for suites whose subject is some *other* handler on the
+ * controller that merely shares its constructor.
+ *
+ * @remarks The default configuration is the unconfigured deployment — providers off, no
+ * state secret — so a suite that never calls into the walk cannot accidentally depend on a
+ * configured one being present.
+ */
+export const fakeOAuthService = (
+  config: GatewayConfig = testGatewayConfig(),
+  http: OAuthHttpPort = new FakeOAuthHttp(),
+  identity: IdentityClientPort = new FakeIdentityClient(),
+  sessions: SessionClientPort = new FakeSessionClient(),
+): OAuthService => new OAuthService(config, http, identity, sessions);
 
 // ---- transport ---------------------------------------------------------------------
 
@@ -304,7 +431,7 @@ export const numericStatusOf = (code: GrpcStatusCode): number =>
  *
  * @remarks Used to exercise the adapters and the peer-caller's error translation, which are
  * the two places a gRPC failure has to stop being a gRPC failure. Registering by method name
- * means a test reads as "auth-gateway is unavailable", which is the claim being made.
+ * means a test reads as "auth-flow is unavailable", which is the claim being made.
  */
 export class ScriptedChannel implements GrpcChannel {
   readonly calls: { method: string; request: unknown; deadline: number }[] = [];

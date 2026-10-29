@@ -75,7 +75,7 @@ const EXCEPTION_BY_STATUS: Readonly<
  * `CreateUser` starts answering 401 for a malformed email. What the status *means* is the
  * peer's to decide; this only decides what the caller is told.
  *
- * @remarks "The password was wrong" is not in this file at all. auth-gateway reports it as a
+ * @remarks "The password was wrong" is not in this file at all. auth-flow reports it as a
  * flow that ended in `failed`, which the application layer turns into a 401 — where it can be
  * tested without a socket.
  *

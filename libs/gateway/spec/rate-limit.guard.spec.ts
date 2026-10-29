@@ -23,7 +23,6 @@ const config = (over: Partial<RateLimitConfig> = {}): RateLimitConfig => ({
   failOpen: true,
   headers: true,
   keyPrefix: 'rl',
-  redisUrl: null,
   ...over,
 });
 
@@ -74,11 +73,14 @@ const contextFor = (
   return { context, setHeader };
 };
 
-const requestFrom = (ip: string, headers: Record<string, string> = {}): Partial<GatewayRequest> => ({
-  headers,
-  ip,
-  socket: { remoteAddress: ip },
-});
+const requestFrom = (ip: string, headers: Record<string, string> = {}): Partial<GatewayRequest> =>
+  // The socket is only ever read for `remoteAddress`, and `express`'s `Socket` is a wide
+  // type the suite has no interest in constructing whole.
+  ({
+    headers,
+    ip,
+    socket: { remoteAddress: ip },
+  }) as unknown as Partial<GatewayRequest>;
 
 describe('RateLimitGuard', () => {
   it('allows a request under the limit and reports the budget in the headers', async () => {

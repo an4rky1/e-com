@@ -261,6 +261,7 @@ export class PrismaNotificationStore implements NotificationStorePort {
       created_at: notification.createdAt,
       updated_at: notification.updatedAt,
       read_at: notification.readAt,
+      log_body: notification.logBody ?? false,
     };
   }
 
@@ -323,6 +324,7 @@ export class PrismaNotificationStore implements NotificationStorePort {
 interface StoredPayload {
   readonly subject: string;
   readonly redactedVariables: readonly string[];
+  readonly logBody?: boolean;
   readonly providerMessageIds: Readonly<Record<string, string>>;
 }
 
@@ -337,6 +339,7 @@ function toStoredPayload(notification: Notification): StoredPayload {
   return {
     subject: notification.subject,
     redactedVariables: [...notification.redactedVariables],
+    logBody: notification.logBody ?? false,
     providerMessageIds,
   };
 }
@@ -360,6 +363,8 @@ interface StoredNotificationRow {
     readonly dispatched_at: Date | null;
     readonly created_at: Date;
   }[];
+  readonly log_body?: boolean;
+  readonly provider_message_ids?: Record<string, string>;
 }
 
 /**
@@ -382,7 +387,8 @@ function fromStoredNotification(row: StoredNotificationRow): Notification | null
   const deliveries: readonly ChannelDelivery[] = (row.deliveries ?? []).flatMap((delivery) => {
     if (!isChannel(delivery.channel) || !isDeliveryStatus(delivery.status)) return [];
 
-    const providerMessageId = payload.providerMessageIds[delivery.channel];
+    const providerMessageId =
+      row.provider_message_ids?.[delivery.channel] ?? payload.providerMessageIds[delivery.channel];
 
     return [
       {
@@ -417,6 +423,7 @@ function fromStoredNotification(row: StoredNotificationRow): Notification | null
     // read" is answerable without parsing a status string.
     readAt: row.read_at,
     createdAt,
+    logBody: (row as unknown as { log_body?: boolean }).log_body ?? false,
   });
 }
 
@@ -451,6 +458,8 @@ function readStoredPayload(payload: unknown): StoredPayload | null {
       typeof candidate.providerMessageIds === 'object' && candidate.providerMessageIds !== null
         ? (candidate.providerMessageIds as Record<string, string>)
         : {},
+    logBody:
+      typeof candidate.logBody === 'boolean' ? candidate.logBody : false,
   };
 }
 

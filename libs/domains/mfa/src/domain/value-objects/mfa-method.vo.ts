@@ -3,7 +3,7 @@
  *
  * @remarks Deliberately short. mfa answers "prove possession of a second factor" and nothing
  * else — it never decides *whether* a second factor is required. That decision belongs to
- * auth-gateway, which knows the risk of the request; if this service could require MFA on its
+ * auth-flow, which knows the risk of the request; if this service could require MFA on its
  * own it would be making a policy call with no view of the request at all.
  *
  * @remarks A string union rather than a TypeScript `enum`, for the same reason as

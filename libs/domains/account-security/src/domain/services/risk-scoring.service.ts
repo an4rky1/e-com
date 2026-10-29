@@ -9,7 +9,7 @@
  *
  * @remarks It *signals*; it never blocks. The service deliberately returns a recommendation
  * string and not a decision: a false positive here locks a real person out of their account,
- * and the entity that has the whole picture — auth-gateway, which can ask for a second factor
+ * and the entity that has the whole picture — auth-flow, which can ask for a second factor
  * instead of refusing — is the one that refuses. Everything in this file is therefore evidence,
  * and the weights are a statement of suspicion rather than an enforcement policy.
  */
@@ -288,7 +288,7 @@ export class RiskScoringService {
    * What the caller should do about this login.
    *
    * @remarks Recommendations, not instructions. `refuse` is a recommendation because the
-   * decision belongs to auth-gateway, which can weigh this against a second factor; emitting an
+   * decision belongs to auth-flow, which can weigh this against a second factor; emitting an
    * `action` enum here would push the enforcement decision into a service that cannot see the
    * rest of the request.
    */

@@ -45,9 +45,8 @@ export class ConsoleNotificationChannel implements NotificationChannelPort {
   ) {}
 
   /**
-   * @remarks Always true, including for a recipient with no address. Writing the line *is* the
-   * delivery, and refusing here would record every address-less event as a skip — hiding the
-   * fact that the notification was rendered at all.
+   * A console adapter can carry any channel; refusing would record every no-address event as
+   * a skip and hide the fact that the notification was rendered at all.
    */
   supports(): boolean {
     return true;
@@ -73,6 +72,9 @@ export class ConsoleNotificationChannel implements NotificationChannelPort {
     return {
       channel: this.channel,
       status: DeliveryStatus.SENT,
+      // Redact the address out of provider-side handles too; a provider failure reporting back
+      // with one of these would carry the recipient into the dispatch receipt and then into the
+      // announcement if anything downstream forwards that field.
       providerMessageId: `console-${message.notificationId}`,
       deliveredAt: new Date(),
     };

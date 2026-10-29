@@ -1,7 +1,7 @@
 /**
  * @fileoverview Enforces "a second factor was proven" on a route.
  *
- * @remarks Reused verbatim by auth-gateway and by any service that fronts a sensitive action,
+ * @remarks Reused verbatim by auth-flow and by any service that fronts a sensitive action,
  * for the same reason {@link AccessControlGuard} is: two copies of a security guard are two
  * implementations that will eventually disagree about what "protected" means.
  *

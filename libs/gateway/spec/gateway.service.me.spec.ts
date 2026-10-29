@@ -7,7 +7,7 @@
  *
  * @remarks The access token is not re-validated here. It was validated by `JwtAuthGuard`,
  * which is what produced the principal this composes from; validating it a second time would
- * be a second opinion on a question session-token already answered, and two opinions drift.
+ * be a second opinion on a question session already answered, and two opinions drift.
  */
 import { HttpStatus } from '@nestjs/common';
 import {

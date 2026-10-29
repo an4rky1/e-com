@@ -12,8 +12,8 @@
  * tested without a Redis server.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { REDIS } from '@auth/infra/redis';
 import type { Redis } from 'ioredis';
-import { ACCOUNT_SECURITY_REDIS } from '../../account-security.config';
 import type { FailureTrackerPort } from '../../domain/ports/failure-tracker.port';
 import type { DeviceRegistryPort } from '../../domain/ports/security-repository.port';
 import {
@@ -38,7 +38,7 @@ export class RedisFailureTracker implements FailureTrackerPort, DeviceRegistryPo
   private readonly logger = new Logger(RedisFailureTracker.name);
 
   constructor(
-    @Inject(ACCOUNT_SECURITY_REDIS) private readonly redis: Redis,
+    @Inject(REDIS) private readonly redis: Redis,
     private readonly options: RedisCounterOptions,
   ) {}
 

@@ -25,9 +25,18 @@ const nextConfig = {
       // `/api/auth/login` and `/auth/login` are the same route to the browser, and the proxy
       // is the only place that knows where it lands. Every `/auth/*` route is covered, not
       // just login, so `me`, `refresh` and `logout` need no second rule when they arrive.
+      // The prefix itself is `API_PROXY_PREFIX` in `@auth/contracts/http` — change it there
+      // and here together, or the contract's URLs stop matching these sources.
       {
         source: '/api/auth/:path*',
         destination: `${GATEWAY_URL}/auth/:path*`,
+      },
+      // The account routes under the same rule: `POST /users` (registration) and
+      // `POST /users/:id/password` are part of the same edge surface, and a second base URL
+      // in a component would be exactly the knowledge the `/api` prefix exists to remove.
+      {
+        source: '/api/users/:path*',
+        destination: `${GATEWAY_URL}/users/:path*`,
       },
     ];
   },

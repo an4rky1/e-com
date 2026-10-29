@@ -1,3 +1,4 @@
+export * from './access-token';
 export * from './auth.types';
 export * from './events/integration-event';
 export * from './grpc/endpoints';

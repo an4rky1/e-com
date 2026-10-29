@@ -177,6 +177,39 @@ export const ERROR_DEFINITIONS = {
     defaultMessage: 'Resource already exists',
   },
 
+  // idempotency
+  IDEMPOTENCY_IN_FLIGHT: {
+    code: 'IDEMPOTENCY_IN_FLIGHT',
+    status: 409,
+    category: ErrorCategories.CONFLICT,
+    severity: ErrorSeverities.INFO,
+    // Retrying is the correct answer — the first attempt is still running, and the caller
+    // is told when to come back (`Retry-After`) rather than left to guess.
+    retryable: true,
+    defaultMessage: 'A request with this idempotency key is still being processed',
+  },
+  IDEMPOTENCY_ALREADY_PROCESSED: {
+    code: 'IDEMPOTENCY_ALREADY_PROCESSED',
+    status: 409,
+    category: ErrorCategories.CONFLICT,
+    severity: ErrorSeverities.INFO,
+    // Not retryable: the request already happened. Telling a caller to retry here is how a
+    // duplicate user is created by a client that did exactly what it was told.
+    retryable: false,
+    defaultMessage:
+      'This idempotency key belongs to a request that has already completed',
+  },
+
+  // api lifecycle
+  API_SUNSET: {
+    code: 'API_SUNSET',
+    status: 410,
+    category: ErrorCategories.NOT_FOUND,
+    severity: ErrorSeverities.INFO,
+    retryable: false,
+    defaultMessage: 'This API version has been sunset; see the Sunset header for its successor',
+  },
+
   // rate limiting
   RATE_LIMIT_EXCEEDED: {
     code: 'RATE_LIMIT_EXCEEDED',

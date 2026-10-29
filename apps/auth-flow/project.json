@@ -1,0 +1,24 @@
+{
+  "name": "@app/auth-flow",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/auth-flow/src",
+  "projectType": "application",
+  "tags": [
+    "type:app",
+    "domain:auth-flow"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/auth-flow/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/auth-flow/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/auth-flow/src/main.ts"
+      }
+    }
+  }
+}

@@ -9,8 +9,7 @@
  * the whole notification could only be implemented as one call, which is exactly the shape
  * that makes one unreachable provider able to take down the reachable ones.
  */
-import type { NotificationChannel, NotificationSeverity } from '../value-objects/notification-channel.vo';
-import type { DeliveryStatus } from '../value-objects/notification-channel.vo';
+import type { DeliveryStatus, NotificationChannel, NotificationSeverity } from '../value-objects/notification-channel.vo';
 import type {
   NotificationTemplate,
   NotificationVariables,
@@ -58,13 +57,17 @@ export interface NotificationChannelPort {
   readonly channel: NotificationChannel;
 
   /**
-   * Whether this adapter can currently deliver to this recipient.
+   * Whether this adapter is enabled for delivery at all.
    *
-   * @remarks Configured reachability, not capability: a deployment with no SMS provider binds
-   * no SMS adapter, and `resolve` returns `null` for that channel rather than an adapter that
-   * throws on send.
+   * @remarks Read by the dispatch loop, not by providers. A channel whose adapter returns false
+   * here is recorded as skipped rather than as an attempt that failed — there is nowhere to send
+   * the message in this deployment, rather than a provider that refused one.
+   *
+   * @remarks Configured reachability, not recipient capability: an adapter with no provider
+   * returns false for every recipient, and a recipient with no address is handled separately in
+   * the dispatch loop before this is called.
    */
-  supports(recipient: NotificationRecipient): boolean;
+  supports(): boolean;
 
   /**
    * Delivers one message.

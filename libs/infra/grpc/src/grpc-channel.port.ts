@@ -91,7 +91,7 @@ export const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
   '/access_control.v1.AccessControlService/GetPermissions',
   '/access_control.v1.AccessControlService/CheckPermission',
   '/access_control.v1.AccessControlService/EvaluatePolicy',
-  '/session_token.v1.SessionTokenService/ValidateAccessToken',
+  '/session.v1.SessionService/ValidateAccessToken',
   '/account_security.v1.AccountSecurityService/AssessLoginRisk',
   '/account_security.v1.AccountSecurityService/ListDevices',
 ]);

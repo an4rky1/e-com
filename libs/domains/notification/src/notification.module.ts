@@ -36,25 +36,25 @@ import { NotificationService } from './application/facade/notification.service';
 import { NotificationEventProcessor } from './application/consumers/notification-event.processor';
 import { CommandBusNotificationDispatcher } from './application/adapters/cqrs-notification.adapter';
 import { NOTIFICATION_DISPATCHER } from './application/ports/notification-dispatcher.port';
+import { NOTIFICATION_DISPATCH_QUEUE } from './application/ports/notification-dispatch-queue.port';
 import { NOTIFICATION_CHANNELS } from './domain/ports/notification-channel.port';
+import { NotificationChannel } from './domain/value-objects/notification-channel.vo';
 import { NOTIFICATION_STORE } from './domain/ports/notification-store.port';
 import { CONSUMER_CLAIM_STORE } from './domain/ports/consumer-claim.port';
-import { NotificationChannel } from './domain/value-objects/notification-channel.vo';
 import {
   DefaultNotificationChannelRegistry,
   NoopNotificationChannel,
   consoleChannelsFor,
 } from './infrastructure/channels/notification-channels';
 import { PrismaConsumerClaimStore } from './infrastructure/persistence/prisma-consumer-claim.store';
-import {
-  NOTIFICATION_TOPICS,
-  PrismaNotificationStore,
-  TOPIC_BY_EVENT,
-} from './infrastructure/persistence/prisma-notification.store';
+import { PrismaNotificationStore, NOTIFICATION_TOPICS, TOPIC_BY_EVENT } from './infrastructure/persistence/prisma-notification.store';
 import { InMemoryNotificationStore } from './infrastructure/persistence/in-memory-notification.store';
 import { NotificationKafkaConsumer } from './infrastructure/messaging/notification.kafka.consumer';
 import { NotificationHealthIndicator } from './notification.health';
-
+import { QueueModule, NOTIFICATION_WORKER_QUEUE, NOTIFICATION_DISPATCH_QUEUE as NOTIFICATION_DISPATCH_QUEUE_NAME } from '@auth/infra/queue';
+import { NotificationWorker } from './infrastructure/queues/notification-worker.queue';
+import { NotificationDispatchWorker } from './infrastructure/queues/notification-dispatch.worker';
+import { BullNotificationDispatchQueue } from './infrastructure/queues/notification-dispatch.queue';
 @Module({})
 export class NotificationModule {}
 
@@ -65,8 +65,7 @@ export class NotificationModule {}
  * → handlers → facade. Every port is bound to a `Symbol` from the port's own file, so the
  * application layer never names a class from `infrastructure/` and swapping the store for a
  * real `notifications` table is a one-line change here.
- */
-export function createNotificationModule(): DynamicModule {
+ */export function createNotificationModule(): DynamicModule {
   const logger = new Logger('NotificationModule');
 
   const configProvider: Provider = {
@@ -123,7 +122,13 @@ export function createNotificationModule(): DynamicModule {
 
   return {
     module: NotificationModule,
-    imports: [CqrsModule.forRoot()],
+    imports: [
+      CqrsModule.forRoot(),
+      QueueModule.register({
+        queues: [NOTIFICATION_WORKER_QUEUE, NOTIFICATION_DISPATCH_QUEUE_NAME],
+      }),
+    ],
+    controllers: [],
     providers: [
       {
         provide: NOTIFICATION_PRISMA,
@@ -146,6 +151,16 @@ export function createNotificationModule(): DynamicModule {
       // step — and the kind that drifts silently, because neither list fails to compile.
       { provide: CONSUMER_CLAIM_STORE, useClass: PrismaConsumerClaimStore },
       { provide: NOTIFICATION_DISPATCHER, useClass: CommandBusNotificationDispatcher },
+      {
+        provide: NOTIFICATION_DISPATCH_QUEUE,
+        useClass: BullNotificationDispatchQueue,
+      },
+
+      // The workers own their queues. The resend worker owns the resend/cancel path with its
+      // per-user rate limiter; the dispatch worker owns the hot path — one job per consumed
+      // Kafka event — with concurrency instead of a limiter.
+      NotificationWorker,
+      NotificationDispatchWorker,
 
       SendNotificationHandler,
       MarkNotificationReadHandler,

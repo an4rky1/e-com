@@ -1,0 +1,15 @@
+# service database — the single source shell tooling reads.
+# Directory names and database names deliberately differ (the session service writes to
+# session_engine, notification to notify); the Terraform catalog restates the same
+# ten pairs for the tasks' DATABASE_URL keys, and tools/migrate.sh, tools/aws-ecs-task.sh
+# and tools/create-databases.sh all read this file so a new service lands in one place.
+identity identity
+access-control access_control
+credential-vault credential_vault
+session session_engine
+auth-flow auth_flow
+mfa mfa
+api-key api_key
+account-security account_security
+notification notify
+audit-log audit_log

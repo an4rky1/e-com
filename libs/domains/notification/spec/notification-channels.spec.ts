@@ -27,9 +27,11 @@ import {
   FailingChannel,
   InMemoryClaimStore,
   RecordingChannel,
+  RecordingDispatchQueue,
   TestChannelRegistry,
   UnreachableChannel,
   USER_ID,
+  drainDispatches,
   eventMessage,
   fullRecipient,
 } from './testing/fakes';
@@ -161,7 +163,9 @@ describe('per-channel dispatch', () => {
     );
 
     expect(byChannel.get(NotificationChannel.PUSH)?.status).toBe(DeliveryStatus.SKIPPED);
-    expect(byChannel.get(NotificationChannel.PUSH)?.error).toContain('no address');
+    expect(byChannel.get(NotificationChannel.PUSH)?.error).toContain(
+      'not enabled in this deployment',
+    );
     // Nothing failed, so the whole notification succeeded on what it could reach.
     expect(result.outcome).toBe(NotificationOutcome.PARTIAL);
   });
@@ -222,11 +226,8 @@ describe('a channel failure inside the consumer', () => {
         new FailingChannel(NotificationChannel.EMAIL),
       ]),
     );
-
-    const processor = new NotificationEventProcessor(claims, {
-      send: (command) => handler.execute(command),
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const queue = new RecordingDispatchQueue();
+    const processor = new NotificationEventProcessor(claims, queue);
 
     const outcome = await processor.process(
       eventMessage(Topics.USER_LOCKED, {
@@ -240,6 +241,8 @@ describe('a channel failure inside the consumer', () => {
     expect(outcome.kind).toBe('processed');
     expect(claims.releaseLog).toHaveLength(0);
     expect(claims.heldCount).toBe(1);
+
+    await drainDispatches(queue, handler);
     expect(store.records.size).toBe(1);
   });
 
@@ -251,11 +254,8 @@ describe('a channel failure inside the consumer', () => {
       store,
       new TestChannelRegistry([new RecordingChannel(NotificationChannel.INAPP), email]),
     );
-
-    const processor = new NotificationEventProcessor(claims, {
-      send: (command) => handler.execute(command),
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const queue = new RecordingDispatchQueue();
+    const processor = new NotificationEventProcessor(claims, queue);
 
     await processor.process(
       eventMessage(Topics.USER_REGISTERED, {
@@ -265,6 +265,8 @@ describe('a channel failure inside the consumer', () => {
         source: 'web',
       }),
     );
+
+    await drainDispatches(queue, handler);
 
     expect(email.delivered[0].address).toBe(EMAIL);
     expect(JSON.stringify(store.outbox)).not.toContain(EMAIL);

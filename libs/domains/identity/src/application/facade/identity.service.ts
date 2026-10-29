@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { toCreateUserCommand, CreateUserCommand } from '../commands/create-user.command';
+import { ResolveOauthUserCommand } from '../commands/resolve-oauth-user.command';
 import {
   DeleteUserCommand,
   UpdateUserStatusCommand,
@@ -34,8 +35,32 @@ export class IdentityService {
     displayName?: string;
     locale?: string;
     source?: string;
+    emailVerified?: boolean;
+    id?: string;
   }): Promise<string> {
     return this.commandBus.execute<string>(toCreateUserCommand(input));
+  }
+
+  /**
+   * Resolves a provider account to the local user behind it — link, link-by-address, or
+   * create. The one place the (provider, subject) linkage is read or written.
+   */
+  resolveOauthUser(input: {
+    provider: string;
+    subject: string;
+    email: string;
+    emailVerified: boolean;
+    displayName?: string;
+  }): Promise<{ userId: string; created: boolean }> {
+    return this.commandBus.execute(
+      new ResolveOauthUserCommand(
+        input.provider,
+        input.subject,
+        input.email,
+        input.emailVerified,
+        input.displayName,
+      ),
+    );
   }
 
   updateUserStatus(input: {

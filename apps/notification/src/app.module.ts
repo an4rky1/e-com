@@ -9,6 +9,7 @@ import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
 import { HealthModule } from '@auth/platform/health';
+import { ObservabilityModule } from '@auth/platform/observability';
 import { createKafkaModule } from '@auth/infra/kafka';
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createNotificationModule } from '@auth/domains/notification';
@@ -20,6 +21,7 @@ import { createNotificationModule } from '@auth/domains/notification';
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
     HealthModule.forRoot('notification'),
+    ObservabilityModule.forRoot('notification'),
     // Supplies the Kafka consumer the notification module exports but does not
     // provide: the module is consumer-only and takes its transport from here.
     createKafkaModule(),

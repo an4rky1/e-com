@@ -1,0 +1,26 @@
+# Scrapes every backend process's /metrics endpoint.
+#
+# `network_mode: host` on the Prometheus container is what makes plain `localhost` targets
+# work: the services listen on the host, not on the compose network, and the alternative —
+# a per-runtime host gateway name (`host.containers.internal` vs `host-gateway`) — is the one
+# piece of this file that would behave differently under podman and under docker.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: auth-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - localhost:3001 # identity
+          - localhost:3002 # access-control
+          - localhost:3003 # credential-vault
+          - localhost:3004 # session
+          - localhost:3005 # auth-flow
+          - localhost:3006 # mfa
+          - localhost:3007 # api-key
+          - localhost:3008 # account-security
+          - localhost:3009 # notification
+          - localhost:3010 # audit-log
+          - localhost:4000 # api-gateway (the edge)

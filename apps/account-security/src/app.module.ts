@@ -9,10 +9,12 @@ import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
 import { HealthModule } from '@auth/platform/health';
+import { ObservabilityModule } from '@auth/platform/observability';
 
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createAccountSecurityModule } from '@auth/domains/account-security';
 import { createKafkaPublisher } from '@auth/infra/kafka';
+import { RedisModule } from '@auth/infra/redis';
 
 /**
  * Outbox transport, built here because a module factory cannot receive it through DI.
@@ -28,6 +30,11 @@ const eventPublisher = createKafkaPublisher();
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
     HealthModule.forRoot('account-security'),
+    ObservabilityModule.forRoot('account-security'),
+    // The shared client the failure counters and the device registry ride on. Listed here
+    // rather than inside the domain module so the composition root stays the only place that
+    // knows which processes of this service have Redis.
+    RedisModule.forRoot(),
 
     createAccountSecurityModule({ publisher: eventPublisher }),
   ],

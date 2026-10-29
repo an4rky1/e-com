@@ -12,16 +12,22 @@
  * the role in access-control and this shortcut would keep working.
  */
 import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import type { SetPasswordResponse } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { Public, RequirePermissions } from './decorators/route-metadata';
-import { toUserResponse } from './dto/gateway.dto';
-import type {
+import { Idempotent } from './decorators/idempotent';
+// Values on purpose — the same `emitDecoratorMetadata` reasoning as in `auth.controller.ts`:
+// a type-only body DTO emits `Function` as its parameter metatype, and ValidationPipe then
+// strips the request to `{}` instead of validating it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import {
   CreateUserRequestDto,
   SetPasswordRequestDto,
-  UserResponseDto,
+  toUserResponse,
 } from './dto/gateway.dto';
+import type { UserResponseDto } from './dto/gateway.dto';
 // Value import on purpose — see the note in `auth.controller.ts`.
  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { GatewayService } from '../application/facade/gateway.service';
@@ -31,8 +37,15 @@ import { GatewayService } from '../application/facade/gateway.service';
 export class UsersController {
   constructor(private readonly gateway: GatewayService) {}
 
-  /** Creates the account record. The caller still has to set a password and sign in. */
+  /**
+   * Creates the account record. The caller still has to set a password and sign in.
+   *
+   * @remarks `replay` rather than the `dedup` default: the answer is a plain record with
+   * no credentials in it, so a retry whose first response was lost gets that response back
+   * instead of a conflict it can do nothing with.
+   */
   @Public()
+  @Idempotent({ mode: 'replay' })
   @Post()
   async create(@Body() body: CreateUserRequestDto): Promise<UserResponseDto> {
     return toUserResponse(
@@ -52,14 +65,19 @@ export class UsersController {
    *
    * @remarks `users:password:set` is a name, not a rule. Which role carries it, and under
    * what conditions, is access-control's data.
+   *
+   * @remarks `replay`, because the answer is two identifiers and no secret — a retry of a
+   * set that already succeeded can be handed that answer back instead of running the set
+   * a second time against a credential the vault has already stored.
    */
   @RequirePermissions('users:password:set')
+  @Idempotent({ mode: 'replay' })
   @Post(':id/password')
   @HttpCode(200)
   async setPassword(
     @Param('id') id: string,
     @Body() body: SetPasswordRequestDto,
-  ): Promise<{ userId: string; credentialId: string }> {
+  ): Promise<SetPasswordResponse> {
     return this.gateway.setPassword({ userId: id, newPassword: body.password });
   }
 }

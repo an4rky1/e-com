@@ -8,7 +8,7 @@
 import { type ExecutionContext, createParamDecorator } from '@nestjs/common';
 import type { GatewayPrincipal } from '../../application/ports/gateway-principal';
 import { TokenInvalidException } from '@auth/platform/error-handling';
-import type { GatewayRequest } from '../gateway-request';
+import { clientIpOf, type GatewayRequest } from '../gateway-request';
 
 /**
  * The authenticated caller.
@@ -30,13 +30,8 @@ export const CurrentPrincipal = createParamDecorator(
 
 /** The caller's address, for the peers that record it. Never a header we were told to trust. */
 export const ClientIp = createParamDecorator(
-  (_data: unknown, context: ExecutionContext): string | undefined => {
-    const request = context.switchToHttp().getRequest<GatewayRequest>();
-    const forwarded = request.headers?.['x-forwarded-for'];
-    const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    if (typeof value === 'string' && value.length > 0) return value.split(',')[0]?.trim();
-    return request.socket?.remoteAddress ?? undefined;
-  },
+  (_data: unknown, context: ExecutionContext): string | undefined =>
+    clientIpOf(context.switchToHttp().getRequest<GatewayRequest>()),
 );
 
 /** The caller's user agent, forwarded verbatim for the flows that record it. */

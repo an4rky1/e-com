@@ -70,14 +70,14 @@ export const Topics = {
   SESSION_ISSUED: 'platform.session.issued.v1',
   SESSION_REFRESHED: 'platform.session.refreshed.v1',
   SESSION_REVOKED: 'platform.session.revoked.v1',
-  SESSION_TOKEN_REUSE_DETECTED: 'platform.session.token_reuse_detected.v1',
+  SESSION_REUSE_DETECTED: 'platform.session.token_reuse_detected.v1',
 
   // access control
   ROLE_GRANTED: 'platform.role.granted.v1',
   ROLE_REVOKED: 'platform.role.revoked.v1',
   PERMISSION_DENIED: 'platform.permission.denied.v1',
 
-  // auth gateway
+  // auth-flow
   AUTH_FLOW_STARTED: 'platform.auth_flow.started.v1',
   AUTH_FLOW_STEP_COMPLETED: 'platform.auth_flow.step_completed.v1',
   AUTH_FLOW_COMPLETED: 'platform.auth_flow.completed.v1',
@@ -120,14 +120,14 @@ export const TopicsByProducer = {
     Topics.MFA_DISABLED,
   ],
   'api-key': [Topics.API_KEY_CREATED, Topics.API_KEY_ROTATED, Topics.API_KEY_REVOKED],
-  'session-token': [
+  'session': [
     Topics.SESSION_ISSUED,
     Topics.SESSION_REFRESHED,
     Topics.SESSION_REVOKED,
-    Topics.SESSION_TOKEN_REUSE_DETECTED,
+    Topics.SESSION_REUSE_DETECTED,
   ],
   'access-control': [Topics.ROLE_GRANTED, Topics.ROLE_REVOKED, Topics.PERMISSION_DENIED],
-  'auth-gateway': [
+  'auth-flow': [
     Topics.AUTH_FLOW_STARTED,
     Topics.AUTH_FLOW_STEP_COMPLETED,
     Topics.AUTH_FLOW_COMPLETED,

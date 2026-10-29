@@ -66,7 +66,58 @@ services:
       retries: 30
       start_period: 10s
 
+  # --- Observability -------------------------------------------------------------
+  # The three backends the platform's telemetry lands in. All three use `network_mode: host`
+  # rather than published ports: Prometheus must reach services that listen on the *host*
+  # (localhost targets), and a per-runtime gateway name (`host.containers.internal` under
+  # podman, `host-gateway` under docker) is the one detail here that would otherwise behave
+  # differently depending on which runtime started the stack. Host networking makes the
+  # localhost in prometheus.yml mean the same thing everywhere.
+  jaeger:
+    image: docker.io/jaegertracing/all-in-one:1.57
+    container_name: auth-jaeger
+    network_mode: host
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true' # OTLP on 4317 (gRPC) / 4318 (HTTP) — the SDK's default target
+
+  prometheus:
+    image: docker.io/prom/prometheus:v2.53.0
+    container_name: auth-prometheus
+    network_mode: host
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  # Port 3100, not Grafana's default 3000: the front owns 3000 on the host, and host
+  # networking gives no ports block to remap it with.
+  grafana:
+    image: docker.io/grafana/grafana:11.1.0
+    container_name: auth-grafana
+    network_mode: host
+    environment:
+      GF_SERVER_HTTP_PORT: '3100'
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+  # Topic and message browser for the event bus: browse platform.* topics, follow messages in
+  # live tail, inspect consumer groups. Same host-networking reasoning as above — redpanda
+  # advertises PLAINTEXT://localhost:9092, so a bridge-network container would be told to
+  # reconnect to *its* localhost after the metadata fetch and fail on the next dial.
+  kafka-ui:
+    image: docker.io/provectuslabs/kafka-ui:v0.7.2
+    container_name: auth-kafka-ui
+    network_mode: host
+    environment:
+      KAFKA_CLUSTERS_0_NAME: auth-platform
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: localhost:9092
+
 volumes:
   postgres-data:
   redis-data:
   redpanda-data:
+  prometheus-data:
+  grafana-data:

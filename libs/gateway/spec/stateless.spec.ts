@@ -111,7 +111,13 @@ describe('the library reaches only the layers its tag allows', () => {
       specifiersOf(LIB_SOURCES)
         .filter((specifier) => specifier.startsWith('@auth/'))
         // `@auth/gateway` is this lib's own alias, used by the app and by nobody here.
-        .map((specifier) => specifier.split('/').slice(0, 3).join('/')),
+        // `@auth/contracts/http` is a module *inside* `@auth/contracts`, not a layer — the
+        // three-segment cut would otherwise report the HTTP contract as a new dependency.
+        .map((specifier) =>
+          specifier.startsWith('@auth/contracts')
+            ? '@auth/contracts'
+            : specifier.split('/').slice(0, 3).join('/'),
+        ),
     );
 
     // `eslint.config.mjs` says the same thing as a `depConstraints` entry; this fails with a
@@ -119,8 +125,11 @@ describe('the library reaches only the layers its tag allows', () => {
     expect([...roots].sort()).toEqual([
       '@auth/contracts',
       '@auth/infra/grpc',
+      '@auth/infra/idempotency',
       '@auth/infra/rate-limit',
+      '@auth/infra/redis',
       '@auth/platform/config',
+      '@auth/platform/context',
       '@auth/platform/error-handling',
       '@auth/platform/feature-flags',
       '@auth/platform/health',
@@ -153,29 +162,45 @@ describe('the app shell is thin', () => {
   });
 });
 
-describe('the api-gateway needs no environment beyond the shared service token', () => {
-  it('refuses to resolve without that token, rather than booting a client that presents nothing', () => {
-    // No `DATABASE_URL`, no signing key, no peer addresses: every one of them has a default or
-    // does not exist. The one thing that is not optional is the secret this edge presents on
-    // every peer call — it cannot verify a token, and a channel with no token of its own would
-    // be refused by every receiving guard, just later and per call.
+describe('the api-gateway needs two secrets, and neither of them has a default', () => {
+  it('refuses to resolve without the service token, rather than booting a client that presents nothing', () => {
+    // No `DATABASE_URL`, no peer addresses: every one of them has a default or does not
+    // exist. The first thing that is not optional is the secret this edge presents on every
+    // peer call — a channel with no token of its own would be refused by every receiving
+    // guard, just later and per call.
     expect(() => resolveGatewayConfig({})).toThrow(/GRPC_SERVICE_TOKEN/);
   });
 
-  it('resolves every default once that one secret is given', () => {
+  it('refuses to resolve without the signing key, rather than booting a guard that 401s everyone', () => {
+    // Read after the service token, so this is named only once that one is given: an edge
+    // that cannot verify a bearer refuses every authenticated request anyway, and the boot
+    // error is where that gets caught instead — one message at startup rather than one 401
+    // per caller.
+    expect(() =>
+      resolveGatewayConfig({ GRPC_SERVICE_TOKEN: 'a-shared-service-token' }),
+    ).toThrow(/SESSION_ACCESS_TOKEN_SIGNING_KEY/);
+  });
+
+  it('resolves every default once both secrets are given', () => {
     const config = resolveGatewayConfig({
       GRPC_SERVICE_TOKEN: 'a-shared-service-token',
+      SESSION_ACCESS_TOKEN_SIGNING_KEY: 'the-shared-signing-key',
     });
 
     expect(config.peerDeadlineMs).toBe(3_000);
     expect(config.identityUrl).toBe('localhost:13001');
     expect(config.grpcServiceToken).toBe('a-shared-service-token');
+    expect(config.accessTokenSigningKey).toBe('the-shared-signing-key');
+    // The issuer's tolerance, read from its namespace rather than chosen here: two readings
+    // of the skew is the "logged out for no reason" bug wearing a config file.
+    expect(config.clockSkewSec).toBe(30);
   });
 
   it('boots even when a database happens to be in the environment', () => {
     const config = resolveGatewayConfig({
       DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/identity',
       GRPC_SERVICE_TOKEN: 'a-shared-service-token',
+      SESSION_ACCESS_TOKEN_SIGNING_KEY: 'the-shared-signing-key',
     });
 
     // Absent from the schema, so absent from the result: `readNamespacedEnv` has no way to
@@ -184,25 +209,30 @@ describe('the api-gateway needs no environment beyond the shared service token',
     expect(Object.keys(config)).not.toContain('databaseUrl');
   });
 
-  it('reads the token from the platform namespace, and no lookalike of its own', () => {
+  it('reads both secrets from the namespaces that own them, and no lookalike of its own', () => {
     const config = resolveGatewayConfig({
+      // Somebody else's variable: the gateway's own address knobs are `GATEWAY_`-prefixed,
+      // so this one is ignored and the compiled-in default stands.
       IDENTITY_GRPC_URL: 'identity.internal:13001',
-      SESSION_ACCESS_TOKEN_SIGNING_KEY: 'a-signing-key-that-is-not-ours',
       GATEWAY_PEER_DEADLINE_MS: '750',
       GATEWAY_SERVICE_TOKEN: 'a-token-nobody-else-would-present',
+      GATEWAY_ACCESS_TOKEN_SIGNING_KEY: 'a-key-nobody-else-would-sign-with',
       GRPC_SERVICE_TOKEN: 'the-shared-service-token',
+      SESSION_ACCESS_TOKEN_SIGNING_KEY: 'the-shared-signing-key',
     });
 
-    // Someone else's variable, and a signing key this process has no business holding.
     expect(config.peerDeadlineMs).toBe(750);
     expect(config.identityUrl).toBe('localhost:13001');
-    expect(JSON.stringify(config)).not.toContain('signing-key');
 
-    // One variable, read from the namespace every peer shares: a `GATEWAY_`-prefixed twin
-    // would be a second secret for a single trust boundary, and a rotation that updated this
-    // edge out of step with the nine services it calls.
+    // One variable each, read from the namespace that owns it. A `GATEWAY_`-prefixed twin
+    // would be a second secret for a single trust boundary — and for the signing key, a
+    // rotation that updated this edge out of step with session, which is the failure
+    // mode where a token mints fine and refuses at the edge.
     expect(config.grpcServiceToken).toBe('the-shared-service-token');
-    expect(JSON.stringify(config)).not.toContain('a-token-nobody-else-would-present');
+    expect(config.accessTokenSigningKey).toBe('the-shared-signing-key');
+    const rendered = JSON.stringify(config);
+    expect(rendered).not.toContain('a-token-nobody-else-would-present');
+    expect(rendered).not.toContain('a-key-nobody-else-would-sign-with');
   });
 
   it('rejects a malformed peer deadline at boot rather than on the first request', () => {

@@ -2,7 +2,7 @@
  * @fileoverview The single read model this service exposes.
  *
  * @remarks One query, answering "what second factors does this person hold, and can they
- * satisfy one right now?" Both halves are needed by the same caller — auth-gateway deciding
+ * satisfy one right now?" Both halves are needed by the same caller — auth-flow deciding
  * whether to challenge — and two round trips would race with each other: the status could
  * say "active" while the factor was being disabled a millisecond later.
  *

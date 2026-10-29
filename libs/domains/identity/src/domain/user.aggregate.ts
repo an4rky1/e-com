@@ -75,7 +75,7 @@ export class UserDeleted extends DomainEvent {
  * The user account.
  *
  * @remarks Identity owns *who someone is* and nothing else. Passwords live in
- * credential-vault, tokens in session-token and roles in access-control, each behind a gRPC
+ * credential-vault, tokens in session and roles in access-control, each behind a gRPC
  * call. Storing any of them here would make "who you are" inseparable from "what you may do".
  */
 export class User extends AggregateRoot<string> {
@@ -94,6 +94,12 @@ export class User extends AggregateRoot<string> {
     displayName?: string;
     locale?: string;
     source?: string;
+    /**
+     * True when the address arrived already vouched for — an OAuth sign-up where the
+     * provider asserted a verified mailbox. Absent means the usual case: a letter is on
+     * its way and the account stays `pending_verification` until it is opened.
+     */
+    emailVerified?: boolean;
     id?: string;
     now?: Date;
   }): User {
@@ -109,7 +115,7 @@ export class User extends AggregateRoot<string> {
         displayName: input.displayName?.trim() || null,
         locale: input.locale ?? 'en',
         status: 'pending_verification',
-        emailVerified: false,
+        emailVerified: input.emailVerified ?? false,
         version: 1,
         deletedReason: null,
       },

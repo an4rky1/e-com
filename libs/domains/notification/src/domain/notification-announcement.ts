@@ -7,10 +7,10 @@
  * that gets removed the first time it is slow.
  *
  * @remarks Two independent guards, because they fail differently. The *structural* one is the
- * field list in {@link toAnnouncementPayload}: it names exactly what may leave, so an address
- * has no path into the payload. The *content* one scans the values that survived it for
- * address- and token-shaped text, which is what catches a variable a producer invented and a
- * template declared — the case a field list alone cannot see coming.
+ * field list in {@link announcementFor}: it names exactly what may leave, so an address has no
+ * path into the payload. The *content* one scans the values that survived it for address-
+ * and token-shaped text, which is what catches a variable a producer invented and a template
+ * declared — the case a field list alone cannot see coming.
  */
 import type {
   DeliveryStatus,
@@ -22,6 +22,28 @@ import type {
   NotificationTemplate,
 } from './value-objects/notification-template.vo';
 import type { Notification } from './notification.aggregate';
+
+/**
+ * Structural guard: the fields that form the announcement shape.
+ *
+ * @remarks The list is the first line of defence. Any field not on it has no path into the
+ * published payload, so a later edit that adds a `resetLink` to a template must also add it
+ * here deliberately — and this file is the one place that lists every published field in one
+ * place. The content guard below is the second line, because it catches the case a producer
+ * slid an address-shaped value into a field this list already allows.
+ */
+export const ANNOUNCEMENT_FIELDS = [
+  'notificationId',
+  'userId',
+  'template',
+  'severity',
+  'subject',
+  'channels',
+  'deliveries',
+  'variables',
+  'redactedVariables',
+  'createdAt',
+] as const;
 
 /**
  * Keys that must never appear in a published payload.
@@ -127,6 +149,30 @@ export function toVariableMap(value: unknown): NotificationVariables {
  * dropped is a template that renders with a hole in it, and an operator who can see *which*
  * one can fix the producer instead of guessing from a support ticket.
  */
+const ALWAYS_REDACTED_BY_NAME: ReadonlySet<string> = new Set([
+  'email',
+  'phone',
+  'address',
+  'recipient',
+  'to',
+  'token',
+  'secret',
+  'password',
+  'credential',
+  'digest',
+  'otp',
+  'code',
+  'link',
+  'reset',
+  'cookie',
+  'session',
+  'apiKey',
+  'api_key',
+  'bearer',
+  'jwt',
+  'salt',
+]);
+
 export function redactVariables(variables: NotificationVariables): {
   variables: NotificationVariables;
   redacted: readonly string[];
@@ -136,9 +182,10 @@ export function redactVariables(variables: NotificationVariables): {
 
   for (const [key, value] of Object.entries(variables)) {
     if (
+      ALWAYS_REDACTED_BY_NAME.has(key) ||
       FORBIDDEN_PAYLOAD_KEY.test(key) ||
       EMAIL_SHAPED.test(value) ||
-      TOKEN_SHAPED.test(value)
+      (TOKEN_SHAPED.test(value) && !UUID_SHAPED.test(value))
     ) {
       redacted.push(key);
       continue;
@@ -146,7 +193,7 @@ export function redactVariables(variables: NotificationVariables): {
     kept[key] = value;
   }
 
-  return { variables: kept, redacted: redacted.sort() };
+  return { variables: kept, redacted: redacted.sort((a, b) => a.localeCompare(b)) };
 }
 
 /**
@@ -188,7 +235,16 @@ export function sanitiseDeliveryError(error: string): string {
  * the decision stand while the payload said something other than what was decided.
  */
 export function assertPublishable(announcement: NotificationAnnouncement): void {
+  const allowed = new Set<string>(ANNOUNCEMENT_FIELDS);
   for (const [path, value] of flatten(announcement)) {
+    // The *root* field decides, not the leaf: `$.variables.contact` is a value inside the
+    // published `variables` map, and filtering on the leaf name (`contact`) would skip the
+    // check for exactly the nested keys a producer invents.
+    const root = rootFieldOf(path);
+    if (!allowed.has(root)) {
+      continue;
+    }
+
     if (typeof value !== 'string') continue;
     if (EMAIL_SHAPED.test(value)) {
       throw new Error(
@@ -201,6 +257,16 @@ export function assertPublishable(announcement: NotificationAnnouncement): void 
       );
     }
   }
+}
+
+/** The published field a path hangs off — `variables` for `$.variables.contact`, `deliveries` for `$.deliveries[0].error`. */
+function rootFieldOf(path: string): string {
+  const segments = path.split('.').filter((segment) => segment !== '$' && segment !== '');
+  for (const segment of segments) {
+    const name = segment.replace(/\[\d+\]$/, '');
+    if (name !== '') return name;
+  }
+  return path;
 }
 
 /**

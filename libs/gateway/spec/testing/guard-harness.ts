@@ -12,13 +12,58 @@
 import 'reflect-metadata';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AccessTokenCodec } from '@auth/contracts';
 import { JwtAuthGuard } from '../../src/presentation/guards/jwt-auth.guard';
 import {
   Public,
   RequirePermissions,
 } from '../../src/presentation/decorators/route-metadata';
 import type { GatewayRequest } from '../../src/presentation/gateway-request';
-import { FakeSessionClient } from './peer-doubles';
+import type { GatewayTokenTrust } from '../../src/gateway.config';
+
+/**
+ * The key this suite signs with. The guard verifies locally, so a test token has to be a real
+ * token — signed with the key the guard was configured with, exactly as session would
+ * sign it — rather than the opaque string an opaque peer call used to stand in for.
+ */
+export const TEST_SIGNING_KEY = 'a-test-signing-key-that-is-only-ever-used-here';
+export const TEST_OTHER_KEY = 'a-different-key-entirely-32-bytes-of-entropy';
+/** The skew under test, mirroring the issuer's default. */
+export const TEST_CLOCK_SKEW_SEC = 30;
+
+/**
+ * Signs a token the guard should accept, with any claim overridden per test.
+ *
+ * @remarks Defaults mirror the claims `peer-doubles` exports, so a test that only cares about
+ * "a valid token" keeps reading as one.
+ */
+export const signTestToken = (
+  overrides: Partial<{
+    userId: string;
+    sessionId: string;
+    email: string;
+    tokenFamilyId: string;
+    roles: readonly string[];
+    permissions: readonly string[];
+    issuedAt: Date;
+    expiresAt: Date;
+    key: string;
+  }> = {},
+): string =>
+  AccessTokenCodec.sign(
+    {
+      userId: overrides.userId ?? '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      sessionId: overrides.sessionId ?? 'session-1',
+      email: overrides.email ?? 'person@example.com',
+      tokenFamilyId: overrides.tokenFamilyId ?? '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+      roles: overrides.roles ?? ['member'],
+      permissions: overrides.permissions ?? ['users:read'],
+      issuedAt: overrides.issuedAt ?? new Date(),
+      expiresAt:
+        overrides.expiresAt ?? new Date(Date.now() + 15 * 60 * 1_000),
+    },
+    overrides.key ?? TEST_SIGNING_KEY,
+  );
 
 /**
  * Route shapes carrying the same metadata the real controllers carry.
@@ -70,8 +115,10 @@ export const rejection = async (promise: Promise<unknown>): Promise<unknown> => 
   throw new Error('expected the promise to reject, but it resolved');
 };
 
-/** A guard with a scriptable session peer. */
-export const guardWith = (sessions: FakeSessionClient = new FakeSessionClient()) => ({
-  guard: new JwtAuthGuard(new Reflector(), sessions),
-  sessions,
+/** A guard configured the way the module configures it: local key, local skew. */
+export const guardWith = (config: Partial<GatewayTokenTrust> = {}) => ({
+  guard: new JwtAuthGuard(new Reflector(), {
+    accessTokenSigningKey: config.accessTokenSigningKey ?? TEST_SIGNING_KEY,
+    clockSkewSec: config.clockSkewSec ?? TEST_CLOCK_SKEW_SEC,
+  }),
 });

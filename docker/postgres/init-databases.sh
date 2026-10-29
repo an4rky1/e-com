@@ -7,7 +7,7 @@
 set -euo pipefail
 
 for db in identity credential_vault mfa api_key session_engine access_control \
-          auth_gateway account_security notify; do
+          auth_flow account_security notify audit_log; do
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-EOSQL
     SELECT 'CREATE DATABASE $db OWNER $POSTGRES_USER'
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')\gexec

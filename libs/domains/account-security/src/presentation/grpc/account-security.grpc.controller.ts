@@ -2,7 +2,7 @@
  * @fileoverview gRPC transport for account-security.
  *
  * @remarks Four methods, and none of them blocks. `RecordLoginAttempt` and `AssessLoginRisk`
- * both exist to let auth-gateway *choose*; the response carries the lock state and the score
+ * both exist to let auth-flow *choose*; the response carries the lock state and the score
  * as fields precisely so that the refusal, when there is one, is made by the service that has
  * the rest of the request in front of it.
  */

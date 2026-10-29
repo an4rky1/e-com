@@ -1,10 +1,10 @@
 /**
  * @fileoverview Nest wiring for account-security.
  *
- * @remarks A factory rather than a static `@Module`, for one reason: the lockout thresholds and
- * the Redis url come from `ACCOUNT_SECURITY_*`, and a module whose metadata is evaluated at
- * import time reads the environment before `ConfigModule` has had a chance to load it. The
- * factory also makes the "no Redis" decision explicit at boot rather than implicit.
+ * @remarks A factory rather than a static `@Module`, for one reason: the lockout thresholds
+ * come from `ACCOUNT_SECURITY_*`, and a module whose metadata is evaluated at import time
+ * reads the environment before `ConfigModule` has had a chance to load it. The factory also
+ * makes the "no Redis" decision explicit at boot rather than implicit.
  */
 import { Logger, Module, type DynamicModule, type Provider } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
@@ -14,12 +14,12 @@ import {
   PrismaOutboxRepository,
   type EventPublisher,
 } from '@auth/infra/outbox';
-import { Redis, type RedisOptions } from 'ioredis';
+import { REDIS } from '@auth/infra/redis';
+import type { Redis } from 'ioredis';
 import { PrismaClient } from './generated/prisma/client';
 import {
   ACCOUNT_SECURITY_CONFIG,
   ACCOUNT_SECURITY_PRISMA,
-  ACCOUNT_SECURITY_REDIS,
   resolveAccountSecurityConfig,
   type AccountSecurityConfig,
 } from './account-security.config';
@@ -54,25 +54,15 @@ import { AccountSecurityGrpcController } from './presentation/grpc/account-secur
 @Module({})
 export class AccountSecurityModule {}
 
-/** A private Redis client: one connection per service, never shared with another domain. */
-const redisProvider: Provider = {
-  provide: ACCOUNT_SECURITY_REDIS,
-  inject: [ACCOUNT_SECURITY_CONFIG],
-  useFactory: (config: AccountSecurityConfig): Redis | null => {
-    if (!config.cacheEnabled || config.redisUrl === null) {
-      return null;
-    }
-
-    const options: RedisOptions = { maxRetriesPerRequest: 2, enableOfflineQueue: false };
-    return new Redis(config.redisUrl, options);
-  },
-};
-
 /**
  * The rate store, real or not.
  *
  * @remarks One provider for both ports because the two questions are answered from the same
- * keys. Splitting them would mean two connections and two sets of key prefixes for no gain.
+ * keys. Splitting them would mean two sets of key prefixes for no gain.
+ *
+ * @remarks The client is the shared one from `@auth/infra/redis` — optional here, so a host
+ * that never imported that module degrades to the no-op tracker instead of failing to boot
+ * with an unresolvable token.
  *
  * @remarks A missing Redis is a *warning*, not a boot failure. This service signs people in; it
  * must keep doing that while degraded. What is lost — the lockout and the per-ip limit — is
@@ -81,10 +71,10 @@ const redisProvider: Provider = {
  */
 const rateStoreProvider: Provider = {
   provide: FAILURE_TRACKER,
-  inject: [ACCOUNT_SECURITY_REDIS, ACCOUNT_SECURITY_CONFIG],
+  inject: [ACCOUNT_SECURITY_CONFIG, { token: REDIS, optional: true }],
   useFactory: (
-    redis: Redis | null,
     config: AccountSecurityConfig,
+    redis: Redis | null | undefined,
   ): RedisFailureTracker | NoopFailureTracker => {
     const logger = new Logger('AccountSecurityModule');
     const options: RedisCounterOptions = {
@@ -93,10 +83,10 @@ const rateStoreProvider: Provider = {
       deviceTtlSec: config.deviceRetentionDays * 86_400,
     };
 
-    if (redis === null) {
+    if (!config.cacheEnabled || redis === null || redis === undefined) {
       logger.warn(
         'Redis is not configured: account lockouts and per-ip limits are DISABLED. ' +
-          'Set ACCOUNT_SECURITY_REDIS_URL before handling production traffic.',
+          'Set REDIS_URL before handling production traffic.',
       );
       return new NoopFailureTracker();
     }
@@ -164,7 +154,6 @@ export function createAccountSecurityModule(
         provide: ACCOUNT_SECURITY_CONFIG,
         useFactory: () => resolveAccountSecurityConfig(),
       },
-      redisProvider,
       rateStoreProvider,
       scoringProvider,
       { provide: SECURITY_REPOSITORY, useClass: PrismaSecurityRepository },

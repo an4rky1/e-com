@@ -21,6 +21,14 @@ export class CreateUserCommand extends Command<string> {
     readonly locale?: string,
     /** Where the registration came from: `web`, `admin`, `oauth:<provider>`. */
     readonly source?: string,
+    /** True when the address came vouched for (an OAuth provider); absent means pending. */
+    readonly emailVerified?: boolean,
+    /**
+     * Caller-chosen id for the account; absent lets `User.create` generate one. Registration
+     * pre-chooses it so the password is stored against the id the account will have — the
+     * credential is written first and revoked if this command then refuses the address.
+     */
+    readonly id?: string,
   ) {
     super();
   }
@@ -31,10 +39,14 @@ export const toCreateUserCommand = (input: {
   displayName?: string;
   locale?: string;
   source?: string;
+  emailVerified?: boolean;
+  id?: string;
 }): CreateUserCommand =>
   new CreateUserCommand(
     input.email,
     input.displayName,
     input.locale,
     input.source,
+    input.emailVerified,
+    input.id,
   );

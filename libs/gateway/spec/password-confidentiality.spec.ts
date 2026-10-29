@@ -24,6 +24,7 @@ import {
   FakeIdentityClient,
   FakeSessionClient,
   PASSWORD,
+  fakeOAuthService,
   principalOf,
   userOf,
 } from './testing/peer-doubles';
@@ -66,7 +67,7 @@ const captureLogs = async (run: () => Promise<void>): Promise<string[]> => {
 };
 
 describe('the password never leaves the vault call it was handed to', () => {
-  it('reaches auth-gateway, on the credential field, exactly once', async () => {
+  it('reaches auth-flow, on the credential field, exactly once', async () => {
     const { service, flows } = serviceWith();
 
     await service.login({ email: EMAIL, password: PASSWORD });
@@ -155,7 +156,9 @@ describe('the password never leaves the vault call it was handed to', () => {
     expect(credentials.stored).toEqual([{ userId: 'u-1', newPassword: PASSWORD }]);
     expect(JSON.stringify(flows.started)).not.toContain(PASSWORD);
     expect(JSON.stringify(flows.advanced.filter((a) => a.credential !== PASSWORD))).toBe('[]');
-    expect(JSON.stringify(sessions.validated)).not.toContain(PASSWORD);
+    expect(
+      JSON.stringify([sessions.issued, sessions.rotated, sessions.revoked, sessions.revokedOne]),
+    ).not.toContain(PASSWORD);
     expect(JSON.stringify(identity.created)).not.toContain(PASSWORD);
     expect(JSON.stringify(accessControl.granted)).not.toContain(PASSWORD);
   });
@@ -164,7 +167,7 @@ describe('the password never leaves the vault call it was handed to', () => {
 describe('the controllers hold no state of their own', () => {
   it('composes a login answer from what the use case returned', async () => {
     const { service } = serviceWith();
-    const controller = new AuthController(service);
+    const controller = new AuthController(service, fakeOAuthService());
 
     const response = await controller.login({ email: EMAIL, password: PASSWORD });
 
@@ -184,7 +187,7 @@ describe('the controllers hold no state of their own', () => {
 
   it('composes /auth/me from the composed answer', async () => {
     const { service } = serviceWith();
-    const controller = new AuthController(service);
+    const controller = new AuthController(service, fakeOAuthService());
 
     const response = await controller.me(principalOf());
 

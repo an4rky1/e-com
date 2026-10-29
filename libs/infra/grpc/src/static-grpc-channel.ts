@@ -27,7 +27,7 @@ interface UnaryCall {
  * Channel built directly from a loaded proto, without `ClientGrpcProxy`.
  *
  * @remarks Needed where a module has to be assembled at import time rather than through DI —
- * `createAuthGatewayModule(options)` is called in an `@Module` decorator, where no container
+ * `createAuthFlowModule(options)` is called in an `@Module` decorator, where no container
  * exists yet. Going through the proxy there would require bootstrapping Nest to build a
  * channel, which is circular.
  */
@@ -130,7 +130,7 @@ export class StaticGrpcChannel implements GrpcChannel {
  * Loads one or more protos and returns a ready-to-use channel.
  *
  * @remarks **Multiple protos is the normal case, not an edge case.** An orchestrator calls
- * `identity.v1`, `credential_vault.v1`, `session_token.v1` and `mfa.v1` — four packages, each
+ * `identity.v1`, `credential_vault.v1`, `session.v1` and `mfa.v1` — four packages, each
  * declared in its own file. A channel built from one proto can only dispatch that package's
  * methods, so a single-proto channel makes cross-service orchestration impossible while
  * looking perfectly healthy until the first call to a second peer.

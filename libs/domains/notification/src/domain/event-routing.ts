@@ -176,7 +176,7 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
     }),
   },
   {
-    topic: Topics.SESSION_TOKEN_REUSE_DETECTED,
+    topic: Topics.SESSION_REUSE_DETECTED,
     template: NotificationTemplate.SUSPICIOUS_REUSE,
     // The strongest signal the platform has: a replayed refresh token means the credentials
     // are in someone else's hands. It goes out on every channel that exists.

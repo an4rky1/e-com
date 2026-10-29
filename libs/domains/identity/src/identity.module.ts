@@ -10,6 +10,7 @@ import {
 } from '@auth/infra/outbox';
 import { PrismaClient } from './generated/prisma/client';
 import { CreateUserHandler } from './application/commands/create-user.handler';
+import { ResolveOauthUserHandler } from './application/commands/resolve-oauth-user.handler';
 import {
   DeleteUserHandler,
   UpdateUserStatusHandler,
@@ -81,6 +82,7 @@ export function createIdentityModule(options: IdentityModuleOptions): DynamicMod
       { provide: IDENTITY_CONFIG, useFactory: () => resolveIdentityConfig() },
 
       CreateUserHandler,
+      ResolveOauthUserHandler,
       UpdateUserStatusHandler,
       VerifyUserEmailHandler,
       DeleteUserHandler,

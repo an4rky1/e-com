@@ -11,7 +11,7 @@
  * credential that has to be rotated.
  *
  * @remarks The guard authenticates *machines*. It never reads a user id off a session, a JWT or
- * a cookie — that is auth-gateway's question, and this one has no opinion about who a human is.
+ * a cookie — that is auth-flow's question, and this one has no opinion about who a human is.
  */
 import {
   type CanActivate,

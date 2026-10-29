@@ -1,16 +1,21 @@
 /**
  * @fileoverview Turns a bearer token into a principal, or refuses the request.
  *
- * @remarks **Named `JwtAuthGuard` for the shape of what it accepts; it never touches a JWT.**
- * There is no signing key in this service's environment and no `jsonwebtoken` in its import
- * graph. session-token minted the token and session-token decides whether it is still valid,
- * so the gateway forwards the string and accepts the answer. A local verifier would be a
- * second opinion on a question one service already owns, and the two would disagree the day
- * a key rotates.
+ * @remarks **Named `JwtAuthGuard` because it is one.** The edge verifies the token's shape,
+ * signature and `exp` locally — one HMAC against `SESSION_ACCESS_TOKEN_SIGNING_KEY`, the same
+ * variable the session service signs with, resolved into the config at boot. No peer call, no
+ * lookup, no round trip: the answer to "is this bearer genuine" is computed from the string
+ * in the header and nothing else, which is what keeps the edge stateless under load.
+ *
+ * @remarks What local verification cannot answer is whether the *session* behind the token
+ * was revoked after the token was minted. Logout revokes the session row, so the next refresh
+ * fails, but a bearer already in the wild keeps working until its `exp` (15 minutes). That is
+ * the deliberate price of an edge that answers every request without asking anyone — short
+ * blast radius instead of instant revocation.
  *
  * @remarks Deny by default. `@Public()` is an opt-*out*, which is why `POST /auth/login` needs
- * it stated explicitly: without that decorator the route is unreachable, and the failure is
- * a 401 rather than a boot error, so the decorator is load-bearing and belongs in the code.
+ * it stated explicitly: without that decorator the route is unreachable, and the failure is a
+ * 401 rather than a boot error, so the decorator is load-bearing and belongs in the code.
  */
 import {
   type CanActivate,
@@ -22,11 +27,9 @@ import {
  // erases the DI token and the service then boots with an undefined facade.
  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { Reflector } from '@nestjs/core';
-import { TokenInvalidException } from '@auth/platform/error-handling';
-import {
-  SESSION_CLIENT,
-  type SessionClientPort,
-} from '../../application/ports/peer-clients.port';
+import { TokenExpiredException, TokenInvalidException } from '@auth/platform/error-handling';
+import { AccessTokenCodec, type AccessTokenClaims } from '@auth/contracts';
+import { GATEWAY_CONFIG, type GatewayTokenTrust } from '../../gateway.config';
 import type { GatewayPrincipal } from '../../application/ports/gateway-principal';
 import { IS_PUBLIC_ROUTE } from '../decorators/route-metadata';
 import { type GatewayRequest, bearerTokenOf } from '../gateway-request';
@@ -38,10 +41,10 @@ export class JwtAuthGuard implements CanActivate {
     // binding. A type-only import emits `Object` and every request arrives with an undefined
     // reflector.
     private readonly reflector: Reflector,
-    @Inject(SESSION_CLIENT) private readonly sessions: SessionClientPort,
+    @Inject(GATEWAY_CONFIG) private readonly config: GatewayTokenTrust,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     if (this.isPublic(context)) return true;
 
     const request = context.switchToHttp().getRequest<GatewayRequest>();
@@ -52,21 +55,29 @@ export class JwtAuthGuard implements CanActivate {
       });
     }
 
-    // The peer call carries its own deadline and maps its own failures, so a gRPC error can
-    // never reach this method and escape as a raw object.
-    const validation = await this.sessions.validateAccessToken(accessToken);
-
-    // `valid: false` is an answer, not a failure: a stale browser tab holding a revoked token
-    // is ordinary traffic, and session-token says so with a field rather than an exception.
-    if (!validation.valid) {
+    // Signature first: a token that is not ours never gets to argue about its clock.
+    const verified = AccessTokenCodec.verify(accessToken, this.config.accessTokenSigningKey);
+    if (verified.isFailure) {
       throw new TokenInvalidException('the access token is not valid', {
-        // The reason names *why* it stopped working, and is written by the service that knows.
+        // The reason names *why* it failed and is written by the codec that failed it.
         // Never the token, which would put the rejected credential in the log line.
-        reason: validation.revocationReason || 'rejected by the session engine',
+        reason: verified.error,
       });
     }
 
-    request.principal = toPrincipal(validation);
+    const claims = verified.unwrapOrThrow();
+    const nowSec = Math.floor(Date.now() / 1_000);
+    if (claims.exp + this.config.clockSkewSec <= nowSec) {
+      throw new TokenExpiredException('the access token has expired', {
+        reason: 'token_expired',
+        // `iat`/`exp` are numbers off the wire, not secrets: they say how long ago the
+        // issuer minted it, which is the one debugging detail a 401 otherwise hides.
+        issuedAt: claims.iat,
+        expiresAt: claims.exp,
+      });
+    }
+
+    request.principal = toPrincipal(claims);
     return true;
   }
 
@@ -81,18 +92,12 @@ export class JwtAuthGuard implements CanActivate {
   }
 }
 
-function toPrincipal(validation: {
-  userId: string;
-  email: string;
-  sessionId: string;
-  roles: readonly string[];
-  permissions: readonly string[];
-}): GatewayPrincipal {
+function toPrincipal(claims: AccessTokenClaims): GatewayPrincipal {
   return {
-    userId: validation.userId,
-    email: validation.email,
-    sessionId: validation.sessionId,
-    roles: [...validation.roles],
-    permissions: [...validation.permissions],
+    userId: claims.sub,
+    email: claims.email,
+    sessionId: claims.sid,
+    roles: [...claims.roles],
+    permissions: [...claims.perms],
   };
 }

@@ -35,3 +35,19 @@ export function bearerTokenOf(request: GatewayRequest): string | undefined {
   const trimmed = token?.trim();
   return trimmed ? trimmed : undefined;
 }
+
+/**
+ * The caller's address, as this edge reads it everywhere it needs one: the first
+ * `X-Forwarded-For` entry when a proxy supplied it, the socket's address otherwise.
+ *
+ * @remarks One function rather than three copies because idempotency's key scope and the
+ * address peers record must agree: a scope derived differently from what `@ClientIp()`
+ * reports would put two identities on one request, and the mismatch would only ever show
+ * up as a record that failed to match its retry.
+ */
+export function clientIpOf(request: GatewayRequest): string | undefined {
+  const forwarded = request.headers?.['x-forwarded-for'];
+  const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  if (typeof value === 'string' && value.length > 0) return value.split(',')[0]?.trim();
+  return request.socket?.remoteAddress ?? undefined;
+}

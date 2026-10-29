@@ -19,17 +19,12 @@ import {
   NotificationEventProcessor,
   parseEnvelope,
 } from '../src/application/consumers/notification-event.processor';
-import { SendNotificationHandler } from '../src/application/commands/notification.handlers';
 import { compileTemplate } from '../src/domain/templates/notification-templates';
 import { NotificationTemplate } from '../src/domain/value-objects/notification-template.vo';
-import { NotificationChannel } from '../src/domain/value-objects/notification-channel.vo';
-import { InMemoryNotificationStore } from '../src/infrastructure/persistence/in-memory-notification.store';
 import {
   EMAIL,
   InMemoryClaimStore,
-  RecordingChannel,
-  RecordingDispatcher,
-  TestChannelRegistry,
+  RecordingDispatchQueue,
   USER_ID,
   eventMessage,
   rawMessage,
@@ -38,14 +33,17 @@ import {
 import { rejection } from './testing/helpers';
 import type { ConsumedMessage } from '@auth/infra/kafka';
 
-/** A processor with nothing behind it, so a dead letter cannot be a side effect of sending. */
+/**
+ * A processor with nothing behind it, so a dead letter cannot be a side effect of sending.
+ *
+ * @remarks The queue it gets would record an instruction if one were ever ordered — which is
+ * exactly what the dead-letter assertions below are proving never happens.
+ */
 function bareProcessor() {
   const claims = new InMemoryClaimStore();
-  const processor = new NotificationEventProcessor(claims, {
-    send: () => Promise.reject(new Error('must not be reached')),
-    markRead: () => Promise.reject(new Error('must not be reached')),
-  });
-  return { claims, processor };
+  const queue = new RecordingDispatchQueue();
+  const processor = new NotificationEventProcessor(claims, queue);
+  return { claims, queue, processor };
 }
 
 describe('envelope parsing', () => {
@@ -131,16 +129,8 @@ describe('a payload the producer got wrong', () => {
     // Keeping the claim is the point: the same payload fails identically on every
     // redelivery, so releasing it would buy a retry loop that never converges.
     const claims = new InMemoryClaimStore();
-    const store = new InMemoryNotificationStore((type) => `local.${type}`);
-    const handler = new SendNotificationHandler(
-      store,
-      new TestChannelRegistry([new RecordingChannel(NotificationChannel.EMAIL)]),
-    );
-
-    const processor = new NotificationEventProcessor(claims, {
-      send: (command) => handler.execute(command),
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const queue = new RecordingDispatchQueue();
+    const processor = new NotificationEventProcessor(claims, queue);
 
     // `riskLevel` is not one of the declared values.
     const outcome = await processor.process(
@@ -156,7 +146,9 @@ describe('a payload the producer got wrong', () => {
     expect(outcome.kind === 'dead_lettered' && outcome.reason).toBe('template-rejected');
     expect(claims.releaseLog).toHaveLength(0);
     expect(claims.heldCount).toBe(1);
-    expect(store.records.size).toBe(0);
+    // Rejected before anything was ordered: a dispatch job for variables the schema refused
+    // would fail in the worker, where nobody can name the producer that sent them.
+    expect(queue.enqueued).toHaveLength(0);
   });
 
   it('is dead-lettered, naming the topic, when no route exists for it', async () => {
@@ -233,7 +225,7 @@ describe('the Kafka adapter turns outcomes into offset decisions', () => {
   it('publishes nothing for a duplicate, and commits', async () => {
     const processor = new NotificationEventProcessor(
       new InMemoryClaimStore(),
-      new RecordingDispatcher(),
+      new RecordingDispatchQueue(),
     );
     const { adapter, producer } = build(processor);
 
@@ -250,10 +242,9 @@ describe('the Kafka adapter turns outcomes into offset decisions', () => {
 
   it('rethrows a released outcome, so the broker redelivers', async () => {
     const claims = new InMemoryClaimStore();
-    const processor = new NotificationEventProcessor(claims, {
-      send: () => Promise.reject(new Error('the notification store is unavailable')),
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const queue = new RecordingDispatchQueue();
+    queue.failNextEnqueue = new Error('redis is unavailable');
+    const processor = new NotificationEventProcessor(claims, queue);
     const { adapter, producer } = build(processor);
 
     const error = await rejection(
@@ -317,6 +308,29 @@ describe('the Kafka adapter turns outcomes into offset decisions', () => {
     expect(consumer.handlers.has(Topics.SESSION_ISSUED)).toBe(false);
     expect(consumer.handlers.size).toBe(17);
   });
+
+  it('leaves a poisoned record for retry when the downstream failure is not permanent', async () => {
+    // A DomainError from the template schema is permanent and is dead-lettered; anything else
+    // — here, Redis being unreachable at the enqueue — may succeed on a redelivery, so the
+    // claim is released rather than kept. The adapter half of the contract, the rethrow that
+    // keeps the offset uncommitted, is "rethrows a released outcome" above.
+    const claims = new InMemoryClaimStore();
+    const queue = new RecordingDispatchQueue();
+    queue.failNextEnqueue = new Error('redis is unavailable');
+    const processor = new NotificationEventProcessor(claims, queue);
+
+    // A well-formed payload: a producer mistake would be a different test, dead-lettered.
+    const outcome = await processor.process(
+      eventMessage(Topics.USER_REGISTERED, { userId: USER_ID, displayName: 'Ada' }),
+    );
+
+    expect(outcome.kind).toBe('released');
+    expect(outcome.kind === 'released' && outcome.reason).toBe('enqueue-failed');
+    expect(outcome.kind === 'released' && outcome.detail).toBe('redis is unavailable');
+    expect(claims.releaseLog).toHaveLength(1);
+    expect(claims.heldCount).toBe(0);
+    expect(queue.enqueued).toHaveLength(0);
+  });
 });
 
 describe('the template schema is what makes a bad payload visible', () => {
@@ -329,6 +343,20 @@ describe('the template schema is what makes a bad payload visible', () => {
     });
 
     expect(compiled.variables).toEqual({});
+    expect(compiled.redacted).toEqual(['email', 'resetToken']);
     expect(compiled.body).not.toContain(EMAIL);
+  });
+
+  it('reports the variables the content guard removed', () => {
+    const compiled = compileTemplate(NotificationTemplate.WELCOME, {
+      displayName: 'Ada',
+      email: EMAIL,
+    });
+
+    // `source` is filled in by the template's declared default — the suite in
+    // notification-templates.spec owns that contract; what this test owns is that the
+    // address was named in `redacted` and kept out of the variables.
+    expect(compiled.variables).toEqual({ displayName: 'Ada', source: 'web' });
+    expect(compiled.redacted).toEqual(['email']);
   });
 });

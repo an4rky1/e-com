@@ -26,12 +26,12 @@ import { InMemoryNotificationStore } from '../src/infrastructure/persistence/in-
 import {
   EMAIL,
   FailingChannel,
-  FailingDispatcher,
   InMemoryClaimStore,
   RecordingChannel,
-  RecordingDispatcher,
+  RecordingDispatchQueue,
   TestChannelRegistry,
   USER_ID,
+  drainDispatches,
   eventMessage,
   fullRecipient,
 } from './testing/fakes';
@@ -48,13 +48,14 @@ const registeredPayload = (email = EMAIL) => ({
 /**
  * A consumer wired to real handlers over in-memory ports.
  *
- * @remarks The claim store and the dispatcher are injected separately so a test can replace
+ * @remarks The claim store and the dispatch queue are injected separately so a test can replace
  * either without rebuilding the rest. `store` is exposed because most of these assertions are
- * about what reached it.
+ * about what reached it, and `drain` plays the dispatch worker — the production split, kept
+ * intact: the processor orders a dispatch and stops, the worker delivers it.
  */
 function consumer(
   overrides: {
-    dispatcher?: FailingDispatcher | RecordingDispatcher;
+    queue?: RecordingDispatchQueue;
     channels?: TestChannelRegistry;
   } = {},
 ) {
@@ -67,33 +68,33 @@ function consumer(
       new RecordingChannel(NotificationChannel.EMAIL),
     ]);
 
-  const dispatcher =
-    overrides.dispatcher ??
-    new RecordingDispatcher();
-
   const handler = new SendNotificationHandler(store, channels);
+  const queue = overrides.queue ?? new RecordingDispatchQueue();
 
-  // The processor talks to a port; the port talks to the real handler. Keeping that indirection
-  // in the test means the loop under test is the production loop, not a re-implementation.
-  const port = overrides.dispatcher ?? {
-    send: (command: SendNotificationCommand) => handler.execute(command),
-    markRead: () => Promise.reject(new Error('not used here')),
+  const processor = new NotificationEventProcessor(claims, queue);
+
+  return {
+    claims,
+    store,
+    channels,
+    handler,
+    queue,
+    processor,
+    drain: () => drainDispatches(queue, handler),
   };
-
-  const processor = new NotificationEventProcessor(claims, port);
-
-  return { claims, store, channels, dispatcher, handler, processor, port };
 }
 
 describe('processing the same event twice', () => {
   it('sends exactly one notification', async () => {
-    const { processor, store, channels } = consumer();
+    const { processor, store, channels, drain } = consumer();
 
     const first = await processor.process(eventMessage(topic, registeredPayload()));
     const second = await processor.process(eventMessage(topic, registeredPayload()));
 
     expect(first.kind).toBe('processed');
     expect(second.kind).toBe('duplicate');
+
+    await drain();
 
     expect(store.records.size).toBe(1);
     expect(store.outbox.filter((row) => row.type === 'notification.dispatched')).toHaveLength(
@@ -128,7 +129,7 @@ describe('processing the same event twice', () => {
   it('keys the claim on the event, not on the user', async () => {
     // Two different registrations for one user id are two different facts and must produce two
     // notifications. Deduping on `userId` would silently swallow the second one.
-    const { processor, store } = consumer();
+    const { processor, store, drain } = consumer();
 
     await processor.process(
       eventMessage(topic, registeredPayload(), { eventId: 'aaaaaaaa-0000-4000-8000-000000000001' }),
@@ -137,11 +138,12 @@ describe('processing the same event twice', () => {
       eventMessage(topic, registeredPayload(), { eventId: 'aaaaaaaa-0000-4000-8000-000000000002' }),
     );
 
+    await drain();
     expect(store.records.size).toBe(2);
   });
 
   it('treats the same event on a different topic as a different notification', async () => {
-    const { processor, store } = consumer();
+    const { processor, store, drain } = consumer();
 
     await processor.process(
       eventMessage(topic, registeredPayload(), { eventId: 'aaaaaaaa-0000-4000-8000-000000000003' }),
@@ -154,45 +156,36 @@ describe('processing the same event twice', () => {
       ),
     );
 
+    await drain();
     expect(store.records.size).toBe(2);
   });
 
   it('is idempotent across a redelivery on a later attempt', async () => {
-    const { processor, store } = consumer();
-
+    const { processor, store, drain } = consumer();
 
     await processor.process(eventMessage(topic, registeredPayload(), { attempt: 1 }));
     const retry = await processor.process(eventMessage(topic, registeredPayload(), { attempt: 2 }));
 
     expect(retry.kind).toBe('duplicate');
+    await drain();
     expect(store.records.size).toBe(1);
   });
 });
 
 describe('a failed processing releases the claim', () => {
   it('releases the claim so the retry can proceed', async () => {
-    // The failure a user actually experiences: the store is briefly unreachable. The wrong
+    // The failure a user actually experiences: Redis is briefly unreachable. The wrong
     // behaviour is to keep the claim, because then the redelivery arrives as a "duplicate",
     // commits its offset, and the welcome email is never sent — with no error anywhere.
     const claims = new InMemoryClaimStore();
-    const dispatcher = new FailingDispatcher('the notification store is unavailable');
-    const working = consumer();
-
-    let attempt = 0;
-    const processor = new NotificationEventProcessor(claims, {
-      send: (command) => {
-        attempt += 1;
-        return attempt === 1
-          ? dispatcher.send()
-          : working.handler.execute(command);
-      },
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const queue = new RecordingDispatchQueue();
+    queue.failNextEnqueue = new Error('redis is unavailable');
+    const processor = new NotificationEventProcessor(claims, queue);
 
     const first = await processor.process(eventMessage(topic, registeredPayload()));
 
     expect(first.kind).toBe('released');
-    expect(first.kind === 'released' && first.reason).toBe('dispatch-failed');
+    expect(first.kind === 'released' && first.reason).toBe('enqueue-failed');
     expect(claims.releaseLog).toEqual([
       claimKeyFor(topic, '33333333-4444-4555-8666-777777777777'),
     ]);
@@ -207,7 +200,9 @@ describe('a failed processing releases the claim', () => {
   it('reports a released processing rather than throwing out of the handler', async () => {
     // The consumer adapter turns `released` into a rethrow so the broker redelivers. Throwing
     // from here instead would bypass the release entirely.
-    const { processor } = consumer({ dispatcher: new FailingDispatcher() });
+    const queue = new RecordingDispatchQueue();
+    queue.failNextEnqueue = new Error('redis is unavailable');
+    const { processor } = consumer({ queue });
 
     const outcome = await processor.process(eventMessage(topic, registeredPayload()));
 
@@ -217,21 +212,17 @@ describe('a failed processing releases the claim', () => {
   it('keeps the original failure when the release itself fails', async () => {
     const claims = new InMemoryClaimStore();
     claims.failNextRelease = new Error('the claim table is unreachable');
-    const dispatcher = new FailingDispatcher('the notification store is unavailable');
+    const queue = new RecordingDispatchQueue();
+    queue.failNextEnqueue = new Error('redis is unavailable');
 
-    const processor = new NotificationEventProcessor(claims, {
-      send: () => dispatcher.send(),
-      markRead: () => Promise.reject(new Error('not used here')),
-    });
+    const processor = new NotificationEventProcessor(claims, queue);
 
     const outcome = await processor.process(eventMessage(topic, registeredPayload()));
 
     // If the release error replaced the original, the operator would be told the claim table
-    // is down when the real fault is that the store is.
+    // is down when the real fault is that Redis is.
     expect(outcome.kind).toBe('released');
-    expect(outcome.kind === 'released' && outcome.detail).toBe(
-      'the notification store is unavailable',
-    );
+    expect(outcome.kind === 'released' && outcome.detail).toBe('redis is unavailable');
   });
 
   it('releases on a claim-table failure, so a retry is not blocked forever', async () => {

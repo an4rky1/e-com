@@ -4,7 +4,7 @@
  * @remarks This service answers one question — "is this request carrying a valid machine
  * credential, and what may it do?" — so it authenticates *machines*, never people. There is
  * no password here, no login flow, and no session: a password belongs to credential-vault and
- * a browser session to session-token, each behind a gRPC call. Holding any of that here would
+ * a browser session to session, each behind a gRPC call. Holding any of that here would
  * make "what may this request do" inseparable from "who this person is".
  *
  * @remarks The plaintext key is returned exactly once, by the issue and rotate paths, and is

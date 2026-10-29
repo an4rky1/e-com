@@ -18,12 +18,16 @@ import {
 import { AccessControlService } from '../application/facade/access-control.service';
 import { AccessControlGuard } from './guards/access-control.guard';
 import { RequirePermissions } from './decorators/require-permissions.decorator';
+// Request DTOs are values on purpose: `emitDecoratorMetadata` reads the *value* binding of
+// each `@Body()`/`@Query()` parameter's type — a type-only binding emits `Function`, and
+// ValidationPipe then strips the request to `{}` instead of validating it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
-  type CreatePolicyRequestDto,
-  type CreateRoleRequestDto,
-  type GrantRoleRequestDto,
-  type ListRolesQueryDto,
-  type RevokeRoleRequestDto,
+  CreatePolicyRequestDto,
+  CreateRoleRequestDto,
+  GrantRoleRequestDto,
+  ListRolesQueryDto,
+  RevokeRoleRequestDto,
   attributesContextFrom,
   PagedRolesResponseDto,
   toRoleResponse,

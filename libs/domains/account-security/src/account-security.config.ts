@@ -8,7 +8,6 @@ import {
 import { Defaults as RiskDefaults, type RiskScoringPolicy } from './domain/services/risk-scoring.service';
 
 export const ACCOUNT_SECURITY_PRISMA = Symbol('ACCOUNT_SECURITY_PRISMA');
-export const ACCOUNT_SECURITY_REDIS = Symbol('ACCOUNT_SECURITY_REDIS');
 export const ACCOUNT_SECURITY_CONFIG = Symbol('ACCOUNT_SECURITY_CONFIG');
 
 export const Defaults = {
@@ -54,10 +53,10 @@ export const Defaults = {
 /**
  * account-security's own configuration namespace.
  *
- * @remarks No connection parameters here. `DATABASE_URL` is platform-owned; a module that could
- * reconfigure its own connection would make "one service, one database" unenforceable. The Redis
- * url is the exception that proves it — Redis is a shared cache and rate-limit store, not this
- * service's data, and every key it writes is namespaced per account.
+ * @remarks No connection parameters here. `DATABASE_URL` is platform-owned, and so is
+ * `REDIS_URL` — the shared client comes from `@auth/infra/redis`. What stays in this
+ * namespace is the key prefix, because the keys are this service's vocabulary even though
+ * the server is not this service's alone.
  */
 export const accountSecuritySchema = z.object({
   MAX_FAILED_ATTEMPTS: envInt(Defaults.MAX_FAILED_ATTEMPTS, { min: 1, max: 100 }),
@@ -81,7 +80,6 @@ export const accountSecuritySchema = z.object({
    * Turning it off silently by accident is what the boot log below prevents.
    */
   CACHE_ENABLED: envBoolean(true),
-  REDIS_URL: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('account-security'),
 });
 
@@ -97,7 +95,6 @@ export interface AccountSecurityConfig {
   loginHistoryPageSize: number;
   maxLoginHistoryPageSize: number;
   cacheEnabled: boolean;
-  redisUrl: string | null;
   redisKeyPrefix: string;
   riskScoring: RiskScoringPolicy;
 }
@@ -131,7 +128,6 @@ export function resolveAccountSecurityConfig(
       ),
       maxLoginHistoryPageSize: parsed.MAX_LOGIN_HISTORY_PAGE_SIZE,
       cacheEnabled: parsed.CACHE_ENABLED,
-      redisUrl: parsed.REDIS_URL?.trim() || null,
       redisKeyPrefix: parsed.REDIS_KEY_PREFIX,
       riskScoring: {
         rapidFailureThreshold: parsed.RAPID_FAILURE_THRESHOLD,

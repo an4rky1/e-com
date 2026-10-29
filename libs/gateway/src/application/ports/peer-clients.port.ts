@@ -12,7 +12,7 @@
  * provider and compiles cleanly; a symbol only resolves to the binding that produced it.
  */
 
-/** auth-gateway: "walk this person through the flow". Owns the state machine. */
+/** auth-flow: "walk this person through the flow". Owns the state machine. */
 export const AUTH_FLOW_CLIENT = Symbol('AUTH_FLOW_CLIENT');
 
 /** identity: "who is this user". Owns the account record. */
@@ -21,7 +21,7 @@ export const IDENTITY_CLIENT = Symbol('IDENTITY_CLIENT');
 /** access-control: "what may this user do". Owns every authorization answer. */
 export const ACCESS_CONTROL_CLIENT = Symbol('ACCESS_CONTROL_CLIENT');
 
-/** session-token: "what did we issue, and is it still valid". Owns the tokens. */
+/** session: "what did we issue, and is it still valid". Owns the tokens. */
 export const SESSION_CLIENT = Symbol('SESSION_CLIENT');
 
 /** credential-vault: "prove you are this user". Owns the secrets. */
@@ -52,6 +52,12 @@ export interface GatewayUserInput {
   readonly displayName?: string;
   readonly locale?: string;
   readonly source?: string;
+  /**
+   * Caller-chosen id for the new account; absent lets identity generate one. Registration
+   * pre-chooses it so the password is stored against the id the account will have — see
+   * `GatewayService.register` for why the credential has to come first.
+   */
+  readonly id?: string;
 }
 
 export interface TokenPair {
@@ -59,16 +65,6 @@ export interface TokenPair {
   readonly refreshToken: string;
   readonly expiresIn: number;
   readonly sessionId: string;
-}
-
-export interface AccessTokenValidation {
-  readonly valid: boolean;
-  readonly userId: string;
-  readonly email: string;
-  readonly roles: readonly string[];
-  readonly permissions: readonly string[];
-  readonly sessionId: string;
-  readonly revocationReason: string;
 }
 
 export interface AuthorizationDecision {
@@ -79,7 +75,7 @@ export interface AuthorizationDecision {
 // ---- flow states -------------------------------------------------------------------
 
 /**
- * Where an auth flow can be, per `auth_gateway.proto`.
+ * Where an auth flow can be, per `auth_flow.proto`.
  *
  * @remarks `as const` rather than a TypeScript `enum`. The wire carries the string, and an
  * `enum` would add a second, structurally different spelling of the same nine values that the
@@ -115,7 +111,7 @@ export interface FlowProgress {
   /**
    * Kept as the wire's own string rather than narrowed to {@link FlowState}.
    *
-   * @remarks auth-gateway is free to add a state without a gateway deploy, and a narrowing
+   * @remarks auth-flow is free to add a state without a gateway deploy, and a narrowing
    * cast would quietly report an unknown state as `failed` — telling a caller with a valid
    * password that they were wrong. An unrecognised state falls through to "no token issued",
    * which is the only thing this edge can honestly claim about it.
@@ -158,6 +154,20 @@ export interface AuthFlowClientPort {
 export interface IdentityClientPort {
   createUser(input: GatewayUserInput): Promise<GatewayUser>;
   getUser(userId: string): Promise<GatewayUser>;
+  /**
+   * Resolves a provider account to the local user behind it — link, link-by-address, or
+   * create — in the one round trip identity needs to make that decision.
+   *
+   * @remarks The gateway carries what the provider vouched for and nothing else; which of the
+   * three outcomes happens is identity's rule, made where the linkage lives.
+   */
+  resolveOauthUser(input: {
+    provider: string;
+    subject: string;
+    email: string;
+    emailVerified: boolean;
+    displayName?: string;
+  }): Promise<{ user: GatewayUser; created: boolean }>;
 }
 
 export interface AccessControlClientPort {
@@ -172,6 +182,19 @@ export interface AccessControlClientPort {
 }
 
 export interface SessionClientPort {
+  /**
+   * Mints a brand-new session for a user who has just proved something else — a fresh
+   * password or a provider handshake — rather than rotating an existing one.
+   *
+   * @remarks No roles or permissions are passed: what a token's claims are worth at
+   * *validation* time is session's answer to make, not this edge's snapshot of it at
+   * issue time — the same reason `me` reads access-control instead of the token's claims.
+   */
+  issueTokens(input: {
+    userId: string;
+    email: string;
+    ipAddress?: string;
+  }): Promise<TokenPair>;
   rotateTokens(input: {
     refreshToken: string;
     ipAddress?: string;
@@ -185,7 +208,6 @@ export interface SessionClientPort {
     reason: string;
     exceptSessionId?: string;
   }): Promise<number>;
-  validateAccessToken(accessToken: string): Promise<AccessTokenValidation>;
 }
 
 export interface CredentialVaultClientPort {
@@ -193,4 +215,13 @@ export interface CredentialVaultClientPort {
     userId: string;
     newPassword: string;
   }): Promise<{ readonly credentialId: string }>;
+  /**
+   * Drops every credential a user holds.
+   *
+   * @remarks The registration path needs it as compensation: the password is stored against
+   * the id the account will have, and an address identity then refuses leaves a credential
+   * nobody may reach — which must not outlive the refusal, even though nothing could log in
+   * with it.
+   */
+  revokeAll(input: { userId: string; reason?: string }): Promise<number>;
 }

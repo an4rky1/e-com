@@ -93,6 +93,34 @@ export class ResourceAlreadyExistsException extends AppException {
   }
 }
 
+/**
+ * A duplicate of an in-flight request arrived.
+ *
+ * @remarks Carries `retryAfterSec` in the context for the same reason
+ * {@link TooManyRequestsException} does: the header is for clients that read headers, the
+ * body is for clients that read bodies, and a client that guesses the delay usually guesses
+ * "immediately", which defeats the point.
+ */
+export class IdempotencyInFlightException extends AppException {
+  constructor(message?: string, context?: Record<string, unknown>) {
+    super({ code: 'IDEMPOTENCY_IN_FLIGHT', message, context });
+  }
+}
+
+/** The key belongs to a request that already completed; replaying the body is refused. */
+export class IdempotencyAlreadyProcessedException extends AppException {
+  constructor(message?: string, context?: Record<string, unknown>) {
+    super({ code: 'IDEMPOTENCY_ALREADY_PROCESSED', message, context });
+  }
+}
+
+/** The version this route was served under has reached its sunset date. */
+export class ApiSunsetException extends AppException {
+  constructor(message?: string, context?: Record<string, unknown>) {
+    super({ code: 'API_SUNSET', message, context });
+  }
+}
+
 export class InvalidStateTransitionException extends AppException {
   constructor(message?: string, context?: Record<string, unknown>) {
     super({ code: 'INVALID_STATE_TRANSITION', message, context });

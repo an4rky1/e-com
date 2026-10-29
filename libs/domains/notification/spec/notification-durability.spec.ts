@@ -721,7 +721,9 @@ describe('the durable notification record', () => {
 
     expect(everything(prisma)).not.toContain('ada.lovelace@example.com');
     expect(result.outcome).toBe('sent');
-    expect(result.redactedVariables).toEqual([]);
+    // The guard reports what it removed: `contact` never reached the announcement, and the
+    // caller is told a producer is putting an address where the template did not declare it.
+    expect(result.redactedVariables).toEqual(['contact']);
   });
 
   it('re-reads a notification it wrote, deliveries and all', async () => {

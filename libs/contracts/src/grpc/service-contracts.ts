@@ -20,9 +20,27 @@ export interface CreateUserRequest {
   displayName: string;
   locale: string;
   source: string;
+  /** True when the address already came vouched for (OAuth); absent means pending. */
+  emailVerified?: boolean;
+  /**
+   * Caller-chosen id for the new account; absent lets identity generate one. Registration
+   * pre-chooses it so its credential is stored against the id the account will have.
+   */
+  id?: string;
 }
 export interface CreateUserResponse {
   user?: UserResponse;
+}
+export interface ResolveOauthUserRequest {
+  provider: string;
+  subject: string;
+  email: string;
+  emailVerified: boolean;
+  displayName: string;
+}
+export interface ResolveOauthUserResponse {
+  user?: UserResponse;
+  created: boolean;
 }
 export interface AuthenticateRequest {
   accessToken?: string;
@@ -55,6 +73,7 @@ export interface IdentityGrpcClient {
   GetUser(request: GetUserRequest): Promise<UserResponse>;
   GetUserByEmail(request: GetUserByEmailRequest): Promise<UserResponse>;
   CreateUser(request: CreateUserRequest): Promise<CreateUserResponse>;
+  ResolveOauthUser(request: ResolveOauthUserRequest): Promise<ResolveOauthUserResponse>;
   Authenticate(request: AuthenticateRequest): Promise<AuthenticateResponse>;
   UpdateUserStatus(request: UpdateUserStatusRequest): Promise<UserResponse>;
 }
@@ -135,7 +154,7 @@ export interface CredentialVaultGrpcClient {
   RevokeAllCredentials(request: { userId: string; reason: string }): Promise<{ revokedCount: number }>;
 }
 
-// ---- session_token.v1 ---------------------------------------------------------
+// ---- session.v1 ---------------------------------------------------------
 
 export interface IssueTokensRequest {
   userId: string;
@@ -169,7 +188,7 @@ export interface ValidateAccessTokenResponse {
   revocationReason: string;
 }
 
-export interface SessionTokenGrpcClient {
+export interface SessionGrpcClient {
   IssueTokens(request: IssueTokensRequest): Promise<IssueTokensResponse>;
   RotateTokens(request: RotateTokensRequest): Promise<RotateTokensResponse>;
   RevokeSession(request: { sessionId: string; reason: string }): Promise<{ ok: boolean }>;
@@ -181,7 +200,7 @@ export interface SessionTokenGrpcClient {
   ): Promise<ValidateAccessTokenResponse>;
 }
 
-// ---- auth_gateway.v1 ----------------------------------------------------------
+// ---- auth_flow.v1 ----------------------------------------------------------
 
 export interface StartFlowRequest {
   flow: string;
@@ -211,7 +230,7 @@ export interface FlowResponse {
   retryAfterSeconds?: number;
 }
 
-export interface AuthGatewayGrpcClient {
+export interface AuthFlowGrpcClient {
   StartFlow(request: StartFlowRequest): Promise<FlowResponse>;
   AdvanceFlow(request: AdvanceFlowRequest): Promise<FlowResponse>;
   GetFlow(request: { flowId: string }): Promise<FlowResponse>;

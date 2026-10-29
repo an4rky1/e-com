@@ -4,7 +4,7 @@
  * @remarks mfa owns exactly one question — *does the caller hold something a stolen password
  * does not?* — and the aggregate is built around that question. Every method here either
  * enrols a secret, checks a proof against one, or destroys the secret. Nothing here decides
- * whether MFA should be demanded of a given request; that is auth-gateway's judgement, made
+ * whether MFA should be demanded of a given request; that is auth-flow's judgement, made
  * with the risk context this service is not given.
  *
  * @remarks The state machine is the heart of it. A factor is `unverified` before a secret

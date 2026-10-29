@@ -1,15 +1,15 @@
-/**
- * The read side: list, status and read-state.
+/** @fileoverview Tests for notification queries and read-model accessors.
  *
- * @remarks What these assertions are really about is what a read model may expose. A
- * notification list is exactly the payload a client caches, logs on a debug screen, or hands
- * to a support agent, and a read model that carries the recipient or the rendered body turns
- * every one of those into a place a user's contact details and notification text accumulate.
- *
- * @remarks Ownership is checked on both queries. A notification id arriving from a client is a
- * bearer capability for "I read this" unless somebody compares it to the caller's user id,
- * and "exists but is not yours" must be the same answer as "does not exist".
+ * Covers `ListNotificationsQuery`, `GetNotificationQuery`, and the read-model surface
+ * returned by the notification store. These tests depend on `SendNotificationHandler`,
+ * which is in `notification.handlers.ts`, so they break when that file is incomplete.
  */
+
+import { NotificationId } from '../src/domain/value-objects/notification-id.vo';
+import { NotificationTemplate } from '../src/domain/value-objects/notification-template.vo';
+import { NotificationChannel } from '../src/domain/value-objects/notification-channel.vo';
+import type { NotificationRecipient } from '../src/domain/notification.aggregate';
+import { InMemoryNotificationStore } from '../src/infrastructure/persistence/in-memory-notification.store';
 import { Topics } from '@auth/contracts';
 import {
   GetNotificationStatusHandler,
@@ -18,30 +18,42 @@ import {
   ListNotificationsQuery,
   toNotificationReadModel,
 } from '../src/application/queries/notification.queries';
-import { MarkNotificationReadHandler } from '../src/application/commands/notification.handlers';
+import { SendNotificationHandler, MarkNotificationReadHandler } from '../src/application/commands/notification.handlers';
+import { MarkNotificationReadCommand, SendNotificationCommand } from '../src/application/commands/notification.commands';
 import {
-  MarkNotificationReadCommand,
-  SendNotificationCommand,
-} from '../src/application/commands/notification.commands';
-import { SendNotificationHandler } from '../src/application/commands/notification.handlers';
-import { InMemoryNotificationStore } from '../src/infrastructure/persistence/in-memory-notification.store';
-import { NotificationChannel } from '../src/domain/value-objects/notification-channel.vo';
-import { NotificationTemplate } from '../src/domain/value-objects/notification-template.vo';
-import {
-  EMAIL,
-  OTHER_USER_ID,
-  RecordingChannel,
-  TestChannelRegistry,
-  USER_ID,
   asNotificationId,
+  RecordingChannel,
   testNotificationConfig,
+  fullRecipient,
+  TestChannelRegistry,
 } from './testing/fakes';
 import { rejection } from './testing/helpers';
+import { ResourceNotFoundException } from '@auth/platform/error-handling';
 
-const store = () => new InMemoryNotificationStore((type) => `local.${type}`);
+// helpers {{{1
+const STORE_PREFIX = 'local';
+const STORE = () => new InMemoryNotificationStore((type) => `${STORE_PREFIX}.${type}`);
+
+const LISTER = () => new ListNotificationsHandler(STORE(), testNotificationConfig());
+const MIMER = () => new MarkNotificationReadHandler(STORE());
+const STATUS = () => new GetNotificationStatusHandler(STORE());
+// helpers }}}1
+
+// fixtures {{{1
+const NOW = new Date('2026-01-01T10:00:00Z');
+const EMAIL = 'ada.lovelace@example.com';
+const USER_ID = '00000000-0000-4000-8000-0000000000ff';
+const OTHER_USER_ID = '00000000-0000-4000-8000-0000000000ee';
+// fixtures }}}1
+
+// helpers: }}
+
+function newId(value: string): string {
+  return NotificationId.create(value).value;
+}
 
 async function send(
-  target: InMemoryNotificationStore,
+  target = STORE(),
   input: {
     userId?: string;
     template?: NotificationTemplate;
@@ -67,11 +79,13 @@ async function send(
   return result.notificationId;
 }
 
+const store = () => new InMemoryNotificationStore((type) => `local.${type}`);
+
 describe('ListNotifications', () => {
   it('returns a user newest first with an unread count', async () => {
     const target = store();
 
-    await send(target, { displayName: 'Ada', now: new Date('2026-01-01T10:00:00Z') });
+    await send(target, { displayName: 'Ada', now: NOW });
     await send(target, { displayName: 'Grace', now: new Date('2026-01-01T11:00:00Z') });
 
     const result = await new ListNotificationsHandler(
@@ -90,7 +104,6 @@ describe('ListNotifications', () => {
 
   it('never returns another user notifications', async () => {
     const target = store();
-
     await send(target, { userId: USER_ID });
     await send(target, { userId: OTHER_USER_ID });
 
@@ -117,8 +130,7 @@ describe('ListNotifications', () => {
     const first = await send(target, { displayName: 'Ada' });
     await send(target, { displayName: 'Grace' });
 
-    const handler = new MarkNotificationReadHandler(target);
-    await handler.execute(
+    await new MarkNotificationReadHandler(target).execute(
       new MarkNotificationReadCommand(asNotificationId(first), USER_ID),
     );
 
@@ -138,8 +150,6 @@ describe('ListNotifications', () => {
       testNotificationConfig({ maxPageSize: 10 }),
     ).execute(new ListNotificationsQuery(USER_ID, 5_000));
 
-    // Unbounded, a badge render is a denial of service that stays invisible until the table
-    // is large enough to matter.
     expect(result.limit).toBe(10);
   });
 
@@ -153,7 +163,7 @@ describe('ListNotifications', () => {
   });
 
   it('honours a limit below the maximum', async () => {
-    const target = store();
+    const target = STORE();
     await send(target, { displayName: 'Ada' });
     await send(target, { displayName: 'Grace' });
 
@@ -168,7 +178,7 @@ describe('ListNotifications', () => {
 
 describe('the read model', () => {
   it('carries no recipient and no rendered body', async () => {
-    const target = store();
+    const target = STORE();
     const id = await send(target);
 
     const result = await new GetNotificationStatusHandler(target).execute(
@@ -176,15 +186,13 @@ describe('the read model', () => {
     );
 
     expect(result).not.toBeNull();
-    // A read model is the payload a client caches, logs on a debug screen, or hands to a
-    // support agent. A recipient or a body here puts contact details in all three.
     expect(result).not.toHaveProperty('recipient');
     expect(result).not.toHaveProperty('body');
     expect(JSON.stringify(result)).not.toContain(EMAIL);
   });
 
   it('reports per-channel delivery status', async () => {
-    const target = store();
+    const target = STORE();
     const handler = new SendNotificationHandler(
       target,
       new TestChannelRegistry([
@@ -219,14 +227,12 @@ describe('GetNotificationStatus', () => {
   it('returns null for an unknown id', async () => {
     expect(
       await new GetNotificationStatusHandler(store()).execute(
-        new GetNotificationStatusQuery('00000000-0000-4000-8000-0000000000ff', USER_ID),
+        new GetNotificationStatusQuery(newId('00000000-0000-4000-8000-0000000000ff'), USER_ID),
       ),
     ).toBeNull();
   });
 
   it('returns null for an id that is not a uuid at all', async () => {
-    // `EntityId` throws on a malformed id; a query must answer, not raise, so the caller gets
-    // a 404 rather than a 500 for typing a UUID wrong.
     expect(
       await new GetNotificationStatusHandler(store()).execute(
         new GetNotificationStatusQuery('not-a-uuid', USER_ID),
@@ -244,10 +250,9 @@ describe('GetNotificationStatus', () => {
       new GetNotificationStatusQuery(id, OTHER_USER_ID),
     );
     const missing = await handler.execute(
-      new GetNotificationStatusQuery('00000000-0000-4000-8000-0000000000ee', OTHER_USER_ID),
+      new GetNotificationStatusQuery(newId('00000000-0000-4000-8000-0000000000ee'), OTHER_USER_ID),
     );
 
-    // Distinguishing them would be an existence oracle over a bearer id.
     expect(other).toBeNull();
     expect(missing).toBeNull();
   });
@@ -255,7 +260,7 @@ describe('GetNotificationStatus', () => {
 
 describe('MarkNotificationRead', () => {
   it('marks read and announces it', async () => {
-    const target = store();
+    const target = STORE();
     const id = await send(target);
 
     const result = await new MarkNotificationReadHandler(target).execute(
@@ -288,7 +293,6 @@ describe('MarkNotificationRead', () => {
     expect(first.changed).toBe(true);
     expect(second.changed).toBe(false);
     expect(second.readAt).toBe(first.readAt);
-    // A read button in a UI that can be double-clicked must not announce two reads.
     expect(target.outbox.filter((row) => row.type === 'notification.read')).toHaveLength(1);
   });
 
@@ -302,7 +306,7 @@ describe('MarkNotificationRead', () => {
       ),
     );
 
-    expect((error as Error).name).toBe('ResourceNotFoundException');
+    expect((error as ResourceNotFoundException).name).toBe('ResourceNotFoundException');
     expect(target.records.get(id)?.isRead).toBe(false);
   });
 
@@ -316,29 +320,41 @@ describe('MarkNotificationRead', () => {
       ),
     );
 
-    expect((error as Error).name).toBe('ResourceNotFoundException');
+    expect((error as ResourceNotFoundException).name).toBe('ResourceNotFoundException');
   });
 });
 
 describe('the projection helper', () => {
   it('is total: a notification with no deliveries still projects', async () => {
-    const target = store();
-    const id = await send(target);
-    const stored = target.records.get(id);
-
-    expect(stored).toBeDefined();
+    const projectionTarget = STORE();
+    const projectionId = await send(projectionTarget);
+    const stored = projectionTarget.records.get(projectionId)!;
     const model = toNotificationReadModel(stored as NonNullable<typeof stored>);
 
-    expect(model.id).toBe(id);
+    expect(model.id).toBe(projectionId);
     expect(model.channels.length).toBeGreaterThan(0);
     expect(model.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
+
+  it('renders deliveries into the read model', async () => {
+    const projectionTarget = STORE();
+    const projectionId = await send(projectionTarget);
+    const stored = projectionTarget.records.get(projectionId)!;
+    const model = toNotificationReadModel(stored as NonNullable<typeof stored>);
+
+    // `send` binds only the in-app adapter, so WELCOME's email delivery is recorded as
+    // skipped for want of an adapter — and the read model shows both outcomes, not just
+    // the one that succeeded.
+    expect(model.deliveries.map((d) => `${d.channel}:${d.status}`)).toEqual([
+      'inapp:sent',
+      'email:skipped',
+    ]);
+  });
 });
+
 
 describe('the module the consumer subscribes to', () => {
   it('names the topics the routing table does', () => {
-    // A restatement of one fact rather than a derived assertion: the point is that the topic
-    // catalogue has not grown a member this service now has to route.
     expect(Topics.USER_REGISTERED).toBe('platform.user.registered.v1');
   });
 });

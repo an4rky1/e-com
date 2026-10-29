@@ -53,6 +53,8 @@ export class CreateUserHandler
       displayName: command.displayName,
       locale: command.locale,
       source: command.source,
+      emailVerified: command.emailVerified,
+      id: command.id,
     });
 
     // The repository writes the row and its `user.registered` event in one transaction.

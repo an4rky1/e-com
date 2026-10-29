@@ -1,11 +1,10 @@
-/**
- * @fileoverview The notification module's public API.
- *
+/** @fileoverview The notification module's public API.
+
  * @remarks Everything exported here is something another module may depend on. The rule this
- * file enforces is that the *internals* stay internal: the routing table, the template
- * catalogue and the aggregate are reachable only through the facade and the consumer, so a
- * caller cannot construct a notification by hand, hand it a store it invented, or dispatch on
- * a template name that no route would ever produce.
+ * file enforces is that the *internals* stay internal: the routing table, the template catalogue
+ * and the aggregate are reachable only through the facade and the consumer, so a caller cannot
+ * construct a notification by hand, hand it a store it invented, or dispatch on a template name
+ * that no route would ever produce.
  *
  * @remarks The template catalogue is exported deliberately — a caller rendering its own screen
  * needs to know a template's severity and subject — but the Zod schemas behind it are not,
@@ -66,6 +65,11 @@ export {
   NOTIFICATION_DISPATCHER,
   type NotificationDispatcherPort,
 } from './application/ports/notification-dispatcher.port';
+export {
+  NOTIFICATION_DISPATCH_QUEUE,
+  type NotificationDispatchJob,
+  type NotificationDispatchQueuePort,
+} from './application/ports/notification-dispatch-queue.port';
 export {
   CommandBusNotificationDispatcher,
 } from './application/adapters/cqrs-notification.adapter';
@@ -179,3 +183,20 @@ export {
   type CapturedOutboxEvent,
 } from './infrastructure/persistence/in-memory-notification.store';
 export { NotificationKafkaConsumer } from './infrastructure/messaging/notification.kafka.consumer';
+export {
+  NotificationWorker,
+  type NotificationJobPayload,
+  type NotificationJobResult,
+} from './infrastructure/queues/notification-worker.queue';
+export {
+  NotificationDispatchWorker,
+  type NotificationDispatchProgress,
+} from './infrastructure/queues/notification-dispatch.worker';
+export { BullNotificationDispatchQueue } from './infrastructure/queues/notification-dispatch.queue';
+
+// redaction layer, plus the helper that converts a notification into the shape downstream audit
+// consumers should treat it as. That shape is a point, not an implementation detail, and it lives
+// next to the notification's own contract rather than in the audit-log module — because it is the
+// notification module's answer to "what does a notification event look like once it has been
+// scrubbed for audit?"
+export { type AuditAndNotificationRedactionShape, toAuditAndNotificationRedactionShape } from './domain/audit-and-notification-redaction.shape';

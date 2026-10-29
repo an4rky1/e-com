@@ -103,10 +103,10 @@ jobs:
 
       - name: Create the per-service databases
         # The names are the ones the services actually connect to — `notify` for
-        # notification, `session_engine` for session-token — not the directory names.
+        # notification, `session_engine` for session — not the directory names.
         # api-gateway is absent on purpose: it holds no state.
         run: |
-          for db in identity access_control credential_vault session_engine auth_gateway \
+          for db in identity access_control credential_vault session_engine auth_flow \
                     mfa api_key account_security notify audit_log; do
             PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
               -c "CREATE DATABASE $db"

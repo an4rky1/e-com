@@ -1,0 +1,26 @@
+{
+  "name": "@auth/infra/redis",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/redis/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/redis/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/infra/redis"
+      ],
+      "options": {
+        "jestConfig": "libs/infra/redis/jest.config.ts"
+      }
+    }
+  }
+}

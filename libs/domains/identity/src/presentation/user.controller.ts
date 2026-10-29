@@ -1,11 +1,15 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { IdentityService } from '../application/facade/identity.service';
+// Request DTOs are values on purpose: `emitDecoratorMetadata` reads the *value* binding of
+// each `@Body()` parameter's type — a type-only binding emits `Function`, and
+// ValidationPipe then strips the body to `{}` instead of validating it.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
-  type UserResponseDto,
-  type CreateUserRequestDto,
-  type UpdateUserStatusRequestDto,
+  CreateUserRequestDto,
+  UpdateUserStatusRequestDto,
   toUserResponse,
+  type UserResponseDto,
 } from './dto/user.dto';
 
 /**

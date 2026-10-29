@@ -186,7 +186,7 @@ describe('RecordLoginAttempt', () => {
   });
 
   it('answers a failed login without throwing', async () => {
-    // An error here would be indistinguishable from "the service is down", and auth-gateway
+    // An error here would be indistinguishable from "the service is down", and auth-flow
     // would stop recording the attempt at all.
     const { controller } = build();
 

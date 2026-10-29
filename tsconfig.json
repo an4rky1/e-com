@@ -5,9 +5,6 @@
   "references": [
     {
       "path": "./apps/front-e2e"
-    },
-    {
-      "path": "./apps/front"
     }
   ]
 }

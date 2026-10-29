@@ -8,6 +8,8 @@ import type {
   CreateUserResponse,
   GetUserByEmailRequest,
   GetUserRequest,
+  ResolveOauthUserRequest,
+  ResolveOauthUserResponse,
   UserResponse,
   UpdateUserStatusRequest,
 } from '@auth/contracts';
@@ -64,9 +66,36 @@ export class IdentityGrpcController extends GrpcControllerBase {
       displayName: request.displayName || undefined,
       locale: request.locale || undefined,
       source: request.source || undefined,
+      emailVerified: request.emailVerified === true,
+      id: request.id || undefined,
     });
 
     return { user: this.toGrpc(await this.identity.getUserById(id)) };
+  }
+
+  /**
+   * Resolves a provider account to a local user.
+   *
+   * @remarks The decision — link by identity, link by address, or create — is identity's,
+   * made where the linkage lives. The caller carries only what the provider vouched for; it
+   * does not get to choose which of the three outcomes happens.
+   */
+  @GrpcMethod(SERVICE, 'ResolveOauthUser')
+  async resolveOauthUser(
+    request: ResolveOauthUserRequest,
+  ): Promise<ResolveOauthUserResponse> {
+    const resolved = await this.identity.resolveOauthUser({
+      provider: request.provider,
+      subject: request.subject,
+      email: request.email,
+      emailVerified: request.emailVerified === true,
+      displayName: request.displayName || undefined,
+    });
+
+    return {
+      user: this.toGrpc(await this.identity.getUserById(resolved.userId)),
+      created: resolved.created,
+    };
   }
 
   @GrpcMethod(SERVICE, 'UpdateUserStatus')
@@ -83,13 +112,13 @@ export class IdentityGrpcController extends GrpcControllerBase {
    * Resolves an opaque principal.
    *
    * @remarks Identity owns the user record but not the token store, so an access token is
-   * validated by session-token and a session id by the session engine. This method reports
+   * validated by session and a session id by the session engine. This method reports
    * only the user it can prove, and leaves credential verification to its owner.
    */
   @GrpcMethod(SERVICE, 'Authenticate')
   async authenticate(request: AuthenticateRequest): Promise<AuthenticateResponse> {
     // Without a verified principal there is nothing to resolve; the caller must authenticate
-    // against session-token or api-key first.
+    // against session or api-key first.
     if (!request.accessToken && !request.sessionId && !request.apiKey) {
       return { authenticated: false, strategy: 'none', sessionId: '' };
     }

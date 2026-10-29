@@ -1,7 +1,8 @@
-import { calculateBackoff, OutboxStatus } from '../src/outbox.config';
+import { calculateBackoff, type OutboxRecord, OutboxStatus } from '../src/outbox.config';
 import { OutboxService } from '../src/outbox.service';
 import { OutboxRelay, OutboxHealthIndicator } from '../src/prisma-outbox.repository';
-import type { OutboxRecord, OutboxRepositoryPort } from '../src/outbox.repository.port';
+import type { EventPublisher } from '../src/publisher.port';
+import type { NewOutboxEntry, OutboxRepositoryPort } from '../src/outbox.repository.port';
 import type { OutboxConfig } from '../src/outbox.tokens';
 
 const CONFIG: OutboxConfig = {
@@ -28,18 +29,18 @@ const record = (over: Partial<OutboxRecord> = {}): OutboxRecord => ({
 });
 
 class FakeRepository implements OutboxRepositoryPort {
-  appended: Array<Record<string, unknown>> = [];
+  appended: Array<NewOutboxEntry> = [];
   published: string[][] = [];
   failed: Array<{ id: string; error: string; nextAttemptAt: Date }> = [];
   deadLettered: Array<{ id: string; error: string }> = [];
   batch: OutboxRecord[] = [];
   counts: Record<string, number> = { pending: 0, dlq: 0 };
 
-  async append(entry: Record<string, unknown>): Promise<void> {
+  async append(entry: NewOutboxEntry): Promise<void> {
     this.appended.push(entry);
   }
 
-  async appendMany(entries: Array<Record<string, unknown>>): Promise<void> {
+  async appendMany(entries: Array<NewOutboxEntry>): Promise<void> {
     this.appended.push(...entries);
   }
 
@@ -160,7 +161,7 @@ describe('OutboxService.publish', () => {
 });
 
 describe('OutboxRelay.tick', () => {
-  const relay = (repo: FakeRepository, publisher: { send: () => Promise<void> }) =>
+  const relay = (repo: FakeRepository, publisher: EventPublisher) =>
     new OutboxRelay(repo, publisher, CONFIG);
 
   it('publishes a claimed batch and marks it published', async () => {

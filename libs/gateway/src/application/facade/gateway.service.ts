@@ -9,7 +9,7 @@
  *
  * @remarks Every decision below is somebody else's. "Is this password right?" is
  * credential-vault's. "What may this user do?" is access-control's. "Is this token still
- * valid?" is session-token's. This class sequences the calls and translates the answers; a
+ * valid?" is session's. This class sequences the calls and translates the answers; a
  * rule written here would be a rule that only the edge enforces, which is the exact failure
  * mode a service-per-ownership split exists to prevent.
  *
@@ -19,6 +19,7 @@
  * parameter, hands it to one peer, and lets it go out of scope.
  */
 import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   AccountLockedException,
   InvalidCredentialsException,
@@ -54,6 +55,15 @@ export interface LoginInput {
   readonly userAgent?: string;
 }
 
+export interface RegisterInput {
+  readonly email: string;
+  /** The same confinement rule as {@link LoginInput.password}: one call, then gone. */
+  readonly password: string;
+  readonly displayName?: string;
+  readonly locale?: string;
+  readonly ipAddress?: string;
+}
+
 export interface LoginResult {
   readonly accessToken: string;
   readonly refreshToken: string;
@@ -86,7 +96,7 @@ export class GatewayService {
   ) {}
 
   /**
-   * Signs someone in by walking auth-gateway's login flow.
+   * Signs someone in by walking auth-flow's login flow.
    *
    * @remarks Two calls, and the edge does not merge them: `StartFlow` establishes who is
    * signing in and on what, `AdvanceFlow` is the only thing that ever sees the password. That
@@ -155,7 +165,7 @@ export class GatewayService {
   /**
    * Exchanges a refresh token for a new pair.
    *
-   * @remarks A replayed refresh token revokes the whole family inside session-token before it
+   * @remarks A replayed refresh token revokes the whole family inside session before it
    * answers. Surfacing that as its own 401 lets a client clear its storage instead of
    * retrying a token the service has already decided is burned.
    */
@@ -238,6 +248,50 @@ export class GatewayService {
   /** Registers an account. No credential, no session — see identity's `CreateUser`. */
   async createUser(input: GatewayUserInput): Promise<GatewayUser> {
     return this.identity.createUser(input);
+  }
+
+  /**
+   * Creates an account *and* its first password, then signs the caller in — one request, in
+   * that order, for a reason worth stating.
+   *
+   * @remarks The credential is stored first, against a freshly chosen id, and only then does
+   * the account claim that id. credential-vault does not care whether the user exists yet —
+   * registration is an anticipated caller — but the reverse order would: the vault's policy
+   * (length, composition, whatever an operator configures next) lives in the vault, so every
+   * refusal there would land *after* an account row exists, leaving half an account on every
+   * weak password. This order fails towards a credential nothing points at, which this method
+   * revokes on refusal and which nothing could log in with regardless.
+   *
+   * @remarks A refusal on the address — the ordinary duplicate — is that same compensation:
+   * identity refuses, the orphan credential is revoked, and the original 409 travels to the
+   * caller unchanged. A session that cannot be minted after both writes is a *complete*
+   * account, and the caller can simply sign in, so it is not compensated back to nothing.
+   */
+  async register(input: RegisterInput): Promise<LoginResult> {
+    const userId = randomUUID();
+
+    await this.credentials.setPassword({ userId, newPassword: input.password });
+
+    try {
+      await this.identity.createUser({
+        id: userId,
+        email: input.email,
+        displayName: input.displayName,
+        locale: input.locale,
+        source: 'web',
+      });
+    } catch (error) {
+      await this.credentials
+        .revokeAll({ userId, reason: 'registration_refused' })
+        .catch(() => undefined);
+      throw error;
+    }
+
+    return this.sessions.issueTokens({
+      userId,
+      email: input.email,
+      ipAddress: input.ipAddress,
+    });
   }
 
   /**

@@ -5,8 +5,8 @@
 #   identity (REST)          create the account
 #   credential-vault(gRPC)   store the password
 #   account-security (gRPC)  count the attempts, lock the account
-#   auth-gateway   (gRPC)    open a login flow, advance it with the password
-#   session-token  (gRPC)    validate the issued access token
+#   auth-flow   (gRPC)    open a login flow, advance it with the password
+#   session  (gRPC)    validate the issued access token
 #
 # Every hop is a real socket to a real process. Unit tests inject ports and therefore cannot
 # catch the failures this is written for: a channel pointed at the wrong host, a proto package
@@ -62,7 +62,7 @@ FLOW="$ROOT/tools/e2e/grpc-flow.ts"
 # lockout section below depends on. A randomised address keeps a previous run's failures out
 # of this one: nothing clears that counter on a successful sign-in, so a fixed address would
 # start the next run already part-way to its budget.
-export ACCOUNT_SECURITY_REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
+export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 export E2E_CLIENT_IP="203.0.113.$(( RANDOM % 254 + 1 ))"
 
 pass=0; fail=0
@@ -94,7 +94,7 @@ boot() { # name port db grpc_port
   SERVICE_NAME="$name" PORT="$port" GRPC_URL="0.0.0.0:$grpc" \
   IDENTITY_GRPC_URL="localhost:$IDENTITY_GRPC" \
   CREDENTIAL_VAULT_GRPC_URL="localhost:$VAULT_GRPC" \
-  SESSION_TOKEN_GRPC_URL="localhost:$SESSION_GRPC" \
+  SESSION_GRPC_URL="localhost:$SESSION_GRPC" \
   MFA_GRPC_URL="localhost:39006" \
   ACCOUNT_SECURITY_GRPC_URL="localhost:$SECURITY_GRPC" \
   TS_NODE_PROJECT="apps/$name/tsconfig.app.json" \
@@ -107,9 +107,9 @@ boot() { # name port db grpc_port
 # silently falls back to the production defaults and every call gets ECONNREFUSED.
 export IDENTITY_GRPC_URL="localhost:$IDENTITY_GRPC"
 export CREDENTIAL_VAULT_GRPC_URL="localhost:$VAULT_GRPC"
-export SESSION_TOKEN_GRPC_URL="localhost:$SESSION_GRPC"
+export SESSION_GRPC_URL="localhost:$SESSION_GRPC"
 export MFA_GRPC_URL="localhost:39006"
-export AUTH_GATEWAY_GRPC_URL="localhost:$GATEWAY_GRPC"
+export AUTH_FLOW_GRPC_URL="localhost:$GATEWAY_GRPC"
 
 flow() { # step arg1 arg2
   local out err
@@ -124,12 +124,12 @@ flow() { # step arg1 arg2
   echo "$out"
 }
 
-echo "==> booting identity, credential-vault, session-token, account-security, auth-gateway"
+echo "==> booting identity, credential-vault, session, account-security, auth-flow"
 boot identity       "$IDENTITY_PORT" identity       "$IDENTITY_GRPC"
 boot credential-vault "$VAULT_PORT"  credential_vault "$VAULT_GRPC"
-boot session-token  "$SESSION_PORT"  session_engine  "$SESSION_GRPC"
+boot session  "$SESSION_PORT"  session_engine  "$SESSION_GRPC"
 boot account-security "$SECURITY_PORT" account_security "$SECURITY_GRPC"
-boot auth-gateway   "$GATEWAY_PORT"  auth_gateway    "$GATEWAY_GRPC"
+boot auth-flow   "$GATEWAY_PORT"  auth_flow    "$GATEWAY_GRPC"
 
 # Wait for every service, not just the first: booting five processes takes longer than one,
 # and probing early reports services that are merely still starting as unhealthy.
@@ -147,8 +147,8 @@ done
 echo
 echo "==> 1. all five services are up"
 for entry in "identity:$IDENTITY_PORT" "credential-vault:$VAULT_PORT" \
-             "session-token:$SESSION_PORT" "account-security:$SECURITY_PORT" \
-             "auth-gateway:$GATEWAY_PORT"; do
+             "session:$SESSION_PORT" "account-security:$SECURITY_PORT" \
+             "auth-flow:$GATEWAY_PORT"; do
   check "${entry%%:*} healthy" \
     "$(curl -s -m 5 "http://127.0.0.1:${entry##*:}/health" | grep -o '"status":"[a-z]*"' | cut -d'"' -f4)" \
     "up"
@@ -170,7 +170,7 @@ SET=$(flow set-password "$USER_ID" "$PASSWORD")
 check "password stored" "$(echo "$SET" | grep -o '"ok":true' || echo false)" '"ok":true'
 
 echo
-echo "==> 4. auth-gateway opens a login flow (gRPC)"
+echo "==> 4. auth-flow opens a login flow (gRPC)"
 START=$(flow start-flow "$EMAIL")
 FLOW_ID=$(echo "$START" | grep -o '"flowId":"[^"]*"' | cut -d'"' -f4)
 STATE=$(echo "$START" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)
@@ -201,7 +201,7 @@ check "refresh token issued" "$([ ${#REFRESH} -gt 40 ] && echo yes || echo no)" 
 check "refresh token is not the access token" "$([ "$ACCESS" != "$REFRESH" ] && echo yes || echo no)" "yes"
 
 echo
-echo "==> 7. session-token validates the token (gRPC)"
+echo "==> 7. session validates the token (gRPC)"
 VAL=$(flow validate "$ACCESS")
 check "token is valid" "$(echo "$VAL" | grep -o '"valid":true' || echo false)" '"valid":true'
 check "resolves to the right user" "$(echo "$VAL" | grep -o '"userId":"[^"]*"' | cut -d'"' -f4)" "$USER_ID"
@@ -229,12 +229,12 @@ check "refresh token stored as a digest, never plaintext" \
 echo
 echo "==> 10. the login published session events to Kafka"
 for _ in $(seq 1 20); do
-  [ "$(podman exec auth-postgres psql -U postgres -d auth_gateway -tAc \
+  [ "$(podman exec auth-postgres psql -U postgres -d auth_flow -tAc \
       "SELECT count(*) FROM outbox_events WHERE aggregate_id='$FLOW_ID'" 2>/dev/null | tr -d ' ')" != "0" ] && break
   sleep 1
 done
-check "auth-gateway recorded flow events" \
-  "$(podman exec auth-postgres psql -U postgres -d auth_gateway -tAc \
+check "auth-flow recorded flow events" \
+  "$(podman exec auth-postgres psql -U postgres -d auth_flow -tAc \
      "SELECT count(*) FROM outbox_events WHERE aggregate_id='$FLOW_ID' AND status='published'" 2>/dev/null | tr -d ' ')" \
   "3"
 
@@ -283,7 +283,7 @@ echo "================================================"
 printf "  passed: %d   failed: %d\n" "$pass" "$fail"
 echo "================================================"
 if [ "$fail" -gt 0 ]; then
-  for s in identity credential-vault session-token account-security auth-gateway; do
+  for s in identity credential-vault session account-security auth-flow; do
     echo "--- $s ---"; tail -12 "$LOG/login-$s.log"
   done
 fi

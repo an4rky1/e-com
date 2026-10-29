@@ -4,12 +4,18 @@
 dist
 tmp
 out-tsc
+*.tsbuildinfo
 
 # Prisma clients are generated per service by `npm run generate`
 libs/domains/*/src/generated/
 
 # dependencies
 node_modules
+
+# local env files — secrets live here, never commit them
+.env
+.env.*
+!.env.example
 
 # IDEs and editors
 /.idea
@@ -52,3 +58,11 @@ Thumbs.db
 out
 
 test-output
+
+# Terraform — local state, plans and provider caches. Lock files
+# (.terraform.lock.hcl) are committed on purpose: they pin the providers.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

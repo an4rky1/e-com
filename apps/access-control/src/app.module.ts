@@ -9,6 +9,7 @@ import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
 import { HealthModule } from '@auth/platform/health';
+import { ObservabilityModule } from '@auth/platform/observability';
 
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createAccessControlModule } from '@auth/domains/access-control';
@@ -28,6 +29,7 @@ const eventPublisher = createKafkaPublisher();
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
     HealthModule.forRoot('access-control'),
+    ObservabilityModule.forRoot('access-control'),
 
     createAccessControlModule({ publisher: eventPublisher }),
   ],

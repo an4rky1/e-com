@@ -1,20 +1,47 @@
 /**
  * @fileoverview Request bodies the edge accepts, and the responses it composes.
  *
- * @remarks `whitelist: true` on the validation pipe means anything not declared here is
- * dropped before a handler sees it. For `POST /auth/login` that is the difference between
- * forwarding `{ email, password, debug: true, note: "<the password>" }` upstream and
- * forwarding only the two fields the flow needs.
+ * @remarks The *shapes* and the *limits* come from `@auth/contracts/http` — the file the
+ * front reads too — so a client and the gateway cannot disagree about what a well-formed
+ * registration looks like. What stays here is the enforcement: `whitelist: true` on the
+ * validation pipe means anything not declared in these classes is dropped before a handler
+ * sees it, which for `POST /auth/login` is the difference between forwarding
+ * `{ email, password, debug: true, note: "<the password>" }` upstream and forwarding only
+ * the two fields the flow needs.
  *
  * @remarks No DTO here declares a field the caller may set on somebody else's behalf. The
  * routes that act for another user take that user from the path and their authority from
  * access-control.
  */
 import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  DISPLAY_NAME_MAX_LENGTH,
+  EMAIL_MAX_LENGTH,
+  LOCALE_MAX_LENGTH,
+  LOCALE_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  REFRESH_TOKEN_MAX_LENGTH,
+  REFRESH_TOKEN_MIN_LENGTH,
+  REASON_MAX_LENGTH,
+} from '@auth/contracts/http';
+import type {
+  CreateUserRequest,
+  CurrentUserResponse,
+  LoginRequest,
+  LogoutRequest,
+  LogoutResponse,
+  OAuthProvidersResponse,
+  RefreshRequest,
+  RegisterRequest,
+  SetPasswordRequest,
+  TokenPair,
+  UserResponse,
+} from '@auth/contracts/http';
 
-export class LoginRequestDto {
+export class LoginRequestDto implements LoginRequest {
   @IsEmail({}, { message: 'email must be a valid address' })
-  @MaxLength(254)
+  @MaxLength(EMAIL_MAX_LENGTH)
   email!: string;
 
   /**
@@ -25,22 +52,22 @@ export class LoginRequestDto {
    * context by accident.
    */
   @IsString()
-  @MinLength(8)
-  @MaxLength(512)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
   password!: string;
 }
 
-export class RefreshRequestDto {
+export class RefreshRequestDto implements RefreshRequest {
   @IsString()
-  @MinLength(16)
-  @MaxLength(4_096)
+  @MinLength(REFRESH_TOKEN_MIN_LENGTH)
+  @MaxLength(REFRESH_TOKEN_MAX_LENGTH)
   refreshToken!: string;
 }
 
-export class LogoutRequestDto {
+export class LogoutRequestDto implements LogoutRequest {
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(REASON_MAX_LENGTH)
   reason?: string;
 
   /**
@@ -53,59 +80,70 @@ export class LogoutRequestDto {
   everywhere?: boolean;
 }
 
-export class CreateUserRequestDto {
+export class CreateUserRequestDto implements CreateUserRequest {
   @IsEmail({}, { message: 'email must be a valid address' })
-  @MaxLength(254)
+  @MaxLength(EMAIL_MAX_LENGTH)
   email!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(DISPLAY_NAME_MAX_LENGTH)
   displayName?: string;
 
   @IsOptional()
   @IsString()
-  @MinLength(2)
-  @MaxLength(10)
+  @MinLength(LOCALE_MIN_LENGTH)
+  @MaxLength(LOCALE_MAX_LENGTH)
   locale?: string;
 }
 
-export class SetPasswordRequestDto {
+export class RegisterRequestDto implements RegisterRequest {
+  @IsEmail({}, { message: 'email must be a valid address' })
+  @MaxLength(EMAIL_MAX_LENGTH)
+  email!: string;
+
+  /**
+   * The password field's counterpart to {@link LoginRequestDto.password}.
+   *
+   * @remarks The numbers here are the *edge's* gate — what a form may send — and not the
+   * vault's policy, which the vault itself enforces and explains. That split is why
+   * registration sets the credential before creating the account: a refusal on this field's
+   * real rules lands on a password nothing points at, never on a half-made account.
+   */
   @IsString()
-  @MinLength(8)
-  @MaxLength(512)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(DISPLAY_NAME_MAX_LENGTH)
+  displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(LOCALE_MIN_LENGTH)
+  @MaxLength(LOCALE_MAX_LENGTH)
+  locale?: string;
+}
+
+export class SetPasswordRequestDto implements SetPasswordRequest {
+  @IsString()
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
   password!: string;
 }
 
 // ---- responses ---------------------------------------------------------------------
+//
+// Aliases, not shapes: the gateway's response types *are* the contract's types, so a handler
+// returning one is checked against the same file a page reads it with.
 
-export interface TokenPairResponseDto {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  sessionId: string;
-  tokenType: 'Bearer';
-}
-
-export interface UserResponseDto {
-  id: string;
-  email: string;
-  displayName: string;
-  status: string;
-  emailVerified: boolean;
-}
-
-export interface CurrentUserResponseDto {
-  user: UserResponseDto;
-  roles: string[];
-  permissions: string[];
-  sessionId: string;
-}
-
-export interface LogoutResponseDto {
-  sessionId: string;
-  revokedCount: number;
-}
+export type TokenPairResponseDto = TokenPair;
+export type UserResponseDto = UserResponse;
+export type CurrentUserResponseDto = CurrentUserResponse;
+export type LogoutResponseDto = LogoutResponse;
+export type OAuthProvidersResponseDto = OAuthProvidersResponse;
 
 /**
  * Stamps the token type onto a pair.

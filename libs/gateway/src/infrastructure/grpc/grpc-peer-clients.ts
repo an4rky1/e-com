@@ -23,6 +23,10 @@ import type {
   GetPermissionsRequest,
   GetPermissionsResponse,
   GetUserRequest,
+  IssueTokensRequest,
+  IssueTokensResponse,
+  ResolveOauthUserRequest,
+  ResolveOauthUserResponse,
   RotateTokensRequest,
   RotateTokensResponse,
   SetPasswordRequest,
@@ -30,7 +34,6 @@ import type {
   StartFlowRequest,
   AdvanceFlowRequest,
   UserResponse,
-  ValidateAccessTokenResponse,
 } from '@auth/contracts';
 // Value import on purpose. Each adapter is registered with `useClass`, so Nest resolves it
 // through `design:paramtypes` — which reads the *value* binding. `import type` would emit
@@ -50,26 +53,23 @@ import type {
 
 /** Full method paths, so a mistyped service name fails here rather than at the broker. */
 const METHOD = {
-  START_FLOW: '/auth_gateway.v1.AuthGatewayService/StartFlow',
-  ADVANCE_FLOW: '/auth_gateway.v1.AuthGatewayService/AdvanceFlow',
+  START_FLOW: '/auth_flow.v1.AuthFlowService/StartFlow',
+  ADVANCE_FLOW: '/auth_flow.v1.AuthFlowService/AdvanceFlow',
   CREATE_USER: '/identity.v1.IdentityService/CreateUser',
   GET_USER: '/identity.v1.IdentityService/GetUser',
+  RESOLVE_OAUTH_USER: '/identity.v1.IdentityService/ResolveOauthUser',
   GET_PERMISSIONS: '/access_control.v1.AccessControlService/GetPermissions',
   CHECK_PERMISSION: '/access_control.v1.AccessControlService/CheckPermission',
-  ROTATE_TOKENS: '/session_token.v1.SessionTokenService/RotateTokens',
-  REVOKE_SESSION: '/session_token.v1.SessionTokenService/RevokeSession',
-  REVOKE_ALL_SESSIONS: '/session_token.v1.SessionTokenService/RevokeAllSessions',
-  VALIDATE_ACCESS_TOKEN: '/session_token.v1.SessionTokenService/ValidateAccessToken',
+  ISSUE_TOKENS: '/session.v1.SessionService/IssueTokens',
+  ROTATE_TOKENS: '/session.v1.SessionService/RotateTokens',
+  REVOKE_SESSION: '/session.v1.SessionService/RevokeSession',
+  REVOKE_ALL_SESSIONS: '/session.v1.SessionService/RevokeAllSessions',
   SET_PASSWORD: '/credential_vault.v1.CredentialVaultService/SetPassword',
+  REVOKE_ALL_CREDENTIALS: '/credential_vault.v1.CredentialVaultService/RevokeAllCredentials',
 } as const;
 
-/** Declared inline on `SessionTokenGrpcClient` rather than exported by the contracts lib. */
-interface ValidateAccessTokenRequest {
-  accessToken: string;
-}
-
 /**
- * Also declared inline there, for the same reason.
+ * Declared inline on `SessionGrpcClient` rather than exported by the contracts lib.
  *
  * @remarks `exceptSessionId` is the field that earns the duplication: it is what separates
  * "log out here" from "log out everywhere", and widening a shared contract for one caller
@@ -82,6 +82,16 @@ interface RevokeAllSessionsRequest {
 }
 
 interface RevokeAllSessionsResponse {
+  revokedCount: number;
+}
+
+/** Mirrors the inline signature `CredentialVaultGrpcClient` spells for this call. */
+interface RevokeAllCredentialsRequest {
+  userId: string;
+  reason: string;
+}
+
+interface RevokeAllCredentialsResponse {
   revokedCount: number;
 }
 
@@ -136,6 +146,10 @@ export class GrpcIdentityClient implements IdentityClientPort {
       displayName: input.displayName ?? '',
       locale: input.locale ?? '',
       source: input.source ?? '',
+      // Absent is fine: identity treats an empty id as "generate one", which is the ordinary
+      // provisioning path. Only registration pre-chooses, and only because its credential is
+      // already stored under that id.
+      id: input.id,
     };
 
     const response = await this.peers.call<CreateUserResponse>(
@@ -155,6 +169,36 @@ export class GrpcIdentityClient implements IdentityClientPort {
     }
 
     return toGatewayUser(response.user);
+  }
+
+  async resolveOauthUser(input: {
+    provider: string;
+    subject: string;
+    email: string;
+    emailVerified: boolean;
+    displayName?: string;
+  }): Promise<{ user: GatewayUser; created: boolean }> {
+    const request: ResolveOauthUserRequest = {
+      provider: input.provider,
+      subject: input.subject,
+      email: input.email,
+      emailVerified: input.emailVerified,
+      displayName: input.displayName ?? '',
+    };
+
+    const response = await this.peers.call<ResolveOauthUserResponse>(
+      METHOD.RESOLVE_OAUTH_USER,
+      request,
+    );
+
+    if (!response.user) {
+      throw new InternalErrorException(
+        undefined,
+        { method: METHOD.RESOLVE_OAUTH_USER, reason: 'the reply carried no user' },
+      );
+    }
+
+    return { user: toGatewayUser(response.user), created: response.created };
   }
 
   async getUser(userId: string): Promise<GatewayUser> {
@@ -200,6 +244,33 @@ export class GrpcAccessControlClient implements AccessControlClientPort {
 @Injectable()
 export class GrpcSessionClient implements SessionClientPort {
   constructor(private readonly peers: PeerCaller) {}
+
+  async issueTokens(input: {
+    userId: string;
+    email: string;
+    ipAddress?: string;
+  }): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    sessionId: string;
+  }> {
+    const request: IssueTokensRequest = {
+      userId: input.userId,
+      email: input.email,
+      ipAddress: input.ipAddress,
+    };
+    const response = await this.peers.call<IssueTokensResponse>(
+      METHOD.ISSUE_TOKENS,
+      request,
+    );
+    return {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      expiresIn: response.expiresIn,
+      sessionId: response.sessionId,
+    };
+  }
 
   async rotateTokens(input: {
     refreshToken: string;
@@ -253,34 +324,6 @@ export class GrpcSessionClient implements SessionClientPort {
     );
     return response.revokedCount;
   }
-
-  async validateAccessToken(
-    accessToken: string,
-  ): Promise<{
-    valid: boolean;
-    userId: string;
-    email: string;
-    roles: readonly string[];
-    permissions: readonly string[];
-    sessionId: string;
-    revocationReason: string;
-  }> {
-    const request: ValidateAccessTokenRequest = { accessToken };
-    const response = await this.peers.call<ValidateAccessTokenResponse>(
-      METHOD.VALIDATE_ACCESS_TOKEN,
-      request,
-    );
-
-    return {
-      valid: response.valid,
-      userId: response.userId,
-      email: response.email,
-      roles: response.roles,
-      permissions: response.permissions,
-      sessionId: response.sessionId,
-      revocationReason: response.revocationReason,
-    };
-  }
 }
 
 @Injectable()
@@ -300,6 +343,18 @@ export class GrpcCredentialVaultClient implements CredentialVaultClientPort {
       request,
     );
     return { credentialId: response.credentialId };
+  }
+
+  async revokeAll(input: { userId: string; reason?: string }): Promise<number> {
+    const request: RevokeAllCredentialsRequest = {
+      userId: input.userId,
+      reason: input.reason ?? 'revoked',
+    };
+    const response = await this.peers.call<RevokeAllCredentialsResponse>(
+      METHOD.REVOKE_ALL_CREDENTIALS,
+      request,
+    );
+    return response.revokedCount;
   }
 }
 

@@ -21,14 +21,22 @@ describe('StaticGrpcChannel', () => {
   function channelWith(options?: { serviceToken?: string }) {
     const calls: Array<{ request: unknown; metadata: Metadata }> = [];
     const client = {
+      // The channel always calls the 4-arg form, but the channel's `UnaryCall` type also
+      // declares a 2-arg overload, and a method with four *required* parameters cannot
+      // satisfy it — the mock would fail assignability before any test ran. Trailing
+      // parameters are optional and the callback is taken from whichever position it arrives in.
       GetUser(
         request: unknown,
-        metadata: Metadata,
-        _options: { deadline: Date },
-        callback: (error: Error | null, response: unknown) => void,
-      ) {
-        calls.push({ request, metadata });
-        callback(null, { id: 'user-1' });
+        metadataOrCallback: unknown,
+        _options?: { deadline: Date },
+        callback?: (error: Error | null, response: unknown) => void,
+      ): void {
+        const done = (callback ?? metadataOrCallback) as (
+          error: Error | null,
+          response: unknown,
+        ) => void;
+        calls.push({ request, metadata: metadataOrCallback as Metadata });
+        done(null, { id: 'user-1' });
       },
     };
 

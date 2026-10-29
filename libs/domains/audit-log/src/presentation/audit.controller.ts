@@ -18,6 +18,9 @@ import {
 } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { AuditLogService } from '../application/facade/audit-log.service';
+// The query DTO is an interface, so there is no class for `emitDecoratorMetadata` to emit:
+// a type-only binding makes the metadata `Object`, the pipe skips it, and `toPageNumbers`
+// below is what validates the query — deliberately, as the DTO's own fileoverview says.
 import { toAuditFilter, toPageNumbers, type AuditQueryDto } from './dto/audit-query.dto';
 
 @Controller('audit')

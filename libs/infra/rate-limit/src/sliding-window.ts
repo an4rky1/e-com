@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { REDIS } from '@auth/infra/redis';
 import type { Redis } from 'ioredis';
 import { RATE_LIMIT_CONFIG, type RateLimitConfig } from './rate-limit.config';
-import { RATE_LIMIT_REDIS } from './rate-limit.config';
 
 /** The verdict for one request against one key. */
 export interface RateLimitResult {
@@ -69,7 +69,7 @@ export class RedisRateLimiter implements RateLimiter {
   private readonly logger = new Logger(RedisRateLimiter.name);
 
   constructor(
-    @Inject(RATE_LIMIT_REDIS) private readonly redis: Redis,
+    @Inject(REDIS) private readonly redis: Redis,
     @Inject(RATE_LIMIT_CONFIG) private readonly config: RateLimitConfig,
   ) {}
 

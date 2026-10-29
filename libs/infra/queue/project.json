@@ -1,0 +1,26 @@
+{
+  "name": "@auth/infra/queue",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/queue/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/queue/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/infra/queue"
+      ],
+      "options": {
+        "jestConfig": "libs/infra/queue/jest.config.ts"
+      }
+    }
+  }
+}

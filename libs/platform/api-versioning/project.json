@@ -1,0 +1,26 @@
+{
+  "name": "@auth/platform/api-versioning",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/platform/api-versioning/src",
+  "projectType": "library",
+  "tags": [
+    "type:platform"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/platform/api-versioning/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/platform/api-versioning"
+      ],
+      "options": {
+        "jestConfig": "libs/platform/api-versioning/jest.config.ts"
+      }
+    }
+  }
+}

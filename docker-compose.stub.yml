@@ -1,0 +1,208 @@
+# The local deploy stub: the same twelve images and the same environment layout ECS gets,
+# with compose DNS standing in for Cloud Map. Applied over docker-compose.yml
+# (`make stub`), it adds the platform itself; the base file keeps owning Postgres, Redis
+# and Redpanda underneath it.
+#
+# Addressing mirrors `infra/modules/platform/services.tf` exactly, one substitution:
+# `identity.dev.auth.internal:13001` becomes `identity:13001`. Same keys, same ports, same
+# dead-but-honest `mfa:13006` endpoint — so a peer table that works here works in ECS and
+# the other way around.
+#
+# Secrets are fixed throwaway literals, overridable per host variable (STUB_* names, so a
+# developer's .env can never leak into them). Real environments resolve the same names from
+# one Secrets Manager document; the stub's job is the layout, not the custody.
+#
+# `migrate` runs before any backend starts: the databases exist (init-databases.sh) but the
+# schema only `prisma migrate deploy` creates, and a service that boots against a missing
+# enum type dies with an error that reads like a code failure.
+
+x-backend: &backend
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    migrate: { condition: service_completed_successfully }
+  healthcheck:
+    test:
+      [
+        'CMD',
+        'node',
+        '-e',
+        "fetch('http://localhost:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+
+x-backend-env: &backend-env
+  KAFKA_ENABLED: 'false'
+  OTEL_SDK_DISABLED: 'true'
+  REDIS_URL: redis://redis:6379
+  GRPC_SERVICE_TOKEN: ${STUB_GRPC_SERVICE_TOKEN:-stub-grpc-service-token}
+  SESSION_ACCESS_TOKEN_SIGNING_KEY: ${STUB_SESSION_ACCESS_TOKEN_SIGNING_KEY:-stub-session-access-token-signing-key}
+  SESSION_REFRESH_TOKEN_PEPPER: ${STUB_SESSION_REFRESH_TOKEN_PEPPER:-stub-refresh-token-pepper}
+  VAULT_PEPPER: ${STUB_VAULT_PEPPER:-stub-vault-pepper}
+  MFA_SECRET_ENCRYPTION_KEY: ${STUB_MFA_SECRET_ENCRYPTION_KEY:-stub-mfa-secret-encryption-key}
+  GATEWAY_JWT_SECRET: ${STUB_GATEWAY_JWT_SECRET:-stub-gateway-jwt-secret}
+
+services:
+  identity:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/identity:${TAG:-local}
+    ports: ['3001:3001']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: identity
+      PORT: '3001'
+      GRPC_URL: 0.0.0.0:13001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/identity
+
+  access-control:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/access-control:${TAG:-local}
+    ports: ['3002:3002']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: access-control
+      PORT: '3002'
+      GRPC_URL: 0.0.0.0:13002
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/access_control
+
+  credential-vault:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/credential-vault:${TAG:-local}
+    ports: ['3003:3003']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: credential-vault
+      PORT: '3003'
+      GRPC_URL: 0.0.0.0:13003
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/credential_vault
+
+  session:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/session:${TAG:-local}
+    ports: ['3004:3004']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: session
+      PORT: '3004'
+      GRPC_URL: 0.0.0.0:13004
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/session_engine
+
+  auth-flow:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/auth-flow:${TAG:-local}
+    ports: ['3005:3005']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: auth-flow
+      PORT: '3005'
+      GRPC_URL: 0.0.0.0:13005
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/auth_flow
+      # The orchestrator reads raw IDENTITY_* variables — see services.tf.
+      IDENTITY_GRPC_URL: identity:13001
+      CREDENTIAL_VAULT_GRPC_URL: credential-vault:13003
+      SESSION_GRPC_URL: session:13004
+      MFA_GRPC_URL: mfa:13006
+      ACCOUNT_SECURITY_GRPC_URL: account-security:13008
+
+  mfa:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/mfa:${TAG:-local}
+    ports: ['3006:3006']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: mfa
+      PORT: '3006'
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mfa
+
+  api-key:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/api-key:${TAG:-local}
+    ports: ['3007:3007']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: api-key
+      PORT: '3007'
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/api_key
+
+  account-security:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/account-security:${TAG:-local}
+    ports: ['3008:3008']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: account-security
+      PORT: '3008'
+      GRPC_URL: 0.0.0.0:13008
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/account_security
+
+  notification:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/notification:${TAG:-local}
+    ports: ['3009:3009']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: notification
+      PORT: '3009'
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/notify
+
+  audit-log:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/audit-log:${TAG:-local}
+    ports: ['3010:3010']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: audit-log
+      PORT: '3010'
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/audit_log
+
+  # The edge: unpublished on purpose. The front reaches it over the compose network
+  # (GATEWAY_URL=http://api-gateway:3000), exactly as ECS reaches it through Cloud Map —
+  # port 3000 on the host belongs to the front, and nothing outside the network should be
+  # talking to the gateway directly anyway.
+  api-gateway:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/api-gateway:${TAG:-local}
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: api-gateway
+      PORT: '3000'
+      GATEWAY_IDENTITY_URL: identity:13001
+      GATEWAY_ACCESS_CONTROL_URL: access-control:13002
+      GATEWAY_CREDENTIAL_VAULT_URL: credential-vault:13003
+      GATEWAY_SESSION_URL: session:13004
+      GATEWAY_AUTH_FLOW_URL: auth-flow:13005
+      GATEWAY_OAUTH_PUBLIC_ORIGIN: ''
+      GATEWAY_OAUTH_STATE_SECRET: ${STUB_GATEWAY_OAUTH_STATE_SECRET:-stub-oauth-state-secret}
+
+  front:
+    image: ${ECR_REPOSITORY:-auth-platform}/front:${TAG:-local}
+    ports: ['3000:3000']
+    environment:
+      GATEWAY_URL: http://api-gateway:3000
+    depends_on:
+      api-gateway: { condition: service_started }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # One-shot: `make stub-migrate` re-runs it, `up -d` runs it when the schema is missing.
+  migrate:
+    image: ${ECR_REPOSITORY:-auth-platform}/identity:${TAG:-local}
+    command: bash tools/migrate.sh
+    environment:
+      POSTGRES_URL_PREFIX: postgresql://postgres:postgres@postgres:5432
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'

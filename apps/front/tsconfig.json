@@ -3,6 +3,12 @@
   "compilerOptions": {
     "jsx": "preserve",
     "noEmit": true,
+    // A leaf application, not a node in a project-reference graph: it imports the contracts
+    // library straight out of `libs/`, so `composite` (inherited from the base) would demand
+    // rootDir containment and a file list that names every one of those files — TS6059/TS6307 on every
+    // `@auth/contracts/http` import. Nothing references this project, so it cannot be composite.
+    "composite": false,
+    "declarationMap": false,
     "emitDeclarationOnly": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -16,12 +22,17 @@
         "name": "next"
       }
     ],
+    "baseUrl": "../..",
+    // Sources live outside this directory (`libs/contracts` is imported through `paths`), so
+    // the default rootDir — this config's own directory — would put them out of bounds (TS6059).
+    "rootDir": "../..",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./apps/front/src/*"],
+      "@auth/contracts": ["./libs/contracts/src/index.ts"],
+      "@auth/contracts/*": ["./libs/contracts/src/*"]
     },
     "types": ["jest", "node"],
     "outDir": "dist",
-    "rootDir": "src",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": [
@@ -29,6 +40,9 @@
     "src/**/*.tsx",
     "src/**/*.js",
     "src/**/*.jsx",
+    // The route specs live outside `src/`; without them the IDE has no project that lists
+    // `specs/**` and falls back to a bare program with no `paths` and no node types.
+    "specs/**/*.ts",
     "../../apps/front/.next/types/**/*.ts",
     "../../dist/apps/front/.next/types/**/*.ts",
     "index.d.ts",

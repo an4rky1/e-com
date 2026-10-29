@@ -11,6 +11,7 @@
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
+import { ObservabilityModule } from '@auth/platform/observability';
 
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createGatewayModule } from '@auth/gateway';
@@ -19,6 +20,7 @@ import { createGatewayModule } from '@auth/gateway';
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
+    ObservabilityModule.forRoot('api-gateway'),
 
     createGatewayModule(),
   ],

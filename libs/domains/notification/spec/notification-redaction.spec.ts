@@ -19,6 +19,11 @@
  * @remarks A deleted account's `email` is the interesting case: it is the one address the
  * system is certain of, and therefore the one a naive implementation is most likely to treat
  * as safe.
+ *
+ * @remarks This suite owns the content guard directly, including the exact shape of
+ * {@link redactVariables} / {@link CompiledTemplate.redacted}. The handler and Kafka suites
+ * assert that shape as behaviour of the system as a whole, and should not be the first place a
+ * schema change breaks.
  */
 import { Topics } from '@auth/contracts';
 import { SendNotificationHandler } from '../src/application/commands/notification.handlers';
@@ -31,6 +36,7 @@ import {
   sanitiseDeliveryError,
   toVariableMap,
 } from '../src/domain/notification-announcement';
+import { compileTemplate } from '../src/domain/templates/notification-templates';
 import { Notification } from '../src/domain/notification.aggregate';
 import { NotificationChannel } from '../src/domain/value-objects/notification-channel.vo';
 import { NotificationTemplate } from '../src/domain/value-objects/notification-template.vo';
@@ -308,6 +314,119 @@ describe('the variable map', () => {
   it('treats a non-object as no variables', () => {
     expect(toVariableMap('nope')).toEqual({});
     expect(toVariableMap(null)).toEqual({});
+  });
+});
+
+describe('the content guard and its report surface', () => {
+  it('redacts by name when the key is forbidden', () => {
+    const { variables, redacted } = redactVariables({
+      displayName: 'Ada',
+      email: EMAIL,
+      riskLevel: 'high',
+    });
+
+    expect(variables).toEqual({ displayName: 'Ada', riskLevel: 'high' });
+    expect(redacted).toEqual(['email']);
+  });
+
+  it('redacts by value when the value looks like an email, even on a clean key', () => {
+    const { variables, redacted } = redactVariables({
+      displayName: 'Ada',
+      fromAddress: 'ada@example.com',
+    });
+
+    expect(variables).toEqual({ displayName: 'Ada' });
+    expect(redacted).toEqual(['fromAddress']);
+  });
+
+  it('redacts a token-shaped value by value', () => {
+    const { variables, redacted } = redactVariables({
+      displayName: 'Ada',
+      resetToken: RESET_TOKEN,
+    });
+
+    expect(variables).toEqual({ displayName: 'Ada' });
+    expect(redacted).toEqual(['resetToken']);
+  });
+
+  it('does not redact a UUID', () => {
+    const { variables, redacted } = redactVariables({
+      displayName: 'Ada',
+      accountRef: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    });
+
+    expect(variables).toEqual({
+      displayName: 'Ada',
+      accountRef: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    });
+    expect(redacted).toEqual([]);
+  });
+
+  it('drops a forbidden key even when its value is short', () => {
+    const { variables, redacted } = redactVariables({
+      displayName: 'Ada',
+      token: 'abc',
+    });
+
+    expect(variables).toEqual({ displayName: 'Ada' });
+    expect(redacted).toEqual(['token']);
+  });
+
+  it('does not strip a token embedded inside a longer string', () => {
+    const { variables, redacted } = redactVariables({
+      summary: 'Reset token kZ9x_Q2mB7pL4nR8vT1wY6zX3aC5dF0gH2jK4lM was used',
+    });
+
+    expect(variables).toEqual({
+      summary: 'Reset token kZ9x_Q2mB7pL4nR8vT1wY6zX3aC5dF0gH2jK4lM was used',
+    });
+    expect(redacted).toEqual([]);
+  });
+
+  it('keeps redaction names sorted', () => {
+    // Sorting is the property under test, so every key is redacted by *value*: three
+    // address-shaped values, one per name, and the report must come back in key order.
+    const { redacted } = redactVariables({
+      apple: 'one@example.com',
+      zebra: 'three@example.com',
+      banana: 'two@example.com',
+    });
+
+    expect(redacted).toEqual(['apple', 'banana', 'zebra']);
+  });
+});
+
+describe('the template compilation surface', () => {
+  it('returns the variables and the names it dropped together', () => {
+    const compiled = compileTemplate(NotificationTemplate.ACCOUNT_DELETED, {
+      email: EMAIL,
+      resetToken: RESET_TOKEN,
+      displayName: 'Ada',
+    });
+
+    expect(compiled.variables).toEqual({ displayName: 'Ada' });
+    expect(compiled.redacted).toEqual(['email', 'resetToken']);
+  });
+
+  it('renders the body from the kept variables only', () => {
+    const compiled = compileTemplate(NotificationTemplate.WELCOME, {
+      displayName: 'Ada',
+      email: EMAIL,
+    });
+
+    expect(compiled.body).toContain('Ada');
+    expect(compiled.body).not.toContain(EMAIL);
+  });
+
+  it('redacts a template variable even when the template declared it', () => {
+    // The schema may allow a key; the content guard decides what leaves this service.
+    const compiled = compileTemplate(NotificationTemplate.ACCOUNT_DELETED, {
+      displayName: 'Ada',
+      email: EMAIL,
+    });
+
+    expect(compiled.variables).toEqual({ displayName: 'Ada' });
+    expect(compiled.redacted).toContain('email');
   });
 });
 

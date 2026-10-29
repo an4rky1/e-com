@@ -13,8 +13,8 @@ const SERVICES = [
   { dir: 'identity', lib: 'identity', module: 'createIdentityModule', serviceName: 'identity', port: 3001, grpc: 'identity.v1', publisher: true },
   { dir: 'access-control', lib: 'access-control', module: 'createAccessControlModule', serviceName: 'access-control', port: 3002, grpc: 'access_control.v1', publisher: true },
   { dir: 'credential-vault', lib: 'credential-vault', module: 'createCredentialVaultModule', serviceName: 'credential-vault', port: 3003, grpc: 'credential_vault.v1', publisher: true },
-  { dir: 'session-token', lib: 'session-token', module: 'createSessionTokenModule', serviceName: 'session-token', port: 3004, grpc: 'session_token.v1', publisher: true },
-  { dir: 'auth-gateway', lib: 'auth-gateway', module: 'createAuthGatewayModule', serviceName: 'auth-gateway', port: 3005, grpc: 'auth_gateway.v1', downstream: true, publisher: true },
+  { dir: 'session', lib: 'session', module: 'createSessionModule', serviceName: 'session', port: 3004, grpc: 'session.v1', publisher: true },
+  { dir: 'auth-flow', lib: 'auth-flow', module: 'createAuthFlowModule', serviceName: 'auth-flow', port: 3005, grpc: 'auth_flow.v1', downstream: true, publisher: true },
   { dir: 'mfa', lib: 'mfa', module: 'createMfaModule', serviceName: 'mfa', port: 3006, grpc: null, publisher: true },
   { dir: 'api-key', lib: 'api-key', module: 'createApiKeyModule', serviceName: 'api-key', port: 3007, grpc: null, publisher: true },
   { dir: 'account-security', lib: 'account-security', module: 'createAccountSecurityModule', serviceName: 'account-security', port: 3008, grpc: 'account_security.v1', publisher: true },
@@ -22,16 +22,16 @@ const SERVICES = [
 ];
 
 /**
- * Proto files are named after their gRPC package (`auth_gateway.v1`), which is underscored,
- * not after the service directory (`auth-gateway`). Deriving one from the other is how a
+ * Proto files are named after their gRPC package (`auth_flow.v1`), which is underscored,
+ * not after the service directory (`auth-flow`). Deriving one from the other is how a
  * service ends up pointing at a file that does not exist — at boot, not at compile time.
  */
 const PROTO_BY_SERVICE = {
   identity: 'identity',
   'access-control': 'access_control',
   'credential-vault': 'credential_vault',
-  'session-token': 'session_token',
-  'auth-gateway': 'auth_gateway',
+  'session': 'session',
+  'auth-flow': 'auth_flow',
   'account-security': 'account_security',
 };
 
@@ -133,7 +133,7 @@ import path from 'node:path';
 /**
  * Downstream channel for the four peers this orchestrator calls.
  *
- * @remarks Built eagerly rather than through DI: \`createAuthGatewayModule\` is invoked inside an
+ * @remarks Built eagerly rather than through DI: \`createAuthFlowModule\` is invoked inside an
  * \`@Module\` decorator, where no injection container exists yet. Keeping the construction here
  * means the library still only ever sees the \`GrpcChannel\` port.
  *
@@ -148,14 +148,14 @@ const downstreamChannel = createStaticGrpcChannel({
   protoPaths: [
     path.join(PROTO_DIR, 'identity.proto'),
     path.join(PROTO_DIR, 'credential_vault.proto'),
-    path.join(PROTO_DIR, 'session_token.proto'),
+    path.join(PROTO_DIR, 'session.proto'),
     path.join(PROTO_DIR, 'mfa.proto'),
   ],
   url: process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
   addresses: {
     'identity.v1': process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
     'credential_vault.v1': process.env.CREDENTIAL_VAULT_GRPC_URL ?? 'localhost:31003',
-    'session_token.v1': process.env.SESSION_TOKEN_GRPC_URL ?? 'localhost:31004',
+    'session.v1': process.env.SESSION_GRPC_URL ?? 'localhost:31004',
     'mfa.v1': process.env.MFA_GRPC_URL ?? 'localhost:31006',
   },
 });` : ''}

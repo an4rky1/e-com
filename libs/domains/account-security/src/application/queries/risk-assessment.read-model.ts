@@ -49,7 +49,7 @@ export function toLocation(input: LoginAttemptInput): GeoLocation | null {
 /**
  * The fingerprint to score a login under.
  *
- * @remarks A caller-supplied fingerprint wins over locally computed signals. auth-gateway is the
+ * @remarks A caller-supplied fingerprint wins over locally computed signals. auth-flow is the
  * edge that sees the real request and computes the same canonical digest we would; taking its
  * word keeps "known device" answering the same question on both sides of the boundary instead of
  * comparing a digest against one that was derived differently.

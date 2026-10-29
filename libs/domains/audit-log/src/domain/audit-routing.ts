@@ -49,7 +49,7 @@ const SESSION = ['sessionId'] as const;
  * subscription to a topic nobody publishes.
  */
 export const SUBSCRIBED_TOPICS = [
-  Topics.SESSION_TOKEN_REUSE_DETECTED,
+  Topics.SESSION_REUSE_DETECTED,
   Topics.SESSION_REVOKED,
   Topics.AUTH_FLOW_FAILED,
   Topics.PERMISSION_DENIED,
@@ -72,7 +72,7 @@ export const SUBSCRIBED_TOPICS = [
  * asserts they do.
  */
 const ROUTES: Record<(typeof SUBSCRIBED_TOPICS)[number], AuditRoute> = {
-  [Topics.SESSION_TOKEN_REUSE_DETECTED]: {
+  [Topics.SESSION_REUSE_DETECTED]: {
     action: 'session.token_reuse_detected',
     resourceType: ResourceType.SESSION,
     result: AuditResult.DETECTED,

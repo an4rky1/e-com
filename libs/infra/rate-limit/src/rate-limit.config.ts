@@ -6,7 +6,6 @@ import {
   readNamespacedEnv,
 } from '@auth/platform/config';
 
-export const RATE_LIMIT_REDIS = Symbol('RATE_LIMIT_REDIS');
 export const RATE_LIMIT_CONFIG = Symbol('RATE_LIMIT_CONFIG');
 
 export const Defaults = {
@@ -36,7 +35,6 @@ const schema = z.object({
   FAIL_OPEN: envBoolean(Defaults.FAIL_OPEN),
   HEADERS: envBoolean(Defaults.HEADERS),
   KEY_PREFIX: envString(Defaults.KEY_PREFIX),
-  REDIS_URL: z.string().optional(),
 });
 
 export type RateLimitEnvConfig = z.infer<typeof schema>;
@@ -48,22 +46,19 @@ export interface RateLimitConfig {
   failOpen: boolean;
   headers: boolean;
   keyPrefix: string;
-  redisUrl: string | null;
 }
 
 /**
  * rate-limit's own configuration namespace.
  *
- * @remarks `REDIS_URL` is platform-owned rather than redeclared here: Redis is a shared cache
- * and rate-limit store, not this module's data, and a second owner for the same variable is how
- * two services end up pointing at different instances after a rotation nobody coordinated.
+ * @remarks No connection settings: the client comes from `@auth/infra/redis`, which owns
+ * `REDIS_URL` platform-wide. A second owner for the same variable is how two consumers end
+ * up pointing at different instances after a rotation nobody coordinated.
  */
 export function resolveRateLimitConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): RateLimitConfig {
-  const parsed = readNamespacedEnv('RATE_LIMIT', schema, env, {
-    REDIS_URL: env.REDIS_URL,
-  });
+  const parsed = readNamespacedEnv('RATE_LIMIT', schema, env);
   return {
     enabled: parsed.ENABLED,
     defaultLimit: parsed.DEFAULT_LIMIT,
@@ -71,6 +66,5 @@ export function resolveRateLimitConfig(
     failOpen: parsed.FAIL_OPEN,
     headers: parsed.HEADERS,
     keyPrefix: parsed.KEY_PREFIX,
-    redisUrl: parsed.REDIS_URL?.trim() || null,
   };
 }

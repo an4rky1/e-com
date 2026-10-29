@@ -45,18 +45,25 @@ LOG=/tmp/opencode
 # Two randomised blocks, drawn independently, for the same reason the gateway harness does
 # it: a fixed block collides with a concurrent run and the collision reads as a service being
 # down in a run whose own code had not changed.
-BASE=$(( 39000 + (RANDOM % 300) * 10 ))
-GRPC_BASE=$(( 49000 + (RANDOM % 300) * 10 ))
+#
+# Both blocks stay below 32768. Everything at or above it is the kernel's ephemeral range
+# (`ip_local_port_range`, 32768-60999 on this machine), where any outgoing connection on the
+# box — a container, an agent, a browser — picks its own source port at random. A service that
+# tries to *listen* there loses that race with `EADDRINUSE`, which reads as "session
+# never came up" in a run whose own code is fine. Below it, a port is either ours or somebody
+# is already listening on it before we start, which the readiness check reports honestly.
+BASE=$(( 24000 + (RANDOM % 300) * 10 ))
+GRPC_BASE=$(( 28000 + (RANDOM % 300) * 10 ))
 GW_PORT=$BASE
 declare -A PORT=( [identity]=$(( BASE + 1 )) [access-control]=$(( BASE + 2 )) \
-                  [credential-vault]=$(( BASE + 3 )) [session-token]=$(( BASE + 4 )) \
-                  [auth-gateway]=$(( BASE + 5 )) )
+                  [credential-vault]=$(( BASE + 3 )) [session]=$(( BASE + 4 )) \
+                  [auth-flow]=$(( BASE + 5 )) )
 # Derived from the scalar BASE, not from ${PORT[...]}: inside $(( )) bash parses an array
 # subscript as an arithmetic expression, so ${PORT[access-control]} reads as the difference
 # of two unset variables and trips `set -u`.
 declare -A GRPC=( [identity]=$(( GRPC_BASE + 1 )) [access-control]=$(( GRPC_BASE + 2 )) \
-                  [credential-vault]=$(( GRPC_BASE + 3 )) [session-token]=$(( GRPC_BASE + 4 )) \
-                  [auth-gateway]=$(( GRPC_BASE + 5 )) )
+                  [credential-vault]=$(( GRPC_BASE + 3 )) [session]=$(( GRPC_BASE + 4 )) \
+                  [auth-flow]=$(( GRPC_BASE + 5 )) )
 
 # The front proxies to the gateway through its own origin, so this address is the harness's
 # and the browser's, never a peer's. Exported because Playwright reads it the same way.
@@ -68,8 +75,8 @@ export GATEWAY_URL="http://127.0.0.1:$GW_PORT"
 # plausible-looking "connection refused" during sign-in rather than a missing variable.
 export IDENTITY_GRPC_URL="localhost:${GRPC[identity]}"
 export CREDENTIAL_VAULT_GRPC_URL="localhost:${GRPC[credential-vault]}"
-export SESSION_TOKEN_GRPC_URL="localhost:${GRPC[session-token]}"
-export AUTH_GATEWAY_GRPC_URL="localhost:${GRPC[auth-gateway]}"
+export SESSION_GRPC_URL="localhost:${GRPC[session]}"
+export AUTH_FLOW_GRPC_URL="localhost:${GRPC[auth-flow]}"
 export MFA_GRPC_URL="localhost:39006"
 
 # On NixOS the browsers Playwright downloads do not link against the system: the shared
@@ -97,10 +104,21 @@ PIDS=()
 # `npx` runs the interpreter as its own child, so killing only the recorded pid leaves a node
 # process bound to its port — and the next run, free to pick the same ones, dies on
 # EADDRINUSE against a process that belongs to a test that already reported success.
+#
+# Every descendant, not just the direct child: the front is `npx -> nx -> next dev ->
+# next-server`, and a single-level `pkill -P` stops at the interpreter while the server that
+# actually holds the port keeps running.
+kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null
+}
+
 cleanup() {
   for pid in "${PIDS[@]:-}"; do
-    pkill -P "$pid" 2>/dev/null
-    kill "$pid" 2>/dev/null
+    kill_tree "$pid"
   done
   wait 2>/dev/null
 }
@@ -114,8 +132,8 @@ boot() { # name http_port grpc_port db
   IDENTITY_GRPC_URL="localhost:${GRPC[identity]}" \
   ACCESS_CONTROL_GRPC_URL="localhost:${GRPC[access-control]}" \
   CREDENTIAL_VAULT_GRPC_URL="localhost:${GRPC[credential-vault]}" \
-  SESSION_TOKEN_GRPC_URL="localhost:${GRPC[session-token]}" \
-  AUTH_GATEWAY_GRPC_URL="localhost:${GRPC[auth-gateway]}" \
+  SESSION_GRPC_URL="localhost:${GRPC[session]}" \
+  AUTH_FLOW_GRPC_URL="localhost:${GRPC[auth-flow]}" \
   MFA_GRPC_URL="localhost:39006" \
   TS_NODE_PROJECT="apps/$name/tsconfig.app.json" \
     npx ts-node --transpile-only -r tsconfig-paths/register "apps/$name/src/main.ts" \
@@ -123,18 +141,18 @@ boot() { # name http_port grpc_port db
   PIDS+=($!)
 }
 
-for name in identity access-control credential-vault session-token auth-gateway api-gateway; do
+for name in identity access-control credential-vault session auth-flow api-gateway; do
   : > "$LOG/front-$name.log"
 done
 
-echo "==> booting identity, access-control, credential-vault, session-token, auth-gateway, api-gateway"
-for name in identity access-control credential-vault session-token auth-gateway; do
+echo "==> booting identity, access-control, credential-vault, session, auth-flow, api-gateway"
+for name in identity access-control credential-vault session auth-flow; do
   case "$name" in
     identity)          db=identity ;;
     access-control)    db=access_control ;;
     credential-vault)  db=credential_vault ;;
-    session-token)     db=session_engine ;;
-    auth-gateway)      db=auth_gateway ;;
+    session)     db=session_engine ;;
+    auth-flow)      db=auth_flow ;;
   esac
   boot "$name" "${PORT[$name]}" "${GRPC[$name]}" "$db"
 done
@@ -146,8 +164,8 @@ DATABASE_URL="" SERVICE_NAME=api-gateway PORT="$GW_PORT" \
   GATEWAY_IDENTITY_URL=localhost:${GRPC[identity]} \
   GATEWAY_ACCESS_CONTROL_URL=localhost:${GRPC[access-control]} \
   GATEWAY_CREDENTIAL_VAULT_URL=localhost:${GRPC[credential-vault]} \
-  GATEWAY_SESSION_TOKEN_URL=localhost:${GRPC[session-token]} \
-  GATEWAY_AUTH_GATEWAY_URL=localhost:${GRPC[auth-gateway]} \
+  GATEWAY_SESSION_URL=localhost:${GRPC[session]} \
+  GATEWAY_AUTH_FLOW_URL=localhost:${GRPC[auth-flow]} \
   TS_NODE_PROJECT=apps/api-gateway/tsconfig.app.json \
     npx ts-node --transpile-only -r tsconfig-paths/register apps/api-gateway/src/main.ts \
     > "$LOG/front-api-gateway.log" 2>&1 &
@@ -158,7 +176,7 @@ ready=0
 for _ in $(seq 1 70); do
   up=0
   for p in "$GW_PORT" "${PORT[identity]}" "${PORT[access-control]}" \
-           "${PORT[credential-vault]}" "${PORT[session-token]}" "${PORT[auth-gateway]}"; do
+           "${PORT[credential-vault]}" "${PORT[session]}" "${PORT[auth-flow]}"; do
     curl -sf -m 2 "http://127.0.0.1:$p/health" >/dev/null 2>&1 && up=$((up+1))
   done
   if [ "$up" -eq 6 ]; then ready=1; break; fi
@@ -167,12 +185,36 @@ done
 [ "$ready" -eq 1 ] || echo "  (not every service came up in time; results below may be partial)"
 
 echo
-echo "==> running Playwright against the front on :3000"
+echo "==> starting the front on :3000"
 # The account, the password and the two assertions that need them all live in the spec's
 # beforeAll: a bash step here would mean the same email and password written in two files,
-# and the two drifting is a test that fails for a reason no assertion describes. The front is
-# started by Playwright's own webServer block, so the two only have to agree on where the
-# gateway is.
+# and the two drifting is a test that fails for a reason no assertion describes.
+#
+# The front is started here rather than by Playwright's `webServer` block. Playwright stops
+# that block's process one level deep, which leaves `next dev` bound to :3000 after this
+# script has exited — and `reuseExistingServer` then hands the next run a front whose gateway
+# is already gone, so every test fails against a stale server for a reason no assertion
+# describes. Started here it is one of PIDS, and cleanup can walk the whole tree. The config
+# keeps its webServer block for anyone running Playwright directly; it reuses this front.
+GATEWAY_URL="$GATEWAY_URL" npx nx run @front/front:dev > "$LOG/front-web.log" 2>&1 &
+PIDS+=($!)
+
+front_ready=0
+for _ in $(seq 1 90); do
+  if curl -sf -m 2 http://localhost:3000/ >/dev/null 2>&1; then
+    front_ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$front_ready" -ne 1 ]; then
+  echo "  the front never answered on :3000; see $LOG/front-web.log"
+  tail -20 "$LOG/front-web.log" 2>/dev/null
+  exit 1
+fi
+
+echo
+echo "==> running Playwright against the front on :3000"
 # The exit status of the browser run, kept out of an `if` so a failing Playwright still
 # reaches the summary below — and so a failure cannot be reported as a pass.
 playwright_failed=0
@@ -195,7 +237,7 @@ else
 fi
 echo "================================================"
 if [ "$ready" -ne 1 ]; then
-  for s in identity access-control credential-vault session-token auth-gateway api-gateway; do
+  for s in identity access-control credential-vault session auth-flow api-gateway; do
     echo "--- $s ---"; tail -12 "$LOG/front-$s.log" 2>/dev/null
   done
   exit 1

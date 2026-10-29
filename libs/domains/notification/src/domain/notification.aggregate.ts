@@ -82,6 +82,27 @@ export interface ChannelDelivery {
   readonly deliveredAt: Date;
 }
 
+/**
+ * Public shape a publisher receives from a notification.
+ *
+ * @remarks Used by both the query projection and the announcement so the divergence between
+ * "what a user can see" and "what leaves this service" stays a difference in fields, not a
+ * divergence in when `deliveries` is populated.
+ */
+export interface NotificationPublicRecord {
+  readonly id: NotificationId;
+  readonly userId: string;
+  readonly template: NotificationTemplate;
+  readonly subject: string;
+  readonly severity: NotificationSeverity;
+  readonly channels: readonly NotificationChannel[];
+  readonly deliveries: readonly ChannelDelivery[];
+  readonly redactedVariables: readonly string[];
+  readonly isRead: boolean;
+  readonly readAt: Date | null;
+  readonly createdAt: Date;
+}
+
 /** What a whole notification's dispatch amounted to. */
 export const NotificationOutcome = {
   /** Every requested channel delivered. */
@@ -147,6 +168,8 @@ export interface NotificationRequest {
   readonly channels: readonly NotificationChannel[];
   readonly now?: Date;
   readonly correlationId?: string;
+  /** Whether a rendering adapter may log the rendered body. Defaults to false. */
+  readonly logBody?: boolean;
 }
 
 /** Everything {@link Notification.fromRecord} needs to rebuild a notification from storage. */
@@ -164,12 +187,15 @@ export interface NotificationRecord {
   readonly redactedVariables: readonly string[];
   readonly readAt: Date | null;
   readonly createdAt: Date;
+  readonly logBody?: boolean;
 }
 
 export class Notification extends AggregateRoot<NotificationId> {
-  private _deliveries: readonly ChannelDelivery[] = [];
-  private _redactedVariables: readonly string[] = [];
   private _readAt: Date | null = null;
+  private _variables: NotificationVariables;
+  private _redactedVariables: readonly string[] = [];
+  private _deliveries: ChannelDelivery[] = [];
+  private _logBody: boolean;
 
   private constructor(
     readonly userId: string,
@@ -177,13 +203,16 @@ export class Notification extends AggregateRoot<NotificationId> {
     readonly subject: string,
     readonly body: string,
     readonly severity: NotificationSeverity,
-    readonly variables: NotificationVariables,
+    variables: NotificationVariables,
     readonly recipient: NotificationRecipient,
     readonly channels: readonly NotificationChannel[],
     id: NotificationId,
     createdAt: Date,
   ) {
     super(id, createdAt, createdAt);
+    this._variables = variables;
+    this._redactedVariables = [];
+    this._logBody = false;
   }
 
   /**
@@ -214,6 +243,7 @@ export class Notification extends AggregateRoot<NotificationId> {
     );
 
     notification._redactedVariables = [...(input.redactedVariables ?? [])].sort();
+    notification._logBody = input.logBody ?? false;
     return notification;
   }
 
@@ -233,8 +263,9 @@ export class Notification extends AggregateRoot<NotificationId> {
     );
 
     notification._deliveries = [...record.deliveries];
-    notification._redactedVariables = [...record.redactedVariables];
+    notification._redactedVariables = [...record.redactedVariables].sort();
     notification._readAt = record.readAt;
+    notification._logBody = record.logBody ?? false;
     return notification;
   }
 
@@ -244,6 +275,14 @@ export class Notification extends AggregateRoot<NotificationId> {
 
   get redactedVariables(): readonly string[] {
     return this._redactedVariables;
+  }
+
+  get variables(): NotificationVariables {
+    return this._variables;
+  }
+
+  get logBody(): boolean {
+    return this._logBody;
   }
 
   get readAt(): Date | null {
@@ -290,6 +329,12 @@ export class Notification extends AggregateRoot<NotificationId> {
     this.touch(delivery.deliveredAt);
   }
 
+  /** Used by a handler to replace the aggregate's variable bag with the already-redacted payload. */
+  setVariables(variables: NotificationVariables, redactedVariables: readonly string[]): void {
+    this._variables = variables;
+    this._redactedVariables = [...redactedVariables].sort();
+  }
+
   /**
    * Buffers `notification.dispatched` with the outcome the channel records actually produced.
    *
@@ -327,6 +372,23 @@ export class Notification extends AggregateRoot<NotificationId> {
     this.touch(now);
     this.addDomainEvent(new NotificationRead(this.id, this.userId, now, correlationId));
     return true;
+  }
+
+  /** The public record a store projects from this aggregate. */
+  toPublicRecord(): NotificationPublicRecord {
+    return {
+      id: this.id,
+      userId: this.userId,
+      template: this.template,
+      subject: this.subject,
+      severity: this.severity,
+      channels: this.channels,
+      deliveries: this._deliveries,
+      redactedVariables: this._redactedVariables,
+      isRead: this._readAt !== null,
+      readAt: this._readAt,
+      createdAt: this.createdAt,
+    };
   }
 
   /**

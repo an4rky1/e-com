@@ -9,6 +9,7 @@ import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
 import { HealthModule } from '@auth/platform/health';
+import { ObservabilityModule } from '@auth/platform/observability';
 import { createKafkaModule, createKafkaPublisher } from '@auth/infra/kafka';
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createAuditLogModule } from '@auth/domains/audit-log';
@@ -28,6 +29,7 @@ const eventPublisher = createKafkaPublisher();
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
     HealthModule.forRoot('audit-log'),
+    ObservabilityModule.forRoot('audit-log'),
     // Supplies the Kafka consumer the audit-log module exports but does not provide: the
     // module is consume-driven and takes its transport from here.
     createKafkaModule(),
