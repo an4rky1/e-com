@@ -49,6 +49,11 @@ locals {
     GATEWAY_CREDENTIAL_VAULT_URL = local.grpc_address["credential-vault"]
     GATEWAY_SESSION_URL          = local.grpc_address["session"]
     GATEWAY_AUTH_FLOW_URL        = local.grpc_address["auth-flow"]
+    GATEWAY_CATALOG_URL          = local.grpc_address["catalog"]
+    GATEWAY_CART_URL             = local.grpc_address["cart"]
+    GATEWAY_INVENTORY_URL        = local.grpc_address["inventory"]
+    GATEWAY_BILLING_URL          = local.grpc_address["billing"]
+    GATEWAY_ORDER_URL            = local.grpc_address["order"]
   }
 
   # The orchestrator's peer table — read directly by apps/auth-flow/src/app.module.ts.
@@ -60,6 +65,18 @@ locals {
     SESSION_GRPC_URL          = local.grpc_address["session"]
     MFA_GRPC_URL              = "${local.discovery["mfa"]}:13006"
     ACCOUNT_SECURITY_GRPC_URL = local.grpc_address["account-security"]
+  }
+
+  # Shop peers the order saga and the cart read-model dial directly (raw env, same pattern
+  # as auth-flow). Defaults in each app.module are localhost; ECS needs Cloud Map names.
+  order_peer_env = {
+    CART_GRPC_URL      = local.grpc_address["cart"]
+    INVENTORY_GRPC_URL = local.grpc_address["inventory"]
+    BILLING_GRPC_URL   = local.grpc_address["billing"]
+  }
+
+  cart_peer_env = {
+    CATALOG_GRPC_URL = local.grpc_address["catalog"]
   }
 
   # Env shared by every backend task. OTEL_SDK_DISABLED is not an opinion about tracing —
@@ -78,7 +95,9 @@ locals {
       name == "api-gateway" ? merge(local.gateway_peer_env, {
         GATEWAY_OAUTH_PUBLIC_ORIGIN = var.oauth.public_origin
       }) : {},
-      name == "auth-flow" ? local.auth_flow_peer_env : {}
+      name == "auth-flow" ? local.auth_flow_peer_env : {},
+      name == "order" ? local.order_peer_env : {},
+      name == "cart" ? local.cart_peer_env : {}
     )
   }
 

@@ -66,9 +66,15 @@ describe('sibling topic derivation', () => {
 });
 
 describe('service registry', () => {
-  it('names the eight stateful services plus the gateway', () => {
-    expect(Object.keys(ServiceNames)).toHaveLength(9);
+  it('names every stateful service plus the gateway', () => {
+    // 9 auth-side (gateway + 8 stateful) + 5 shop services.
+    expect(Object.keys(ServiceNames)).toHaveLength(14);
     expect(ServiceNames.API_GATEWAY).toBe('api-gateway');
+    expect(ServiceNames.CATALOG).toBe('catalog');
+    expect(ServiceNames.CART).toBe('cart');
+    expect(ServiceNames.INVENTORY).toBe('inventory');
+    expect(ServiceNames.BILLING).toBe('billing');
+    expect(ServiceNames.ORDER).toBe('order');
   });
 
   it('pairs every grpc package with a dotted v1 suffix', () => {

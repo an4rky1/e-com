@@ -26,10 +26,11 @@ STUB_GATEWAY_URL := http://api-gateway:3000
 # Deterministic Cloud Map name: api-gateway.<ENV>.auth.internal — must match infra/.
 AWS_GATEWAY_URL = http://api-gateway.$(ENV).auth.internal:3000
 
-# The eleven stateful/edge services plus the front. Single source for image builds;
-# api-gateway is stateless but still ships as a container.
+# The stateful/edge services plus the shop slice and the front. Single source for image
+# builds; api-gateway is stateless but still ships as a container.
 SERVICES := identity access-control credential-vault session auth-flow \
-	mfa api-key account-security notification audit-log api-gateway
+	mfa api-key account-security notification audit-log \
+	catalog cart inventory billing order api-gateway
 
 TF_BOOTSTRAP := terraform -chdir=infra/bootstrap
 TF_ENV       := terraform -chdir=infra/envs/$(ENV)

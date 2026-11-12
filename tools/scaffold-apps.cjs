@@ -6,8 +6,21 @@
  * the same service can be run from a different bootstrap — a test harness, a CLI, a serverless
  * adapter — without duplicating wiring.
  */
-const { mkdirSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
+
+/**
+ * Writes only what is not there yet.
+ *
+ * @remarks The committed shells carry edits the template has outgrown — `tracing.ts`,
+ * `ObservabilityModule`, the odd custom comment. Regenerating them would trade those edits
+ * for whatever the template happened to say today, so the scaffold seeds new services and
+ * leaves existing files alone. Deleting a directory is how you ask it to rebuild one.
+ */
+const writeIfMissing = (file, contents) => {
+  if (existsSync(file)) return;
+  writeFileSync(file, contents);
+};
 
 const SERVICES = [
   { dir: 'identity', lib: 'identity', module: 'createIdentityModule', serviceName: 'identity', port: 3001, grpc: 'identity.v1', publisher: true },
@@ -19,6 +32,39 @@ const SERVICES = [
   { dir: 'api-key', lib: 'api-key', module: 'createApiKeyModule', serviceName: 'api-key', port: 3007, grpc: null, publisher: true },
   { dir: 'account-security', lib: 'account-security', module: 'createAccountSecurityModule', serviceName: 'account-security', port: 3008, grpc: 'account_security.v1', publisher: true },
   { dir: 'notification', lib: 'notification', module: 'createNotificationModule', serviceName: 'notification', port: 3009, grpc: null, kafka: true },
+
+  // --- e-commerce ---------------------------------------------------------------
+  // Ports continue after audit-log's 3010; gRPC follows the workspace rule of HTTP+10000.
+  // `alias` differs from `@auth/domains/*`: commerce domains import through `@shop/*`,
+  // the graph name matches the alias so nx and TypeScript tell the same story.
+  // gRPC peers ride in `peers`: one static channel spanning the packages this service
+  // calls, addresses from `<PKG>_GRPC_URL` with a localhost default.
+  {
+    dir: 'catalog', lib: 'catalog', module: 'createCatalogModule', alias: '@shop/domains/catalog',
+    serviceName: 'catalog', port: 3011, grpc: 'catalog.v1', publisher: true,
+  },
+  {
+    dir: 'cart', lib: 'cart', module: 'createCartModule', alias: '@shop/domains/cart',
+    serviceName: 'cart', port: 3012, grpc: 'cart.v1', publisher: false,
+    peers: [{ proto: 'catalog.proto', pkg: 'catalog.v1', env: 'CATALOG_GRPC_URL', url: 'localhost:13011' }],
+  },
+  {
+    dir: 'inventory', lib: 'inventory', module: 'createInventoryModule', alias: '@shop/domains/inventory',
+    serviceName: 'inventory', port: 3013, grpc: 'inventory.v1', publisher: true,
+  },
+  {
+    dir: 'billing', lib: 'billing', module: 'createBillingModule', alias: '@shop/domains/billing',
+    serviceName: 'billing', port: 3014, grpc: 'billing.v1', publisher: true,
+  },
+  {
+    dir: 'order', lib: 'order', module: 'createOrderModule', alias: '@shop/domains/order',
+    serviceName: 'order', port: 3015, grpc: 'order.v1', publisher: true,
+    peers: [
+      { proto: 'cart.proto', pkg: 'cart.v1', env: 'CART_GRPC_URL', url: 'localhost:13012' },
+      { proto: 'inventory.proto', pkg: 'inventory.v1', env: 'INVENTORY_GRPC_URL', url: 'localhost:13013' },
+      { proto: 'billing.proto', pkg: 'billing.v1', env: 'BILLING_GRPC_URL', url: 'localhost:13014' },
+    ],
+  },
 ];
 
 /**
@@ -33,6 +79,11 @@ const PROTO_BY_SERVICE = {
   'session': 'session',
   'auth-flow': 'auth_flow',
   'account-security': 'account_security',
+  catalog: 'catalog',
+  cart: 'cart',
+  inventory: 'inventory',
+  billing: 'billing',
+  order: 'order',
 };
 
 const protoRelative = (service) =>
@@ -41,10 +92,6 @@ const protoRelative = (service) =>
 for (const service of SERVICES) {
   const root = join('apps', service.dir);
   mkdirSync(join(root, 'src'), { recursive: true });
-
-  const grpcImport = service.grpc
-    ? `import { loadServiceDefinition } from '@auth/infra/grpc';`
-    : null;
 
   const grpcMerge = service.grpc
     ? `
@@ -64,7 +111,22 @@ for (const service of SERVICES) {
 `
     : '';
 
-  writeFileSync(
+  writeIfMissing(
+    join(root, 'src', 'tracing.ts'),
+    `/**
+ * @fileoverview Starts the trace SDK before this process's composition root loads.
+ *
+ * @remarks One line by design: the ordering between this import and \`.app.module\` is the
+ * feature, so the file exists to keep the call out of \`main.ts\`'s own logic. See
+ * \`startTracing\` for the instrumentation list and the \`OTEL_*\` surface.
+ */
+import { startTracing } from '@auth/platform/observability';
+
+startTracing('${service.serviceName}');
+`,
+  );
+
+  writeIfMissing(
     join(root, 'src', 'main.ts'),
     `/**
  * @fileoverview Process entry point for ${service.serviceName}.
@@ -74,10 +136,11 @@ for (const service of SERVICES) {
  * graceful shutdown order.
  */
 import 'reflect-metadata';
+import './tracing';
 import path from 'node:path';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-${service.grpc ? "import { Transport } from '@nestjs/microservices';\n" : ''}${grpcImport ? grpcImport + '\n' : ''}import { AppModule } from './app.module';
+${service.grpc ? "import { Transport } from '@nestjs/microservices';\n" : ''}import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -95,14 +158,13 @@ ${grpcMerge}
 bootstrap().catch((error: unknown) => {
   // Logging and a non-zero exit, never a silent swallow: a service that dies during bootstrap
   // must be visibly dead to its orchestrator.
-  // eslint-disable-next-line no-console
   console.error('Bootstrap failed', error);
   process.exit(1);
 });
 `,
   );
 
-  writeFileSync(
+  writeIfMissing(
     join(root, 'src', 'app.module.ts'),
     `/**
  * @fileoverview Composition root for ${service.serviceName}.
@@ -115,9 +177,10 @@ import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
 import { HealthModule } from '@auth/platform/health';
+import { ObservabilityModule } from '@auth/platform/observability';
 ${service.kafka ? `import { createKafkaModule } from '@auth/infra/kafka';` : ''}
 import { ShutdownService } from '@auth/platform/shutdown';
-import { ${service.module} } from '@auth/domains/${service.lib}';
+import { ${service.module} } from '${service.alias ?? `@auth/domains/${service.lib}`}';
 ${service.publisher ? `import { createKafkaPublisher } from '@auth/infra/kafka';
 
 /**
@@ -127,6 +190,26 @@ ${service.publisher ? `import { createKafkaPublisher } from '@auth/infra/kafka';
  * leave this process over Kafka. The domain module sees nothing but the transport port.
  */
 const eventPublisher = createKafkaPublisher();` : ''}
+${service.peers ? `import { createStaticGrpcChannel } from '@auth/infra/grpc';
+import path from 'node:path';
+
+/**
+ * Downstream channels for the peers this service calls over gRPC.
+ *
+ * @remarks One channel spans every peer package, because a channel built from a single
+ * proto can only dispatch that package's methods — an orchestrator wired with one proto
+ * works for its first dependency and fails on its second with an error that reads like a
+ * missing method rather than a missing address.
+ */
+const PROTO_DIR = path.resolve(__dirname, '../../../libs/contracts/proto');
+
+const peerChannel = createStaticGrpcChannel({
+  protoPaths: [${service.peers.map((p) => `path.join(PROTO_DIR, '${p.proto}')`).join(', ')}],
+  url: process.env.${service.peers[0].env} ?? '${service.peers[0].url}',
+  addresses: {
+${service.peers.map((p) => `    '${p.pkg}': process.env.${p.env} ?? '${p.url}',`).join('\n')}
+  },
+});` : ''}
 ${service.downstream ? `import { createStaticGrpcChannel } from '@auth/infra/grpc';
 import path from 'node:path';
 
@@ -165,10 +248,17 @@ const downstreamChannel = createStaticGrpcChannel({
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
     HealthModule.forRoot('${service.serviceName}'),
+    ObservabilityModule.forRoot('${service.serviceName}'),
 ${service.kafka ? `    // Supplies the Kafka consumer the notification module exports but does not
     // provide: the module is consumer-only and takes its transport from here.
     createKafkaModule(),` : ''}
-    ${service.module}(${service.publisher || service.downstream ? `{ ${service.publisher ? 'publisher: eventPublisher' : ''}${service.publisher && service.downstream ? ', ' : ''}${service.downstream ? 'grpcChannel: downstreamChannel' : ''} }` : ''}),
+    ${service.module}({${[
+      service.publisher ? 'publisher: eventPublisher' : null,
+      service.peers ? 'grpcChannel: peerChannel' : null,
+      service.downstream ? 'grpcChannel: downstreamChannel' : null,
+    ]
+      .filter(Boolean)
+      .join(', ')}}),
   ],
   providers: [ShutdownService],
   exports: [ShutdownService],
@@ -177,7 +267,7 @@ export class AppModule {}
 `,
   );
 
-  writeFileSync(
+  writeIfMissing(
     join(root, 'project.json'),
     `${JSON.stringify(
       {
@@ -185,7 +275,7 @@ export class AppModule {}
         $schema: '../../node_modules/nx/schemas/project-schema.json',
         sourceRoot: `apps/${service.dir}/src`,
         projectType: 'application',
-        tags: ['type:app'],
+        tags: ['type:app', `domain:${service.dir}`],
         targets: {
           typecheck: {
             executor: 'nx:run-commands',
@@ -206,7 +296,7 @@ export class AppModule {}
     )}\n`,
   );
 
-  writeFileSync(
+  writeIfMissing(
     join(root, 'tsconfig.app.json'),
     `${JSON.stringify(
       {

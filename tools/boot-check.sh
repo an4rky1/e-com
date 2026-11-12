@@ -37,20 +37,31 @@ declare -a SERVICES=(
   "account-security:account_security"
   "notification:notify"
   "audit-log:audit_log"
+  "catalog:catalog"
+  "cart:cart"
+  "inventory:inventory"
+  "billing:billing"
+  "order:order"
   "api-gateway:api_gateway"
 )
 
 # auth-flow needs a downstream channel and a real peer for its gRPC adapters.
 export IDENTITY_GRPC_URL=localhost:30001
 
-# The api-gateway is the edge: five peer packages, each on its own host. It has no database,
+# The api-gateway is the edge: every peer package, each on its own host. It has no database,
 # so the `DATABASE_URL` the loop hands every service is ignored rather than refused — which is
-# the point of the check for this one.
+# the point of the check for this one. Shop peers use the same dead-but-honest ports the
+# e2e scripts dial; boot only needs the address to resolve at channel construction.
 export GATEWAY_IDENTITY_URL=localhost:30001
 export GATEWAY_ACCESS_CONTROL_URL=localhost:30002
 export GATEWAY_CREDENTIAL_VAULT_URL=localhost:30003
 export GATEWAY_SESSION_URL=localhost:30004
 export GATEWAY_AUTH_FLOW_URL=localhost:30005
+export GATEWAY_CATALOG_URL=localhost:30011
+export GATEWAY_CART_URL=localhost:30012
+export GATEWAY_INVENTORY_URL=localhost:30013
+export GATEWAY_BILLING_URL=localhost:30014
+export GATEWAY_ORDER_URL=localhost:30015
 
 # Secrets a service legitimately refuses to default. `mfa` fails fast without its AES key,
 # which is correct: a secret that silently falls back is worse than a service that will not

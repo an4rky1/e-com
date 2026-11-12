@@ -1,0 +1,26 @@
+{
+  "name": "@auth/infra/http-client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/http-client/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/http-client/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/infra/http-client"
+      ],
+      "options": {
+        "jestConfig": "libs/infra/http-client/jest.config.ts"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@app/inventory",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/inventory/src",
+  "projectType": "application",
+  "tags": [
+    "type:app",
+    "domain:inventory"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/inventory/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/inventory/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/inventory/src/main.ts"
+      }
+    }
+  }
+}

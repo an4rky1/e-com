@@ -1,16 +1,15 @@
 /**
  * @fileoverview Prisma adapter for `account_security`.
  *
- * @remarks The transactional-outbox guarantee lives here. Every mutation goes through
- * `runInTransaction` and writes its `outbox_events` rows in the *same* transaction as the state
- * change, so either a consumer eventually hears about a login or nothing about it exists —
- * never a signal that was stored and never announced, and never an announcement of something
- * that was rolled back.
+ * @remarks The transactional-outbox guarantee lives here. Every mutation goes through the
+ * event sink, which writes the `outbox_events` rows for classified events in the *same*
+ * transaction as the state change, so either a consumer eventually hears about a login or
+ * nothing about it exists — never a signal that was stored and never announced, and never an
+ * announcement of something that was rolled back.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaService } from '@auth/infra/prisma';
-import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/core';
+import { DOMAIN_EVENT_SINK, type DomainEventSink } from '@auth/infra/events';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 import { ACCOUNT_SECURITY_PRISMA } from '../../account-security.config';
 import type { LoginAttempt, LoginHistoryRow } from '../../domain/login-attempt.aggregate';
@@ -24,33 +23,11 @@ import type { DeviceSignals } from '../../domain/value-objects/device-fingerprin
 import { GeoLocation } from '../../domain/value-objects/geo-location.vo';
 import { SecuritySignalType } from '../../domain/value-objects/security-signal-type.vo';
 
-/**
- * The domain-event -> topic mapping.
- *
- * @remarks Every event this service raises has exactly one topic, and the mapping is a single
- * lookup so adding a signal type cannot invent a topic name no consumer subscribes to. The
- * attempt's own `login.succeeded` / `login.failed` facts are deliberately *not* here: the
- * durable record of a login is the `login_history` row, and the catalogue gives this service
- * three topics and none of them is "a login happened". An event with no topic is skipped
- * quietly — a warn per sign-in would drown the one warning that matters.
- */
-const TOPIC_FOR_EVENT: Record<string, string> = {
-  'security.new_device_detected': Topics.SECURITY_NEW_DEVICE_DETECTED,
-  'security.suspicious_login_detected': Topics.SECURITY_SUSPICIOUS_LOGIN_DETECTED,
-  'security.anomaly_detected': Topics.SECURITY_ANOMALY_DETECTED,
-  // The two account-lifecycle facts ride on the anomaly topic: a consumer keeping a count of
-  // locked accounts or a device list has to hear about both, and a fifth topic would mean a
-  // second subscription for a fact that already has one.
-  'account.locked': Topics.SECURITY_ANOMALY_DETECTED,
-  'account.unlocked': Topics.SECURITY_ANOMALY_DETECTED,
-};
-
 @Injectable()
 export class PrismaSecurityRepository implements SecurityRepositoryPort {
-  private readonly logger = new Logger(PrismaSecurityRepository.name);
-
   constructor(
     @Inject(ACCOUNT_SECURITY_PRISMA) private readonly prisma: PrismaService<PrismaClient>,
+    @Inject(DOMAIN_EVENT_SINK) private readonly sink: DomainEventSink,
   ) {}
 
   /**
@@ -68,13 +45,20 @@ export class PrismaSecurityRepository implements SecurityRepositoryPort {
       return;
     }
 
-    await this.prisma.runInTransaction(async (client) => {
+    const pending = signals.map((signal) => ({ signal, events: signal.clearDomainEvents() }));
+    const events = [...pending.flatMap(({ events }) => events), ...attempt.clearDomainEvents()];
+
+    await this.sink.run(this.prisma, events, async (client) => {
       if (row !== null) {
         await client.login_history.createMany({ data: [toLoginRow(row)], skipDuplicates: true });
       }
 
-      await this.writeSignals(client, signals);
-      await this.writeAttemptEvents(client, attempt);
+      if (pending.length > 0) {
+        await client.security_signals.createMany({
+          data: pending.map(({ signal }) => toSignalRow(signal)),
+          skipDuplicates: true,
+        });
+      }
     });
   }
 
@@ -86,94 +70,14 @@ export class PrismaSecurityRepository implements SecurityRepositoryPort {
   async saveSignals(signals: readonly SecuritySignal[]): Promise<void> {
     if (signals.length === 0) return;
 
-    await this.prisma.runInTransaction(async (client) => {
-      await this.writeSignals(client, signals);
-    });
-  }
-
-  private async writeSignals(
-    client: PrismaClient,
-    signals: readonly SecuritySignal[],
-  ): Promise<void> {
-    if (signals.length === 0) return;
-
     const pending = signals.map((signal) => ({ signal, events: signal.clearDomainEvents() }));
+    const events = pending.flatMap(({ events }) => events);
 
-    await client.security_signals.createMany({
-      data: pending.map(({ signal }) => toSignalRow(signal)),
-      skipDuplicates: true,
-    });
-
-    for (const { signal, events } of pending) {
-      for (const event of events) {
-        await this.enqueue(client, event, signal.id, signal.userId);
-      }
-    }
-  }
-
-  private async writeAttemptEvents(client: PrismaClient, attempt: LoginAttempt): Promise<void> {
-    const events = attempt.clearDomainEvents();
-    const userId = attempt.userId;
-
-    for (const event of events) {
-      // An attempt with no resolvable account cannot be partitioned by one, and cannot be
-      // announced: both the row's foreign key and the partition key would be missing.
-      if (userId === null) continue;
-      await this.enqueue(client, event, attempt.id, userId);
-    }
-  }
-
-  /**
-   * Writes one outbox row per domain event.
-   *
-   * @remarks `dedup_key` is what makes a redelivered command safe: the unique index on
-   * `(dedup_key, type)` turns a second insert of the same fact into a no-op instead of a
-   * duplicate `security.anomaly_detected`. The key ends in the event's version so two
-   * *different* anomalies about the same user are still two events.
-   */
-  private async enqueue(
-    client: PrismaClient,
-    event: IDomainEvent,
-    aggregateId: string,
-    userId: string,
-  ): Promise<void> {
-    const topic = TOPIC_FOR_EVENT[event.eventType];
-    if (topic === undefined) return;
-
-    const payload = readPayload(event);
-    const dedupKey = `${event.eventType}:${aggregateId}:${event.version}`;
-
-    await client.outbox_events.createMany({
-      data: [
-        {
-          id: event.eventId,
-          type: event.eventType,
-          aggregate_type: event.aggregateType,
-          aggregate_id: aggregateId,
-          topic,
-          // `payload` is a JSON column, so it needs Prisma's Json input type rather than a
-          // plain Record; the cast is the documented boundary for that conversion.
-          payload: {
-            eventId: event.eventId,
-            type: topic,
-            schemaVersion: 1,
-            occurredAt: event.occurredAt.toISOString(),
-            aggregateId,
-            aggregateType: event.aggregateType,
-            // The partition key is the *user*, not the attempt or the signal: two signals about
-            // the same account have to land on the same partition or a consumer cannot order
-            // them, and the order of "locked" against "unlocked" is the whole meaning.
-            partitionKey: userId,
-            payload: { ...payload, userId },
-          } as unknown as Prisma.InputJsonValue,
-          dedup_key: dedupKey,
-          status: 'pending',
-          attempts: 0,
-          next_attempt_at: event.occurredAt,
-          trace_id: event.correlationId ?? crypto.randomUUID(),
-        },
-      ],
-      skipDuplicates: true,
+    await this.sink.run(this.prisma, events, async (client) => {
+      await client.security_signals.createMany({
+        data: pending.map(({ signal }) => toSignalRow(signal)),
+        skipDuplicates: true,
+      });
     });
   }
 
@@ -365,19 +269,6 @@ function toLocation(
 ): GeoLocation | null {
   if (latitude === null || longitude === null) return null;
   return GeoLocation.fromRow(latitude, longitude, country);
-}
-
-/**
- * A domain event's payload.
- *
- * @remarks `IDomainEvent` carries no `payload` field by design — the interface is the transport
- * shape and a payload is the concrete event's business — so reading one needs a widening cast.
- */
-function readPayload(event: IDomainEvent): Record<string, unknown> {
-  const candidate = event as unknown as { payload?: unknown };
-  return typeof candidate.payload === 'object' && candidate.payload !== null
-    ? (candidate.payload as Record<string, unknown>)
-    : {};
 }
 
 /** `security_signals.details` is a `json` column and may legally hold a scalar or an array. */

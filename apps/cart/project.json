@@ -1,0 +1,24 @@
+{
+  "name": "@app/cart",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/cart/src",
+  "projectType": "application",
+  "tags": [
+    "type:app",
+    "domain:cart"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/cart/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/cart/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/cart/src/main.ts"
+      }
+    }
+  }
+}

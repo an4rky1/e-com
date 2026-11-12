@@ -14,6 +14,7 @@ import {
   PrismaOutboxRepository,
   type EventPublisher,
 } from '@auth/infra/outbox';
+import { domainEventProviders } from '@auth/infra/events';
 import { REDIS } from '@auth/infra/redis';
 import type { Redis } from 'ioredis';
 import { PrismaClient } from './generated/prisma/client';
@@ -43,6 +44,7 @@ import { FAILURE_TRACKER } from './domain/ports/failure-tracker.port';
 import { RISK_SCORING } from './domain/ports/risk-scoring.port';
 import { RiskScoringService } from './domain/services/risk-scoring.service';
 import { PrismaSecurityRepository } from './infrastructure/persistence/prisma-security.repository';
+import { ACCOUNT_SECURITY_EVENTS } from './infrastructure/events/account-security.events';
 import {
   NoopFailureTracker,
   RedisFailureTracker,
@@ -156,6 +158,7 @@ export function createAccountSecurityModule(
       },
       rateStoreProvider,
       scoringProvider,
+      ...domainEventProviders(ACCOUNT_SECURITY_EVENTS),
       { provide: SECURITY_REPOSITORY, useClass: PrismaSecurityRepository },
       // The registry and the counters are the same Redis keys, so the same object fills both
       // tokens. Two instances would mean two connections doing one job.

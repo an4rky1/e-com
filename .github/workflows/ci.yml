@@ -107,7 +107,8 @@ jobs:
         # api-gateway is absent on purpose: it holds no state.
         run: |
           for db in identity access_control credential_vault session_engine auth_flow \
-                    mfa api_key account_security notify audit_log; do
+                    mfa api_key account_security notify audit_log \
+                    catalog cart inventory billing order; do
             PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
               -c "CREATE DATABASE $db"
           done

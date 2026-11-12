@@ -12,6 +12,7 @@ import type {
   TokenPair,
 } from '@auth/contracts/http';
 import OAuthButtons from './oauth-buttons';
+import { clearSession, writeSession } from '../lib/session';
 import styles from './page.module.scss';
 
 // Signed-in state is `GET /auth/me`'s answer, read through its contract type. The tokens
@@ -59,6 +60,15 @@ export default function Index() {
       }
 
       tokens.current = payload;
+
+      // Multi-page storefront (cart, checkout, orders) shares this pair across navigation.
+      // The ref still owns the sign-in screen; sessionStorage is the hand-off between pages.
+      writeSession({
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        sessionId: payload.sessionId,
+        expiresIn: payload.expiresIn,
+      });
 
       const caller = await loadCaller(payload.accessToken);
       if (caller === null) return;
@@ -122,9 +132,15 @@ export default function Index() {
       sessionId: params.get('session_id') ?? '',
     };
     window.history.replaceState(null, '', window.location.pathname);
-    tokens.current = pair;
+      tokens.current = pair;
+      writeSession({
+        accessToken: pair.accessToken,
+        refreshToken: pair.refreshToken,
+        sessionId: pair.sessionId,
+        expiresIn: pair.expiresIn,
+      });
 
-    void (async () => {
+      void (async () => {
       const caller = await loadCaller(pair.accessToken);
       if (caller !== null) setSignedIn(caller);
     })();
@@ -162,6 +178,12 @@ export default function Index() {
       }
 
       tokens.current = payload;
+      writeSession({
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        sessionId: payload.sessionId,
+        expiresIn: payload.expiresIn,
+      });
       setInfo(`Session refreshed; the new access token lives ${payload.expiresIn}s`);
     } catch {
       setMessage('The gateway did not answer');
@@ -200,6 +222,7 @@ export default function Index() {
     setEmail('');
     setPassword('');
     tokens.current = null;
+    clearSession();
 
     if (accessToken) {
       void fetch(viaProxy(ApiRoutes.logout), {
@@ -312,6 +335,9 @@ export default function Index() {
       <nav className={styles.nav}>
         <Link href="/register">Create an account</Link>
         <Link href="/playground">API playground</Link>
+        <Link href="/shop">Shop</Link>
+        <Link href="/cart">Cart</Link>
+        <Link href="/orders">Orders</Link>
       </nav>
     </main>
   );

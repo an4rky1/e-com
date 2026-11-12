@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package order.v1;
+
+// Order owns its own state machine and nothing else: not money (billing charges), not
+// stock (inventory reserves), not the cart (read once, at creation, and copied into a
+// snapshot the order keeps for itself).
+service OrderService {
+  // Creates an order from a cart snapshot. Idempotent per idempotency_key: the same
+  // key with the same payload returns the same order; with a different payload it is
+  // an IDEMPOTENCY_CONFLICT, not a silent second order.
+  rpc CreateOrder (CreateOrderRequest) returns (Order);
+  rpc GetOrder (GetOrderRequest) returns (Order);
+  rpc ListUserOrders (ListUserOrdersRequest) returns (ListUserOrdersResponse);
+  rpc CancelOrder (CancelOrderRequest) returns (Order);
+}
+
+message Money {
+  string amount_minor = 1;
+  string currency = 2;
+}
+
+message OrderLine {
+  string sku = 1;
+  string product_id = 2;
+  string name = 3;
+  int32 quantity = 4;
+  Money unit_price = 5;
+  Money total_price = 6;
+}
+
+message Order {
+  string id = 1;
+  string user_id = 2;
+  // draft | pending_payment | paid | confirmed | shipped | delivered | completed | canceled.
+  string status = 3;
+  repeated OrderLine lines = 4;
+  Money subtotal = 5;
+  Money total = 6;
+  string currency = 7;
+  string payment_id = 8;
+  string created_at = 9;
+  string updated_at = 10;
+  int32 version = 11;
+  // Present when the last transition was a cancellation worth surfacing to the client.
+  string cancel_reason = 12;
+}
+
+message CreateOrderRequest {
+  string user_id = 1;
+  string session_id = 2;
+  // Caller-chosen, carried in the Idempotency-Key header. Required.
+  string idempotency_key = 3;
+  string currency = 4;
+  // Opaque PSP token for the checkout charge, obtained from the client-side SDK.
+  // Empty means the configured default test instrument; card numbers never reach
+  // this service.
+  string payment_method_token = 5;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+}
+
+message ListUserOrdersRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListUserOrdersResponse {
+  repeated Order orders = 1;
+  int32 total = 2;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+  string reason = 3;
+}

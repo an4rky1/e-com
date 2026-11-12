@@ -1,11 +1,13 @@
 import {
   API_PROXY_PREFIX,
+  AllRoutes,
   ApiRoutes,
   DISPLAY_NAME_MAX_LENGTH,
   EMAIL_MAX_LENGTH,
   OAUTH_PROVIDERS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  StorefrontRoutes,
   apiErrorMessage,
   isApiErrorResponse,
   isOAuthProvider,
@@ -14,7 +16,7 @@ import {
 } from '../src/http';
 
 describe('http surface', () => {
-  it('pins the ten routes a client may call', () => {
+  it('pins the ten auth routes a client may call', () => {
     expect(Object.keys(ApiRoutes)).toEqual([
       'login',
       'register',
@@ -81,6 +83,60 @@ describe('http surface', () => {
       'oauthCallback',
       'createUser',
     ]);
+  });
+
+  it('pins the storefront routes', () => {
+    expect(Object.keys(StorefrontRoutes)).toEqual([
+      'catalogList',
+      'catalogProduct',
+      'catalogCreateProduct',
+      'catalogSetPrice',
+      'cartGet',
+      'cartAddItem',
+      'cartUpdateItem',
+      'cartRemoveItem',
+      'cartClear',
+      'checkoutPreview',
+      'checkoutCreate',
+      'orderList',
+      'orderGet',
+      'orderCancel',
+      'paymentWebhook',
+    ]);
+    expect(StorefrontRoutes.catalogList).toEqual({
+      method: 'GET',
+      path: '/catalog',
+      authenticated: false,
+    });
+    expect(StorefrontRoutes.paymentWebhook).toEqual({
+      method: 'POST',
+      path: '/webhooks/payment',
+      authenticated: false,
+    });
+    expect(StorefrontRoutes.checkoutCreate).toEqual({
+      method: 'POST',
+      path: '/checkout',
+      authenticated: true,
+    });
+  });
+
+  it('marks exactly the storefront routes without a session', () => {
+    // Browsing the catalog needs no account; the PSP webhook is signed, not sessioned.
+    const publicRoutes = Object.entries(StorefrontRoutes)
+      .filter(([, route]) => !route.authenticated)
+      .map(([name]) => name);
+    expect(publicRoutes).toEqual(['catalogList', 'catalogProduct', 'paymentWebhook']);
+  });
+
+  it('joins both maps into the client-facing surface without collisions', () => {
+    expect(Object.keys(AllRoutes)).toHaveLength(
+      Object.keys(ApiRoutes).length + Object.keys(StorefrontRoutes).length,
+    );
+    for (const name of Object.keys(ApiRoutes)) {
+      expect(AllRoutes[name as keyof typeof ApiRoutes]).toBe(
+        ApiRoutes[name as keyof typeof ApiRoutes],
+      );
+    }
   });
 
   it('reaches every route through the proxy prefix', () => {

@@ -94,6 +94,27 @@ export const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
   '/session.v1.SessionService/ValidateAccessToken',
   '/account_security.v1.AccountSecurityService/AssessLoginRisk',
   '/account_security.v1.AccountSecurityService/ListDevices',
+  // Shop reads.
+  '/catalog.v1.CatalogService/GetProduct',
+  '/catalog.v1.CatalogService/ListByCategory',
+  '/catalog.v1.CatalogService/GetPricing',
+  '/cart.v1.CartService/GetCart',
+  '/cart.v1.CartService/GetCheckoutLines',
+  '/cart.v1.CartService/ValidateForCheckout',
+  '/inventory.v1.InventoryService/GetAvailable',
+  '/billing.v1.BillingService/GetInvoice',
+  '/billing.v1.BillingService/PreviewTotals',
+  '/order.v1.OrderService/GetOrder',
+  '/order.v1.OrderService/ListUserOrders',
+  // Shop writes that are idempotent by contract: a redelivered reserve for the same
+  // order, a charge with the same business key or a release for an order with nothing
+  // reserved must all answer exactly as the first delivery did.
+  '/cart.v1.CartService/ClearCart',
+  '/inventory.v1.InventoryService/Reserve',
+  '/inventory.v1.InventoryService/Release',
+  '/inventory.v1.InventoryService/AdjustStock',
+  '/billing.v1.BillingService/ChargeOrder',
+  '/billing.v1.BillingService/RefundOrder',
 ]);
 
 export type RetryDecision =

@@ -42,7 +42,8 @@ x-backend-env: &backend-env
   SESSION_ACCESS_TOKEN_SIGNING_KEY: ${STUB_SESSION_ACCESS_TOKEN_SIGNING_KEY:-stub-session-access-token-signing-key}
   SESSION_REFRESH_TOKEN_PEPPER: ${STUB_SESSION_REFRESH_TOKEN_PEPPER:-stub-refresh-token-pepper}
   VAULT_PEPPER: ${STUB_VAULT_PEPPER:-stub-vault-pepper}
-  MFA_SECRET_ENCRYPTION_KEY: ${STUB_MFA_SECRET_ENCRYPTION_KEY:-stub-mfa-secret-encryption-key}
+  # 32 bytes base64 — the vault refuses to boot on anything else (see aes-gcm-secret-vault.ts).
+  MFA_SECRET_ENCRYPTION_KEY: ${STUB_MFA_SECRET_ENCRYPTION_KEY:-08QXXtUerFtMFYUcywlnP4qfoYVmUK/IGLZurvixxlA=}
   GATEWAY_JWT_SECRET: ${STUB_GATEWAY_JWT_SECRET:-stub-gateway-jwt-secret}
 
 services:
@@ -158,6 +159,66 @@ services:
       PORT: '3010'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/audit_log
 
+  catalog:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/catalog:${TAG:-local}
+    ports: ['3011:3011']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: catalog
+      PORT: '3011'
+      GRPC_URL: 0.0.0.0:13011
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/catalog
+
+  cart:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/cart:${TAG:-local}
+    ports: ['3012:3012']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: cart
+      PORT: '3012'
+      GRPC_URL: 0.0.0.0:13012
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/cart
+
+  inventory:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/inventory:${TAG:-local}
+    ports: ['3013:3013']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: inventory
+      PORT: '3013'
+      GRPC_URL: 0.0.0.0:13013
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inventory
+
+  billing:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/billing:${TAG:-local}
+    ports: ['3014:3014']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: billing
+      PORT: '3014'
+      GRPC_URL: 0.0.0.0:13014
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/billing
+
+  order:
+    <<: *backend
+    image: ${ECR_REPOSITORY:-auth-platform}/order:${TAG:-local}
+    ports: ['3015:3015']
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: order
+      PORT: '3015'
+      GRPC_URL: 0.0.0.0:13015
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/order
+      # Order's saga dials inventory, billing and cart the way auth-flow dials identity.
+      INVENTORY_GRPC_URL: inventory:13013
+      BILLING_GRPC_URL: billing:13014
+      CART_GRPC_URL: cart:13012
+      CATALOG_GRPC_URL: catalog:13011
+
   # The edge: unpublished on purpose. The front reaches it over the compose network
   # (GATEWAY_URL=http://api-gateway:3000), exactly as ECS reaches it through Cloud Map —
   # port 3000 on the host belongs to the front, and nothing outside the network should be
@@ -174,8 +235,24 @@ services:
       GATEWAY_CREDENTIAL_VAULT_URL: credential-vault:13003
       GATEWAY_SESSION_URL: session:13004
       GATEWAY_AUTH_FLOW_URL: auth-flow:13005
-      GATEWAY_OAUTH_PUBLIC_ORIGIN: ''
+      GATEWAY_CATALOG_URL: catalog:13011
+      GATEWAY_CART_URL: cart:13012
+      GATEWAY_INVENTORY_URL: inventory:13013
+      GATEWAY_BILLING_URL: billing:13014
+      GATEWAY_ORDER_URL: order:13015
+      # The OAuth walk, passed through from the host (its environment or the project
+      # `.env.local` file — compose interpolates both, `.env.local` it does not read). Empty
+      # means disabled: a provider with no client pair resolves to `null` and the front
+      # withholds the button, which is exactly the local default until someone fills
+      # these in.
+      GATEWAY_OAUTH_PUBLIC_ORIGIN: ${GATEWAY_OAUTH_PUBLIC_ORIGIN:-}
       GATEWAY_OAUTH_STATE_SECRET: ${STUB_GATEWAY_OAUTH_STATE_SECRET:-stub-oauth-state-secret}
+      GATEWAY_OAUTH_GOOGLE_CLIENT_ID: ${GATEWAY_OAUTH_GOOGLE_CLIENT_ID:-}
+      GATEWAY_OAUTH_GOOGLE_CLIENT_SECRET: ${GATEWAY_OAUTH_GOOGLE_CLIENT_SECRET:-}
+      GATEWAY_OAUTH_GITHUB_CLIENT_ID: ${GATEWAY_OAUTH_GITHUB_CLIENT_ID:-}
+      GATEWAY_OAUTH_GITHUB_CLIENT_SECRET: ${GATEWAY_OAUTH_GITHUB_CLIENT_SECRET:-}
+      GATEWAY_OAUTH_TELEGRAM_BOT_TOKEN: ${GATEWAY_OAUTH_TELEGRAM_BOT_TOKEN:-}
+      GATEWAY_OAUTH_TELEGRAM_BOT_USERNAME: ${GATEWAY_OAUTH_TELEGRAM_BOT_USERNAME:-}
 
   front:
     image: ${ECR_REPOSITORY:-auth-platform}/front:${TAG:-local}

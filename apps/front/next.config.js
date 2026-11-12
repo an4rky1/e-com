@@ -38,6 +38,47 @@ const nextConfig = {
         source: '/api/users/:path*',
         destination: `${GATEWAY_URL}/users/:path*`,
       },
+      // Storefront routes under the same prefix: catalog, cart, checkout and orders are
+      // gateway paths like the auth ones, and a second base URL in a component would be
+      // exactly the knowledge `API_PROXY_PREFIX` exists to remove.
+      {
+        source: '/api/catalog/:path*',
+        destination: `${GATEWAY_URL}/catalog/:path*`,
+      },
+      {
+        source: '/api/cart/:path*',
+        destination: `${GATEWAY_URL}/cart/:path*`,
+      },
+      {
+        source: '/api/checkout/:path*',
+        destination: `${GATEWAY_URL}/checkout/:path*`,
+      },
+      {
+        source: '/api/orders/:path*',
+        destination: `${GATEWAY_URL}/orders/:path*`,
+      },
+      {
+        source: '/api/webhooks/:path*',
+        destination: `${GATEWAY_URL}/webhooks/:path*`,
+      },
+      // The bare `/api/catalog` (no trailing segment) is not matched by `:path*` on every
+      // Next version the same way; the explicit sibling keeps GET /catalog reachable.
+      {
+        source: '/api/catalog',
+        destination: `${GATEWAY_URL}/catalog`,
+      },
+      {
+        source: '/api/cart',
+        destination: `${GATEWAY_URL}/cart`,
+      },
+      {
+        source: '/api/checkout',
+        destination: `${GATEWAY_URL}/checkout`,
+      },
+      {
+        source: '/api/orders',
+        destination: `${GATEWAY_URL}/orders`,
+      },
     ];
   },
 };

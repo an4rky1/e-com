@@ -1,0 +1,117 @@
+/**
+ * order service schema — source of truth, pulled from the live database DDL.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ *
+ * @remarks E0 ships the platform tables every stateful service carries (outbox, idempotency).
+ * The order tables themselves arrive with the order phase, when the state machine decides
+ * what columns it needs — a schema designed before the aggregate is how a migration lands
+ * with the wrong shape.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/order/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model idempotency_keys {
+  key        String   @id
+  response   Json
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idempotency_keys_created_idx")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              OutboxStatus @default(pending)
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}
+
+/// One order header. Status is the state machine's single source of truth; the
+/// money columns are frozen at creation so a later price change never rewrites
+/// what the customer already agreed to pay.
+model orders {
+  id               String    @id @db.Uuid
+  user_id          String
+  session_id       String?
+  status           String
+  currency         String
+  subtotal_minor   Int
+  total_minor      Int
+  payment_id       String?
+  cancel_reason    String?
+  /// Caller-chosen Idempotency-Key. Unique so a redelivered CreateOrder cannot
+  /// mint a second order; the fingerprint of the request payload lives beside it
+  /// so a *different* payload under the same key is a conflict, not a replay.
+  idempotency_key  String?   @unique
+  request_fingerprint String?
+  version          Int       @default(1)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  lines            order_lines[]
+
+  @@index([user_id, created_at], map: "orders_user_created_idx")
+  @@index([status], map: "orders_status_idx")
+}
+
+/// Snapshot lines. Frozen at creation: the order keeps its own copy of name and
+/// price so a catalogue edit never changes an historical invoice.
+model order_lines {
+  id                String  @id @db.Uuid
+  order_id          String  @db.Uuid
+  sku               String
+  product_id        String
+  name              String
+  quantity          Int
+  unit_price_minor  Int
+  total_price_minor Int
+  orders            orders  @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([order_id], map: "order_lines_order_idx")
+  @@index([sku], map: "order_lines_sku_idx")
+}

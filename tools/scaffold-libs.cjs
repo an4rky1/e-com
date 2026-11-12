@@ -28,6 +28,11 @@ const LIBS = [
   ['infra/grpc', ['type:infra'], true],
   ['infra/queue', ['type:infra'], true],
   ['infra/rate-limit', ['type:infra'], true],
+  ['infra/distributed-locking', ['type:infra'], true],
+  ['infra/scheduler-cron', ['type:infra'], true],
+  ['infra/http-client', ['type:infra'], true],
+  ['infra/incoming-webhooks', ['type:infra'], true],
+  ['infra/encryption', ['type:infra'], true],
 
   ['domains/identity', ['type:domain', 'domain:identity'], true],
   ['domains/access-control', ['type:domain', 'domain:access-control'], true],
@@ -39,6 +44,15 @@ const LIBS = [
   ['domains/account-security', ['type:domain', 'domain:account-security'], true],
   ['domains/notification', ['type:domain', 'domain:notification'], true],
   ['domains/audit-log', ['type:domain', 'domain:audit-log'], true],
+  // E-commerce domains live under the same directory convention but carry a distinct
+  // import root (`@shop/*`): the workspace's `@auth/` prefix is a historical name for an
+  // auth platform, and a commerce domain importing through it would read as a lie. The
+  // Nx project name matches the alias so the graph and the imports tell the same story.
+  ['domains/catalog', ['type:domain', 'domain:catalog'], true, '@shop/domains/catalog'],
+  ['domains/cart', ['type:domain', 'domain:cart'], true, '@shop/domains/cart'],
+  ['domains/order', ['type:domain', 'domain:order'], true, '@shop/domains/order'],
+  ['domains/inventory', ['type:domain', 'domain:inventory'], true, '@shop/domains/inventory'],
+  ['domains/billing', ['type:domain', 'domain:billing'], true, '@shop/domains/billing'],
 
   ['testing', ['type:testing'], true],
 ];
@@ -49,14 +63,14 @@ const LIBS = [
  */
 const depth = (p) => (p.includes('/') ? '../../..' : '../..');
 
-for (const [path, tags, withTests] of LIBS) {
+for (const [path, tags, withTests, customName] of LIBS) {
   const root = join('libs', path);
   const name = path.split('/').pop();
   const up = depth(path);
   mkdirSync(join(root, 'src'), { recursive: true });
 
   const project = {
-    name: `@auth/${path}`,
+    name: customName ?? `@auth/${path}`,
     $schema: '../../node_modules/nx/schemas/project-schema.json',
     sourceRoot: `${root}/src`,
     projectType: 'library',

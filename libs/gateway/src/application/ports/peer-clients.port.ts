@@ -27,6 +27,18 @@ export const SESSION_CLIENT = Symbol('SESSION_CLIENT');
 /** credential-vault: "prove you are this user". Owns the secrets. */
 export const CREDENTIAL_VAULT_CLIENT = Symbol('CREDENTIAL_VAULT_CLIENT');
 
+/** catalog: "what can be bought". Owns the product document. */
+export const CATALOG_CLIENT = Symbol('CATALOG_CLIENT');
+
+/** cart: "what has this shopper picked". Owns the in-progress basket. */
+export const CART_CLIENT = Symbol('CART_CLIENT');
+
+/** order: "what was placed". Owns the order state machine and the checkout saga. */
+export const ORDER_CLIENT = Symbol('ORDER_CLIENT');
+
+/** billing: "what does this cost". Owns totals, invoices and the charge path. */
+export const BILLING_CLIENT = Symbol('BILLING_CLIENT');
+
 // ---- shared shapes -----------------------------------------------------------------
 
 /**
@@ -224,4 +236,200 @@ export interface CredentialVaultClientPort {
    * with it.
    */
   revokeAll(input: { userId: string; reason?: string }): Promise<number>;
+}
+
+// ---- shop ports ----------------------------------------------------------------------
+
+/** Minor units as a string: int64 does not survive a JSON number at 53 bits. */
+export interface ShopMoney {
+  readonly amountMinor: string;
+  readonly currency: string;
+}
+
+export interface GatewayCatalogProduct {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly categoryPath: readonly string[];
+  readonly variants: readonly {
+    readonly sku: string;
+    readonly price: ShopMoney;
+    readonly attrs?: Record<string, string>;
+    readonly active: boolean;
+  }[];
+  readonly mediaKeys: readonly string[];
+  readonly active: boolean;
+  readonly version: number;
+  readonly priceRangeMin?: ShopMoney;
+  readonly priceRangeMax?: ShopMoney;
+}
+
+export interface CatalogClientPort {
+  listByCategory(input: {
+    categoryPath: readonly string[];
+    page: number;
+    pageSize: number;
+  }): Promise<{ products: readonly GatewayCatalogProduct[]; total: number }>;
+  getProduct(id: string): Promise<GatewayCatalogProduct>;
+  createProduct(input: {
+    name: string;
+    description: string;
+    categoryPath: readonly string[];
+    variants: readonly {
+      sku: string;
+      price: ShopMoney;
+      attrs?: Record<string, string>;
+    }[];
+    mediaKeys?: readonly string[];
+  }): Promise<GatewayCatalogProduct>;
+  setVariantPrice(input: {
+    productId: string;
+    sku: string;
+    price: ShopMoney;
+  }): Promise<GatewayCatalogProduct>;
+}
+
+export interface GatewayCartItem {
+  readonly sku: string;
+  readonly productId: string;
+  readonly name: string;
+  readonly quantity: number;
+  readonly unitPrice: ShopMoney;
+  readonly totalPrice: ShopMoney;
+  readonly addedAt: string;
+  readonly updatedAt: string;
+  readonly priceChanged: boolean;
+}
+
+export interface GatewayCartView {
+  readonly sessionId: string;
+  readonly userId: string;
+  readonly items: readonly GatewayCartItem[];
+  readonly status: string;
+  readonly itemCount: number;
+  readonly subtotal: ShopMoney;
+  readonly total: ShopMoney;
+  readonly currency: string;
+  readonly expiresAt: string;
+  readonly version: number;
+}
+
+export interface GatewayCheckoutLines {
+  readonly lines: readonly {
+    readonly sku: string;
+    readonly productId: string;
+    readonly name: string;
+    readonly quantity: number;
+    readonly unitPrice: ShopMoney;
+  }[];
+  readonly subtotal: ShopMoney;
+  readonly currency: string;
+  readonly version: number;
+}
+
+export interface GatewayCheckoutValidation {
+  readonly valid: boolean;
+  readonly unavailableSkus: readonly string[];
+  readonly priceChanges: readonly {
+    readonly sku: string;
+    readonly oldPrice: ShopMoney;
+    readonly newPrice: ShopMoney;
+  }[];
+}
+
+/** Cart identity is taken from the JWT, never from the body. */
+export interface CartIdentityInput {
+  readonly userId: string;
+  readonly sessionId: string;
+}
+
+export interface CartClientPort {
+  getCart(identity: CartIdentityInput): Promise<GatewayCartView>;
+  addItem(
+    identity: CartIdentityInput,
+    input: { sku: string; quantity: number },
+  ): Promise<GatewayCartView>;
+  updateItemQty(
+    identity: CartIdentityInput,
+    input: { sku: string; quantity: number },
+  ): Promise<GatewayCartView>;
+  removeItem(
+    identity: CartIdentityInput,
+    input: { sku: string },
+  ): Promise<GatewayCartView>;
+  clearCart(identity: CartIdentityInput): Promise<GatewayCartView>;
+  getCheckoutLines(identity: CartIdentityInput): Promise<GatewayCheckoutLines>;
+  validateForCheckout(identity: CartIdentityInput): Promise<GatewayCheckoutValidation>;
+}
+
+export interface GatewayOrderView {
+  readonly id: string;
+  readonly userId: string;
+  readonly status: string;
+  readonly lines: readonly {
+    readonly sku: string;
+    readonly productId: string;
+    readonly name: string;
+    readonly quantity: number;
+    readonly unitPrice: ShopMoney;
+    readonly totalPrice: ShopMoney;
+  }[];
+  readonly subtotal: ShopMoney;
+  readonly total: ShopMoney;
+  readonly currency: string;
+  readonly paymentId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly version: number;
+  readonly cancelReason: string;
+}
+
+export interface OrderClientPort {
+  createOrder(input: {
+    userId: string;
+    sessionId: string;
+    idempotencyKey: string;
+    currency: string;
+    paymentMethodToken?: string;
+  }): Promise<GatewayOrderView>;
+  getOrder(input: { orderId: string; userId: string }): Promise<GatewayOrderView>;
+  listUserOrders(input: {
+    userId: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ orders: readonly GatewayOrderView[]; total: number }>;
+  cancelOrder(input: {
+    orderId: string;
+    userId: string;
+    reason: string;
+  }): Promise<GatewayOrderView>;
+}
+
+export interface GatewayInvoiceView {
+  readonly invoiceId: string;
+  readonly orderId: string;
+  readonly status: string;
+  readonly lines: readonly {
+    readonly sku: string;
+    readonly quantity: number;
+    readonly unitPrice: ShopMoney;
+    readonly lineSubtotal: ShopMoney;
+    readonly tax: ShopMoney;
+  }[];
+  readonly subtotal: ShopMoney;
+  readonly discount: ShopMoney;
+  readonly taxTotal: ShopMoney;
+  readonly total: ShopMoney;
+  readonly currency: string;
+  readonly couponCode: string;
+  readonly issuedAt: string;
+}
+
+export interface BillingClientPort {
+  previewTotals(input: {
+    customerCountry: string;
+    couponCode: string;
+    lines: readonly { sku: string; quantity: number; unitPrice: ShopMoney }[];
+    currency: string;
+  }): Promise<GatewayInvoiceView>;
 }

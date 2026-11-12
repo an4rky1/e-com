@@ -16,6 +16,11 @@ export const ServiceNames = {
   NOTIFICATION: 'notification',
   AUDIT_LOG: 'audit-log',
   ACCOUNT_SECURITY: 'account-security',
+  CATALOG: 'catalog',
+  CART: 'cart',
+  INVENTORY: 'inventory',
+  BILLING: 'billing',
+  ORDER: 'order',
 } as const;
 
 export type ServiceName = (typeof ServiceNames)[keyof typeof ServiceNames];
@@ -28,6 +33,11 @@ export const GrpcPackages = {
   SESSION: 'session.v1',
   AUTH_FLOW: 'auth_flow.v1',
   ACCOUNT_SECURITY: 'account_security.v1',
+  CATALOG: 'catalog.v1',
+  CART: 'cart.v1',
+  INVENTORY: 'inventory.v1',
+  BILLING: 'billing.v1',
+  ORDER: 'order.v1',
 } as const;
 
 export type GrpcPackage = (typeof GrpcPackages)[keyof typeof GrpcPackages];

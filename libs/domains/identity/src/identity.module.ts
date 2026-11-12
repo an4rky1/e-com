@@ -8,6 +8,7 @@ import {
   OUTBOX_REPOSITORY_CONFIG,
   type EventPublisher,
 } from '@auth/infra/outbox';
+import { domainEventProviders } from '@auth/infra/events';
 import { PrismaClient } from './generated/prisma/client';
 import { CreateUserHandler } from './application/commands/create-user.handler';
 import { ResolveOauthUserHandler } from './application/commands/resolve-oauth-user.handler';
@@ -24,6 +25,7 @@ import {
 import { IdentityService } from './application/facade/identity.service';
 import { USER_REPOSITORY } from './domain/ports/user-repository.port';
 import { PrismaUserRepository } from './infrastructure/persistence/prisma-user.repository';
+import { IDENTITY_EVENTS } from './infrastructure/events/identity.events';
 import { IdentityHealthIndicator } from './identity.health';
 import {
   IDENTITY_PRISMA,
@@ -80,6 +82,7 @@ export function createIdentityModule(options: IdentityModuleOptions): DynamicMod
       { provide: OUTBOX_REPOSITORY_CONFIG, useValue: outboxRepository },
       { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
       { provide: IDENTITY_CONFIG, useFactory: () => resolveIdentityConfig() },
+      ...domainEventProviders(IDENTITY_EVENTS),
 
       CreateUserHandler,
       ResolveOauthUserHandler,

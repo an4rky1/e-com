@@ -8,6 +8,7 @@ import {
   PrismaOutboxRepository,
   type EventPublisher,
 } from '@auth/infra/outbox';
+import { domainEventProviders } from '@auth/infra/events';
 import { PrismaClient } from './generated/prisma/client';
 import { IssueTokensHandler } from './application/commands/issue-tokens.handler';
 import { RotateTokensHandler } from './application/commands/rotate-tokens.handler';
@@ -21,6 +22,7 @@ import { GetSessionByIdHandler } from './application/queries/session.queries';
 import { SessionService } from './application/facade/session.service';
 import { SESSION_REPOSITORY } from './domain/ports/session-repository.port';
 import { PrismaSessionRepository } from './infrastructure/persistence/prisma-session.repository';
+import { SESSION_EVENTS } from './infrastructure/events/session.events';
 import { SessionHealthIndicator } from './session.health';
 import {
   SESSION_CONFIG,
@@ -77,6 +79,7 @@ export function createSessionModule(
       { provide: SESSION_PRISMA, useValue: prisma },
       { provide: SESSION_REPOSITORY, useClass: PrismaSessionRepository },
       { provide: SESSION_CONFIG, useFactory: () => resolveSessionConfig() },
+      ...domainEventProviders(SESSION_EVENTS),
 
       IssueTokensHandler,
       RefreshTokenReuseGuard,

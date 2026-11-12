@@ -69,6 +69,12 @@ export const Defaults = {
   CREDENTIAL_VAULT_URL: 'localhost:13003',
   SESSION_URL: 'localhost:13004',
   AUTH_FLOW_URL: 'localhost:13005',
+  /** Shop peers, same ports their `main.ts` binds — see the note above. */
+  CATALOG_URL: 'localhost:13011',
+  CART_URL: 'localhost:13012',
+  INVENTORY_URL: 'localhost:13013',
+  BILLING_URL: 'localhost:13014',
+  ORDER_URL: 'localhost:13015',
   /**
    * Tolerance applied to `exp` when the edge verifies a token.
    *
@@ -86,6 +92,11 @@ export const gatewaySchema = z.object({
   CREDENTIAL_VAULT_URL: envString(Defaults.CREDENTIAL_VAULT_URL),
   SESSION_URL: envString(Defaults.SESSION_URL),
   AUTH_FLOW_URL: envString(Defaults.AUTH_FLOW_URL),
+  CATALOG_URL: envString(Defaults.CATALOG_URL),
+  CART_URL: envString(Defaults.CART_URL),
+  INVENTORY_URL: envString(Defaults.INVENTORY_URL),
+  BILLING_URL: envString(Defaults.BILLING_URL),
+  ORDER_URL: envString(Defaults.ORDER_URL),
   // The OAuth walk. All eight default to empty — see the header: empty disables, and an
   // unconfigured deployment boots without a provider rather than with a broken one.
   OAUTH_PUBLIC_ORIGIN: envString(''),
@@ -167,6 +178,11 @@ export interface GatewayConfig {
   readonly credentialVaultUrl: string;
   readonly sessionUrl: string;
   readonly authFlowUrl: string;
+  readonly catalogUrl: string;
+  readonly cartUrl: string;
+  readonly inventoryUrl: string;
+  readonly billingUrl: string;
+  readonly orderUrl: string;
   /** The OAuth walk, resolved to null providers until an operator configures one. */
   readonly oauth: OAuthConfig;
   /**
@@ -205,6 +221,11 @@ export function peerAddressesOf(config: GatewayConfig): Record<string, string> {
     'credential_vault.v1': config.credentialVaultUrl,
     'session.v1': config.sessionUrl,
     'auth_flow.v1': config.authFlowUrl,
+    'catalog.v1': config.catalogUrl,
+    'cart.v1': config.cartUrl,
+    'inventory.v1': config.inventoryUrl,
+    'billing.v1': config.billingUrl,
+    'order.v1': config.orderUrl,
   };
 }
 
@@ -236,6 +257,11 @@ export function resolveGatewayConfig(
       credentialVaultUrl: parsed.CREDENTIAL_VAULT_URL,
       sessionUrl: parsed.SESSION_URL,
       authFlowUrl: parsed.AUTH_FLOW_URL,
+      catalogUrl: parsed.CATALOG_URL,
+      cartUrl: parsed.CART_URL,
+      inventoryUrl: parsed.INVENTORY_URL,
+      billingUrl: parsed.BILLING_URL,
+      orderUrl: parsed.ORDER_URL,
       oauth: resolveOAuthConfig(parsed),
       grpcServiceToken,
       accessTokenSigningKey: trust.ACCESS_TOKEN_SIGNING_KEY,

@@ -120,6 +120,24 @@ const depConstraints = [
   })),
 ];
 
+/**
+ * The same constraints, relaxed for a domain's spec folder.
+ *
+ * @remarks The registry-completeness spec imports `@auth/testing`, and nx enforces *every*
+ * constraint whose source tag matches — so `type:domain` (no testing) would forbid what
+ * `domain:*` (testing allowed) permits. Granting `type:testing` to the spec files only keeps
+ * production code of the domain from ever reaching for the testing lib while letting the
+ * checks that guard the wiring live next to the code they guard.
+ */
+const domainSpecConstraints = depConstraints.map((constraint) =>
+  constraint.sourceTag === 'type:domain'
+    ? {
+        ...constraint,
+        onlyDependOnLibsWithTags: [...constraint.onlyDependOnLibsWithTags, 'type:testing'],
+      }
+    : constraint,
+);
+
 /** Packages the domain layer may never reach for. */
 const DOMAIN_FORBIDDEN_IMPORTS = [
   {
@@ -182,6 +200,7 @@ const GATEWAY_FORBIDDEN_IMPORTS = [
   {
     group: [
       '@auth/domains/**',
+      '@shop/domains/**',
       '**/libs/domains/**',
       '@prisma/client',
       '**/generated/prisma/**',
@@ -230,6 +249,19 @@ export default [
       ],
     },
   },
+  {
+    files: ['libs/domains/*/spec/**/*.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: false,
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          depConstraints: domainSpecConstraints,
+        },
+      ],
+    },
+  },
   // ---- Clean architecture enforcement inside a domain service lib ----
   {
     files: ['libs/domains/*/src/domain/**/*.ts'],
@@ -273,6 +305,7 @@ export default [
                 '@auth/infra/**',
                 '@auth/gateway',
                 '@auth/platform/**',
+                '@shop/domains/**',
                 '@prisma/client',
                 '**/generated/prisma/**',
               ],

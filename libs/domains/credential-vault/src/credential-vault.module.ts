@@ -14,6 +14,7 @@ import {
   PrismaOutboxRepository,
   type EventPublisher,
 } from '@auth/infra/outbox';
+import { domainEventProviders } from '@auth/infra/events';
 import { PrismaClient } from './generated/prisma/client';
 import {
   VAULT_CONFIG,
@@ -32,6 +33,7 @@ import { CredentialVaultService } from './application/facade/credential-vault.se
 import { CREDENTIAL_REPOSITORY } from './domain/ports/credential-repository.port';
 import { PASSWORD_HASHER } from './domain/ports/password-hasher.port';
 import { PrismaCredentialRepository } from './infrastructure/persistence/prisma-credential.repository';
+import { CREDENTIAL_VAULT_EVENTS } from './infrastructure/events/credential-vault.events';
 import { Argon2PasswordHasher } from './infrastructure/security/argon2-password.hasher';
 import { CredentialVaultGrpcController } from './presentation/grpc/credential-vault.grpc.controller';
 
@@ -119,6 +121,7 @@ export function createCredentialVaultModule(
       { provide: VAULT_PRISMA, useValue: prisma },
       vaultConfigProvider,
       hasherProvider,
+      ...domainEventProviders(CREDENTIAL_VAULT_EVENTS),
       { provide: CREDENTIAL_REPOSITORY, useClass: PrismaCredentialRepository },
 
       SetPasswordHandler,

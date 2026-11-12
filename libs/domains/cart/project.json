@@ -1,0 +1,27 @@
+{
+  "name": "@shop/domains/cart",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/cart/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:cart"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/cart/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/cart"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/cart/jest.config.ts"
+      }
+    }
+  }
+}

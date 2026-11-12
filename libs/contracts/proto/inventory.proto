@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+// Inventory is the only service allowed to decide whether a unit may be sold.
+// Reservations are TTL-bound; `available` is derived (on_hand - reserved - safety)
+// in SQL and never stored as a column.
+service InventoryService {
+  // Atomically reserves stock for an order. Idempotent per order: a redelivered
+  // reserve for the same order is a no-op, never a second reservation.
+  rpc Reserve (ReserveRequest) returns (ReserveResponse);
+  rpc Release (ReleaseRequest) returns (ReleaseResponse);
+  rpc Ship (ShipRequest) returns (ShipResponse);
+  rpc AdjustStock (AdjustStockRequest) returns (AdjustStockResponse);
+  rpc GetAvailable (GetAvailableRequest) returns (GetAvailableResponse);
+}
+
+message ReserveLine {
+  string sku = 1;
+  int32 qty = 2;
+}
+
+message ReserveRequest {
+  string order_id = 1;
+  repeated ReserveLine lines = 2;
+  string warehouse_id = 3;
+}
+
+message ReservedLine {
+  string sku = 1;
+  int32 qty = 2;
+  string reservation_id = 3;
+}
+
+message RejectedLine {
+  string sku = 1;
+  int32 qty = 2;
+  string reason = 3;
+}
+
+message ReserveResponse {
+  bool fully_accepted = 1;
+  repeated ReservedLine reserved = 2;
+  repeated RejectedLine rejected = 3;
+}
+
+message ReleaseRequest {
+  string order_id = 1;
+  string warehouse_id = 2;
+}
+
+message ReleaseResponse {
+  int32 released_lines = 1;
+}
+
+message ShipRequest {
+  string order_id = 1;
+  repeated ReserveLine lines = 2;
+  string warehouse_id = 3;
+}
+
+message ShipResponse {
+  bool shipped = 1;
+}
+
+message AdjustStockRequest {
+  string sku = 1;
+  int32 delta = 2;
+  string warehouse_id = 3;
+  string reason = 4;
+  // Correlation id: repeating an adjustment with the same id is a no-op.
+  string adjustment_id = 5;
+}
+
+message AdjustStockResponse {
+  int32 on_hand = 1;
+  int32 available = 2;
+}
+
+message GetAvailableRequest {
+  string sku = 1;
+  string warehouse_id = 2;
+}
+
+message GetAvailableResponse {
+  string sku = 1;
+  string warehouse_id = 2;
+  int32 on_hand = 3;
+  int32 reserved = 4;
+  int32 safety = 5;
+  int32 available = 6;
+}

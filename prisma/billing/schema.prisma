@@ -1,0 +1,159 @@
+/**
+ * billing service schema — source of truth for the money path.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ *
+ * @remarks Every amount is an integer in minor units. A float in a money column
+ * diverges from the first sum computed in a different order, and the difference is
+ * real money.
+ *
+ * @remarks `payments.idempotency_key` and `refunds.idempotency_key` are unique — that is
+ * the whole idempotency mechanism for charge and refund. `invoices.order_id` is unique
+ * because an order has exactly one invoice, updated as the order is paid and refunded.
+ *
+ * @remarks `idempotency_keys` is carried by every stateful service for the generic
+ * HTTP idempotency interceptor; the charge/refund paths do not use it, they use the
+ * unique keys above.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/billing/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model payments {
+  id              String    @id @db.Uuid
+  order_id        String
+  /// Business-derived, never randomUUID: the caller's `order:{id}:charge:{step}`.
+  idempotency_key String    @unique(map: "payments_idempotency_key_unique")
+  amount_minor    Int
+  currency        String
+  /// requires_payment_method | requires_action | processing | succeeded | failed.
+  status          String
+  provider        String
+  provider_ref    String?
+  failure_code    String?
+  refunded_minor  Int       @default(0)
+  customer_id     String
+  /// Bumped by every write; the version tail of every `payment.*` dedup_key.
+  version         Int       @default(1)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  refunds         refunds[]
+
+  @@index([order_id], map: "payments_order_idx")
+}
+
+model refunds {
+  id              String    @id @db.Uuid
+  payment_id      String    @db.Uuid
+  order_id        String
+  idempotency_key String    @unique(map: "refunds_idempotency_key_unique")
+  amount_minor    Int
+  /// succeeded for the fake PSP; the port allows a provider to answer otherwise.
+  status          String
+  provider_ref    String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  payment         payments  @relation(fields: [payment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([order_id], map: "refunds_order_idx")
+}
+
+model invoices {
+  id             String    @id @db.Uuid
+  /// One invoice per order: it is updated in place as the order is paid and refunded.
+  order_id       String    @unique(map: "invoices_order_id_unique")
+  /// draft | issued | paid | void.
+  status         String    @default("draft")
+  subtotal_minor Int
+  discount_minor Int       @default(0)
+  tax_minor      Int
+  total_minor    Int
+  currency       String
+  coupon_code    String?
+  country        String?
+  issued_at      DateTime? @db.Timestamptz(6)
+  version        Int       @default(1)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  lines          invoice_lines[]
+}
+
+model invoice_lines {
+  id                  String   @id @db.Uuid
+  invoice_id          String   @db.Uuid
+  sku                 String
+  quantity            Int
+  unit_price_minor    Int
+  line_subtotal_minor Int
+  tax_minor           Int
+  invoice             invoices @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([invoice_id], map: "invoice_lines_invoice_idx")
+}
+
+model coupons {
+  /// Redeemed by code, so the code is the primary key.
+  code        String    @id
+  percent_off Int
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+}
+
+model idempotency_keys {
+  key        String   @id
+  response   Json
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idempotency_keys_created_idx")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              OutboxStatus @default(pending)
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

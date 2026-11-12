@@ -87,6 +87,35 @@ export const Topics = {
   SECURITY_NEW_DEVICE_DETECTED: 'platform.security.new_device_detected.v1',
   SECURITY_SUSPICIOUS_LOGIN_DETECTED: 'platform.security.suspicious_login_detected.v1',
   SECURITY_ANOMALY_DETECTED: 'platform.security.anomaly_detected.v1',
+
+  // catalog
+  PRODUCT_CREATED: 'platform.product.created.v1',
+  PRODUCT_CHANGED: 'platform.product.changed.v1',
+  PRODUCT_PRICE_CHANGED: 'platform.product.price_changed.v1',
+  PRODUCT_ARCHIVED: 'platform.product.archived.v1',
+
+  // inventory
+  STOCK_RESERVED: 'platform.stock.reserved.v1',
+  STOCK_REJECTED: 'platform.stock.rejected.v1',
+  STOCK_CHANGED: 'platform.stock.changed.v1',
+  STOCK_RELEASED: 'platform.stock.released.v1',
+
+  // order
+  ORDER_CREATED: 'platform.order.created.v1',
+  ORDER_CONFIRMED: 'platform.order.confirmed.v1',
+  ORDER_PAID: 'platform.order.paid.v1',
+  ORDER_CANCELED: 'platform.order.canceled.v1',
+  ORDER_SHIPPED: 'platform.order.shipped.v1',
+  ORDER_DELIVERED: 'platform.order.delivered.v1',
+  ORDER_COMPLETED: 'platform.order.completed.v1',
+
+  // billing / payment
+  PAYMENT_SUCCEEDED: 'platform.payment.succeeded.v1',
+  PAYMENT_FAILED: 'platform.payment.failed.v1',
+  PAYMENT_REFUNDED: 'platform.payment.refunded.v1',
+  PAYMENT_DISPUTED: 'platform.payment.disputed.v1',
+  INVOICE_ISSUED: 'platform.invoice.issued.v1',
+  COUPON_REDEEMED: 'platform.coupon.redeemed.v1',
 } as const;
 
 export type Topic = (typeof Topics)[keyof typeof Topics];
@@ -137,6 +166,30 @@ export const TopicsByProducer = {
     Topics.SECURITY_NEW_DEVICE_DETECTED,
     Topics.SECURITY_SUSPICIOUS_LOGIN_DETECTED,
     Topics.SECURITY_ANOMALY_DETECTED,
+  ],
+  catalog: [
+    Topics.PRODUCT_CREATED,
+    Topics.PRODUCT_CHANGED,
+    Topics.PRODUCT_PRICE_CHANGED,
+    Topics.PRODUCT_ARCHIVED,
+  ],
+  inventory: [Topics.STOCK_RESERVED, Topics.STOCK_REJECTED, Topics.STOCK_CHANGED, Topics.STOCK_RELEASED],
+  order: [
+    Topics.ORDER_CREATED,
+    Topics.ORDER_CONFIRMED,
+    Topics.ORDER_PAID,
+    Topics.ORDER_CANCELED,
+    Topics.ORDER_SHIPPED,
+    Topics.ORDER_DELIVERED,
+    Topics.ORDER_COMPLETED,
+  ],
+  billing: [
+    Topics.PAYMENT_SUCCEEDED,
+    Topics.PAYMENT_FAILED,
+    Topics.PAYMENT_REFUNDED,
+    Topics.PAYMENT_DISPUTED,
+    Topics.INVOICE_ISSUED,
+    Topics.COUPON_REDEEMED,
   ],
 } as const satisfies Record<string, readonly Topic[]>;
 
@@ -239,4 +292,101 @@ export interface SecurityEventPayload {
   ipAddress?: string;
   deviceFingerprint?: string;
   factors: string[];
+}
+
+// ---- E-commerce payloads ---------------------------------------------------------
+// Money is always minor units as an integer. A float in an event payload diverges from
+// the database the first time a sum is computed in a different order.
+
+export interface ProductPriceChangedPayload {
+  productId: string;
+  sku: string;
+  before: { amountMinor: number; currency: string };
+  after: { amountMinor: number; currency: string };
+}
+
+export interface ProductCatalogPayload {
+  productId: string;
+  name?: string;
+  categoryPath?: string[];
+  reason?: string;
+}
+
+export interface StockReservedPayload {
+  orderId: string;
+  sku: string;
+  qty: number;
+  reservationId: string;
+  warehouseId: string;
+}
+
+export interface StockRejectedPayload {
+  orderId: string;
+  sku: string;
+  qty: number;
+  reason: string;
+  warehouseId: string;
+}
+
+export interface StockChangedPayload {
+  sku: string;
+  warehouseId: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+}
+
+export interface StockReleasedPayload {
+  orderId: string;
+  warehouseId: string;
+  /** Lines released in this pass; zero when the release found nothing reserved. */
+  lines: number;
+}
+
+export interface OrderLinePayload {
+  sku: string;
+  productId: string;
+  name: string;
+  qty: number;
+  unitPriceMinor: number;
+  totalPriceMinor: number;
+}
+
+export interface OrderPayload {
+  orderId: string;
+  userId: string;
+  status: string;
+  currency: string;
+  totalMinor: number;
+  lines?: OrderLinePayload[];
+  reason?: string;
+  paymentId?: string;
+}
+
+export interface PaymentPayload {
+  paymentId: string;
+  orderId: string;
+  amountMinor: number;
+  refundedMinor?: number;
+  currency: string;
+  status: string;
+  failureCode?: string;
+  provider: string;
+}
+
+export interface InvoicePayload {
+  invoiceId: string;
+  orderId: string;
+  totalMinor: number;
+  taxMinor: number;
+  discountMinor: number;
+  currency: string;
+  couponCode?: string;
+}
+
+export interface CouponRedeemedPayload {
+  couponCode: string;
+  orderId: string;
+  discountMinor: number;
+  currency: string;
 }

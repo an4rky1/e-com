@@ -33,6 +33,25 @@ services:
       timeout: 5s
       retries: 20
 
+  # Catalog is the one service whose document model does not fit Postgres: product variants
+  # are a nested array of free-form attribute maps, which in Postgres would be EAV or JSONB
+  # over JSONB. MongoDB takes that shape natively. The rule that keeps this from spreading:
+  # this container exists for `catalog` alone, and no other service is ever given a Mongo URL.
+  mongo:
+    image: docker.io/library/mongo:7-alpine
+    container_name: auth-mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Double-quoted outer, single-quoted inner: a flow sequence cannot nest the same
+      # quote, and podman-compose's YAML parser is the strict one that proves it.
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # Redpanda is API-compatible with the Kafka protocol the services speak, without a JVM.
   redpanda:
     image: docker.io/redpandadata/redpanda:v24.2.2
@@ -118,6 +137,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  mongo-data:
   redpanda-data:
   prometheus-data:
   grafana-data:

@@ -28,6 +28,12 @@ export {
   type RegisterInput,
   type SessionSummary,
 } from './application/facade/gateway.service';
+export {
+  StorefrontService,
+  type CheckoutCreateInput,
+  type CheckoutPreviewInput,
+  type CheckoutPreviewResult,
+} from './application/facade/storefront.service';
 export { OAuthService } from './application/oauth/oauth.service';
 export { OAUTH_HTTP, type OAuthHttpPort } from './application/oauth/oauth.port';
 export {
@@ -45,21 +51,37 @@ export {
 export {
   ACCESS_CONTROL_CLIENT,
   AUTH_FLOW_CLIENT,
+  BILLING_CLIENT,
+  CART_CLIENT,
+  CATALOG_CLIENT,
   CREDENTIAL_VAULT_CLIENT,
   FlowState,
   FURTHER_PROOF,
   IDENTITY_CLIENT,
+  ORDER_CLIENT,
   SESSION_CLIENT,
   TERMINAL_FAILURES,
   type AccessControlClientPort,
   type AuthFlowClientPort,
   type AuthorizationDecision,
+  type BillingClientPort,
+  type CartClientPort,
+  type CartIdentityInput,
+  type CatalogClientPort,
   type CredentialVaultClientPort,
   type FlowProgress,
+  type GatewayCartView,
+  type GatewayCatalogProduct,
+  type GatewayCheckoutLines,
+  type GatewayCheckoutValidation,
+  type GatewayInvoiceView,
+  type GatewayOrderView,
   type GatewayUser,
   type GatewayUserInput,
   type IdentityClientPort,
+  type OrderClientPort,
   type SessionClientPort,
+  type ShopMoney,
   type TokenPair,
 } from './application/ports/peer-clients.port';
 export type { GatewayPrincipal } from './application/ports/gateway-principal';
@@ -70,13 +92,22 @@ export { PeerCaller } from './infrastructure/grpc/peer-caller';
 export {
   GrpcAccessControlClient,
   GrpcAuthFlowClient,
+  GrpcBillingClient,
+  GrpcCartClient,
+  GrpcCatalogClient,
   GrpcCredentialVaultClient,
   GrpcIdentityClient,
+  GrpcOrderClient,
   GrpcSessionClient,
 } from './infrastructure/grpc/grpc-peer-clients';
 export { FetchOAuthHttp } from './infrastructure/oauth/fetch-oauth-http';
 export { AuthController } from './presentation/auth.controller';
 export { UsersController } from './presentation/users.controller';
+export { CatalogController } from './presentation/catalog.controller';
+export { CartController } from './presentation/cart.controller';
+export { CheckoutController } from './presentation/checkout.controller';
+export { OrdersController } from './presentation/orders.controller';
+export { WebhooksController } from './presentation/webhooks.controller';
 export { IdempotencyInterceptor } from './presentation/interceptors/idempotency.interceptor';
 export { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 export { PermissionsGuard } from './presentation/guards/permissions.guard';
@@ -117,3 +148,14 @@ export {
   type TokenPairResponseDto,
   type UserResponseDto,
 } from './presentation/dto/gateway.dto';
+export {
+  AddCartItemDto,
+  CancelOrderDto,
+  CatalogCreateProductDto,
+  CatalogSetPriceDto,
+  CheckoutCreateDto,
+  CheckoutPreviewDto,
+  RemoveCartItemDto,
+  ShopMoneyDto,
+  UpdateCartItemDto,
+} from './presentation/dto/storefront.dto';

@@ -41,23 +41,37 @@ import { PeerCaller } from './infrastructure/grpc/peer-caller';
 import {
   GrpcAccessControlClient,
   GrpcAuthFlowClient,
+  GrpcBillingClient,
+  GrpcCartClient,
+  GrpcCatalogClient,
   GrpcCredentialVaultClient,
   GrpcIdentityClient,
+  GrpcOrderClient,
   GrpcSessionClient,
 } from './infrastructure/grpc/grpc-peer-clients';
 import {
   ACCESS_CONTROL_CLIENT,
   AUTH_FLOW_CLIENT,
+  BILLING_CLIENT,
+  CART_CLIENT,
+  CATALOG_CLIENT,
   CREDENTIAL_VAULT_CLIENT,
   IDENTITY_CLIENT,
+  ORDER_CLIENT,
   SESSION_CLIENT,
 } from './application/ports/peer-clients.port';
 import { GatewayService } from './application/facade/gateway.service';
+import { StorefrontService } from './application/facade/storefront.service';
 import { OAUTH_HTTP } from './application/oauth/oauth.port';
 import { OAuthService } from './application/oauth/oauth.service';
 import { FetchOAuthHttp } from './infrastructure/oauth/fetch-oauth-http';
 import { AuthController } from './presentation/auth.controller';
 import { UsersController } from './presentation/users.controller';
+import { CatalogController } from './presentation/catalog.controller';
+import { CartController } from './presentation/cart.controller';
+import { CheckoutController } from './presentation/checkout.controller';
+import { OrdersController } from './presentation/orders.controller';
+import { WebhooksController } from './presentation/webhooks.controller';
 import { IdempotencyInterceptor } from './presentation/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { PermissionsGuard } from './presentation/guards/permissions.guard';
@@ -87,6 +101,11 @@ const PROTO_FILES = [
   'access_control.proto',
   'session.proto',
   'credential_vault.proto',
+  'catalog.proto',
+  'cart.proto',
+  'inventory.proto',
+  'billing.proto',
+  'order.proto',
 ] as const;
 
 export interface GatewayModuleOptions {
@@ -168,12 +187,20 @@ export function createGatewayModule(
       RateLimitModule.register(),
       RequestContextModule.register(),
     ],
-    controllers: [AuthController, UsersController],
+    controllers: [
+      AuthController,
+      UsersController,
+      CatalogController,
+      CartController,
+      CheckoutController,
+      OrdersController,
+      WebhooksController,
+    ],
     providers: [
       { provide: GATEWAY_CONFIG, useValue: config },
       { provide: GRPC_CHANNEL, useValue: channel },
 
-      // One caller, five adapters. Sharing the caller is what makes the deadline and the
+      // One caller, ten adapters. Sharing the caller is what makes the deadline and the
       // error translation uniform rather than five independent decisions.
       PeerCaller,
       GatewayChannelLifecycle,
@@ -183,8 +210,13 @@ export function createGatewayModule(
       { provide: ACCESS_CONTROL_CLIENT, useClass: GrpcAccessControlClient },
       { provide: SESSION_CLIENT, useClass: GrpcSessionClient },
       { provide: CREDENTIAL_VAULT_CLIENT, useClass: GrpcCredentialVaultClient },
+      { provide: CATALOG_CLIENT, useClass: GrpcCatalogClient },
+      { provide: CART_CLIENT, useClass: GrpcCartClient },
+      { provide: ORDER_CLIENT, useClass: GrpcOrderClient },
+      { provide: BILLING_CLIENT, useClass: GrpcBillingClient },
 
       GatewayService,
+      StorefrontService,
       // The provider walk: a service that sequences it, and the one adapter that reaches
       // providers over HTTP. The port exists so neither the service nor a test ever calls
       // `fetch` directly — the same reason the five gRPC peers sit behind ports.
@@ -235,6 +267,6 @@ export function createGatewayModule(
       // lookup while guaranteeing a decorated route can never be mounted unprotected.
       { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     ],
-    exports: [GatewayService, GatewayHealthIndicator],
+    exports: [GatewayService, StorefrontService, GatewayHealthIndicator],
   };
 }

@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package billing.v1;
+
+// Billing owns money movement: invoices, tax, coupons, and the charge/refund calls to
+// the payment service provider behind the Payment Gateway port. It never owns order
+// state (that is order's) and never owns stock.
+service BillingService {
+  // Charges an order. Idempotent per idempotency_key: the same key returns the same
+  // result and never a second charge. `requires_action` (3DS) is a success-shaped
+  // answer carrying a next_action, not an error.
+  rpc ChargeOrder (ChargeOrderRequest) returns (ChargeOrderResponse);
+  rpc RefundOrder (RefundOrderRequest) returns (RefundOrderResponse);
+  rpc GetInvoice (GetInvoiceRequest) returns (Invoice);
+  // Tax-before-discount, coupon-after-tax, invoice-fixed — the frozen calculation
+  // order, exposed so the storefront can show a preview that matches the charge.
+  rpc PreviewTotals (PreviewTotalsRequest) returns (PreviewTotalsResponse);
+}
+
+message Money {
+  string amount_minor = 1;
+  string currency = 2;
+}
+
+message ChargeLine {
+  string sku = 1;
+  int32 quantity = 2;
+  Money unit_price = 3;
+}
+
+message ChargeOrderRequest {
+  string order_id = 1;
+  // Business-derived, never randomUUID: `order:{orderId}:charge:{step}`.
+  string idempotency_key = 2;
+  Money amount = 3;
+  // Opaque PSP token / payment-method reference the browser obtained from the
+  // client-side SDK. Card numbers never reach this service.
+  string payment_method_token = 4;
+  string customer_id = 5;
+  // The lines the amount was computed from. Billing recomputes subtotal + tax from
+  // them and refuses a charge whose amount does not match: an amount that cannot be
+  // reconciled against its own lines is the definition of a money bug.
+  repeated ChargeLine lines = 6;
+  // Tax jurisdiction for the recomputation. Empty means the configured default.
+  string customer_country = 7;
+}
+
+message NextAction {
+  // redirect | use_sdk | display_code — which form the client should show.
+  string type = 1;
+  string redirect_url = 2;
+  string sdk_payload = 3;
+}
+
+message ChargeOrderResponse {
+  string payment_id = 1;
+  // requires_payment_method | requires_action | processing | succeeded | failed.
+  string status = 2;
+  NextAction next_action = 3;
+  string failure_code = 4;
+}
+
+message RefundOrderRequest {
+  string order_id = 1;
+  string payment_id = 2;
+  // Empty means a full refund.
+  Money amount = 3;
+  string reason = 4;
+  string idempotency_key = 5;
+}
+
+message RefundOrderResponse {
+  string refund_id = 1;
+  string status = 2;
+  Money refunded_total = 3;
+}
+
+message InvoiceLine {
+  string sku = 1;
+  int32 quantity = 2;
+  Money unit_price = 3;
+  Money line_subtotal = 4;
+  Money tax = 5;
+}
+
+message Invoice {
+  string invoice_id = 1;
+  string order_id = 2;
+  // draft | issued | paid | void.
+  string status = 3;
+  repeated InvoiceLine lines = 4;
+  Money subtotal = 5;
+  Money discount = 6;
+  Money tax_total = 7;
+  Money total = 8;
+  string currency = 9;
+  string coupon_code = 10;
+  string issued_at = 11;
+}
+
+message PreviewTotalsLine {
+  string sku = 1;
+  int32 quantity = 2;
+  Money unit_price = 3;
+}
+
+message PreviewTotalsRequest {
+  string customer_country = 1;
+  string coupon_code = 2;
+  repeated PreviewTotalsLine lines = 3;
+  string currency = 4;
+}
+
+message PreviewTotalsResponse {
+  Invoice invoice = 1;
+}
+
+message GetInvoiceRequest {
+  string order_id = 1;
+}

@@ -28,6 +28,11 @@ RUN npm run generate
 # Backend service image: APP selects which entry point the container starts.
 FROM base AS backend
 ARG APP
+# buildah/podman serves a cached ENV layer even when --build-arg changes (docker honours
+# it), which silently bakes the first service's name into every image. A RUN that reads
+# $APP forks the cache chain per service: docker keys RUN on the expanded command, so the
+# following ENV is re-evaluated with the right value. Config-only, costs one no-op layer.
+RUN test -n "$APP"
 ENV APP=${APP} TS_NODE_PROJECT=apps/${APP}/tsconfig.app.json
 EXPOSE 3000
 # Shell form on purpose: $APP expands from the ENV at container start, so one image

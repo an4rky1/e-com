@@ -1,21 +1,20 @@
 /**
  * @fileoverview Prisma-backed storage for flows, their audit trail and their outbox.
  *
- * @remarks The three writes go in through one `runInTransaction`, and that is the whole point
- * of the class. A flow that reached `completed` without its `auth_flow.step_completed` event
- * would leave every downstream consumer — account-security, audit-log — believing nobody ever
- * signed in; a flow that reached `completed` without its step rows would be unexplainable. Both
- * are worse than the login not happening at all, and both are prevented only by committing the
+ * @remarks The three writes go in through one transaction, and that is the whole point of the
+ * class. A flow that reached `completed` without its `auth_flow.step_completed` event would
+ * leave every downstream consumer — account-security, audit-log — believing nobody ever signed
+ * in; a flow that reached `completed` without its step rows would be unexplainable. Both are
+ * worse than the login not happening at all, and both are prevented only by committing the
  * row, the steps and the envelopes together.
  *
  * @remarks Steps are appended, never rewritten: only the entries the row does not already hold
  * are inserted, so the `bigserial` ids a previous investigation quoted still resolve.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
-import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/core';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client';
+import { DOMAIN_EVENT_SINK, type DomainEventSink } from '@auth/infra/events';
+import type { PrismaClient } from '../../generated/prisma/client';
 import { AuthFlow, type AuthFlowStepRow } from '../../domain/auth-flow.aggregate';
 import {
   AUTH_FLOW_REPOSITORY,
@@ -23,32 +22,17 @@ import {
 } from '../../domain/ports/auth-flow-repository.port';
 import { AUTH_FLOW_PRISMA } from '../../auth-flow.config';
 
-/**
- * The `auth_flow.*` domain event -> platform topic mapping.
- *
- * @remarks Domain events name facts in the domain's language; topics are a transport
- * contract. Keeping the translation in one table means adding an event cannot accidentally
- * invent a topic no consumer subscribes to.
- */
-const TOPIC_FOR_EVENT: Record<string, string> = {
-  'auth_flow.started': Topics.AUTH_FLOW_STARTED,
-  'auth_flow.step_completed': Topics.AUTH_FLOW_STEP_COMPLETED,
-  'auth_flow.completed': Topics.AUTH_FLOW_COMPLETED,
-  'auth_flow.failed': Topics.AUTH_FLOW_FAILED,
-};
-
 @Injectable()
 export class PrismaAuthFlowRepository implements AuthFlowRepositoryPort {
-  private readonly logger = new Logger(PrismaAuthFlowRepository.name);
-
   constructor(
     @Inject(AUTH_FLOW_PRISMA) private readonly prisma: PrismaService<PrismaClient>,
+    @Inject(DOMAIN_EVENT_SINK) private readonly sink: DomainEventSink,
   ) {}
 
   async save(flow: AuthFlow): Promise<void> {
     const events = flow.clearDomainEvents();
 
-    await this.prisma.runInTransaction(async (client) => {
+    await this.sink.run(this.prisma, events, async (client) => {
       await client.auth_flows.upsert({
         where: { id: flow.id.value },
         create: {
@@ -88,9 +72,6 @@ export class PrismaAuthFlowRepository implements AuthFlowRepositoryPort {
       });
 
       await this.appendSteps(client, flow);
-      for (const event of events) {
-        await this.enqueue(client, event, flow.id.value);
-      }
     });
   }
 
@@ -119,60 +100,6 @@ export class PrismaAuthFlowRepository implements AuthFlowRepositoryPort {
     });
   }
 
-  /**
-   * One outbox row per domain event.
-   *
-   * @remarks `dedup_key` is what makes a redelivered `AdvanceFlow` safe: the unique index on
-   * `(dedup_key, type)` turns a second insert of the same fact into a no-op rather than a
-   * duplicate `auth_flow.completed`.
-   */
-  private async enqueue(
-    client: PrismaClient,
-    event: IDomainEvent,
-    flowId: string,
-  ): Promise<void> {
-    const topic = TOPIC_FOR_EVENT[event.eventType];
-    if (!topic) {
-      // An unmapped event is a build-time oversight. Logging and continuing is deliberate:
-      // failing the transaction would roll back a perfectly valid sign-in over a topic that has
-      // not been wired up yet.
-      this.logger.warn(`No topic mapped for domain event "${event.eventType}"`);
-      return;
-    }
-
-    const dedupKey = `${event.eventType}:${flowId}:${event.version}`;
-
-    await client.outbox_events.createMany({
-      data: [
-        {
-          id: event.eventId,
-          type: event.eventType,
-          aggregate_type: event.aggregateType,
-          aggregate_id: flowId,
-          topic,
-          // `payload` is a JSON column, so it needs Prisma's Json input type rather than a
-          // plain Record; the cast is the documented boundary for that conversion.
-          payload: {
-            eventId: event.eventId,
-            type: topic,
-            schemaVersion: 1,
-            occurredAt: event.occurredAt.toISOString(),
-            aggregateId: flowId,
-            aggregateType: event.aggregateType,
-            partitionKey: flowId,
-            payload: readPayload(event),
-          } as unknown as Prisma.InputJsonValue,
-          dedup_key: dedupKey,
-          status: 'pending',
-          attempts: 0,
-          next_attempt_at: new Date(),
-          trace_id: event.correlationId ?? crypto.randomUUID(),
-        },
-      ],
-      skipDuplicates: true,
-    });
-  }
-
   async findById(id: string): Promise<AuthFlow | null> {
     const row = await this.prisma.tx.auth_flows.findUnique({
       where: { id },
@@ -191,20 +118,6 @@ export class PrismaAuthFlowRepository implements AuthFlowRepositoryPort {
       },
     });
   }
-}
-
-/**
- * The event's payload, or an empty object.
- *
- * @remarks Structural rather than a class check on purpose: the events are declared in another
- * module that this repository must not depend on, and an event with no payload is not an error
- * worth failing a sign-in over.
- */
-function readPayload(event: IDomainEvent): Record<string, unknown> {
-  const candidate = event as unknown as { payload?: unknown };
-  return typeof candidate.payload === 'object' && candidate.payload !== null
-    ? (candidate.payload as Record<string, unknown>)
-    : {};
 }
 
 export { AUTH_FLOW_REPOSITORY, type AuthFlowStepRow };

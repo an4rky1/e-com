@@ -19,6 +19,7 @@ import {
   PrismaOutboxRepository,
   type EventPublisher,
 } from '@auth/infra/outbox';
+import { domainEventProviders } from '@auth/infra/events';
 import { PrismaClient } from './generated/prisma/client';
 import {
   AdvanceFlowHandler,
@@ -34,6 +35,7 @@ import { IDENTITY_PORT } from './domain/ports/identity.port';
 import { MFA_PORT } from './domain/ports/mfa.port';
 import { SESSION_PORT } from './domain/ports/session.port';
 import { PrismaAuthFlowRepository } from './infrastructure/persistence/prisma-auth-flow.repository';
+import { AUTH_FLOW_EVENTS } from './infrastructure/events/auth-flow.events';
 import {
   GrpcAccountSecurityAdapter,
   GrpcCredentialAdapter,
@@ -108,6 +110,7 @@ export function createAuthFlowModule(
         useFactory: () => resolveAuthFlowConfig(),
       },
       { provide: GRPC_CHANNEL, useValue: options.grpcChannel },
+      ...domainEventProviders(AUTH_FLOW_EVENTS),
 
       { provide: AUTH_FLOW_REPOSITORY, useClass: PrismaAuthFlowRepository },
       { provide: IDENTITY_PORT, useClass: GrpcIdentityAdapter },

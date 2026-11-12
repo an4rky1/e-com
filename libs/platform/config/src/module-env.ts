@@ -24,6 +24,18 @@ export const ENV_PREFIXES = {
   outbox: 'OUTBOX',
   grpc: 'GRPC',
   auth: 'AUTH',
+  // E-commerce
+  catalog: 'CATALOG',
+  cart: 'CART',
+  order: 'ORDER',
+  inventory: 'INVENTORY',
+  billing: 'BILLING',
+  // Shared infrastructure modules with their own namespace
+  locking: 'LOCKING',
+  scheduler: 'SCHEDULER',
+  http: 'HTTP',
+  webhooks: 'WEBHOOKS',
+  encryption: 'ENCRYPTION',
 } as const;
 
 /**

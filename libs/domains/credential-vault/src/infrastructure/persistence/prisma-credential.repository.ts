@@ -1,7 +1,6 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaService } from '@auth/infra/prisma';
-import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/core';
+import { DOMAIN_EVENT_SINK, type DomainEventSink } from '@auth/infra/events';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
 import {
   CREDENTIAL_REPOSITORY,
@@ -13,41 +12,19 @@ import { PasswordCredential } from '../../domain/password-credential.aggregate';
 import { RecoveryCodeSet } from '../../domain/recovery-code-set.aggregate';
 import { VAULT_PRISMA } from '../../credential-vault.config';
 
-/**
- * The domain-event -> topic mapping.
- *
- * @remarks Domain events name facts in the domain's language; topics are a transport
- * contract. Keeping the translation in one function means adding an event cannot accidentally
- * invent a topic name that no consumer subscribes to.
- *
- * @remarks `credential.revoked` rides on the rotation topic deliberately. The catalogue gives
- * credential-vault four topics and none of them is a revocation; every one of these events
- * says the same thing to a consumer — whatever secret this credential held, it does not hold
- * it now — and the payload's `rotation`/`reason` fields say which. A fifth topic would mean a
- * second subscription for a fact that already has one.
- */
-const TOPIC_FOR_EVENT: Record<string, string> = {
-  'credential.verified': Topics.CREDENTIAL_VERIFIED,
-  'credential.failed': Topics.CREDENTIAL_FAILED,
-  'credential.rotated': Topics.CREDENTIAL_ROTATED,
-  'credential.revoked': Topics.CREDENTIAL_ROTATED,
-  'credential.recovery_codes_regenerated': Topics.CREDENTIAL_RECOVERY_CODES_REGENERATED,
-};
-
 @Injectable()
 export class PrismaCredentialRepository implements CredentialRepositoryPort {
-  private readonly logger = new Logger(PrismaCredentialRepository.name);
-
   constructor(
     @Inject(VAULT_PRISMA) private readonly prisma: PrismaService<PrismaClient>,
     @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasherPort,
+    @Inject(DOMAIN_EVENT_SINK) private readonly sink: DomainEventSink,
   ) {}
 
   /**
    * Writes the credential and its events atomically.
    *
-   * @remarks This is the transactional-outbox guarantee in its shortest form. The row and the
-   * event envelopes go in through `runInTransaction`, so either a consumer eventually hears
+   * @remarks This is the transactional-outbox guarantee in its shortest form: the sink puts
+   * the row and the outbox entries in one transaction, so either a consumer eventually hears
    * about the new secret or nothing about it exists at all. Publishing to Kafka after a
    * separate commit would leave a window where a rotated password is live and unannounced.
    */
@@ -64,33 +41,24 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
    */
   async saveAll(credentials: readonly PasswordCredential[]): Promise<void> {
     if (credentials.length === 0) return;
-    await this.prisma.runInTransaction((client) => this.writeAll(client, credentials));
+
+    const events = credentials.flatMap((credential) => credential.clearDomainEvents());
+    await this.sink.run(this.prisma, events, (client) => this.writeRows(client, credentials));
   }
 
   /**
-   * The body of {@link saveAll}, without the transaction wrapper.
+   * The state half of {@link saveAll} and {@link revokeAllCredentials}: the credential rows,
+   * no events.
    *
    * @remarks Split out so {@link revokeAllCredentials} can compose the credential writes and
-   * the recovery-code deletion inside a *single* transaction of its own. Wrapping each half
-   * in `runInTransaction` would have produced two commits and none of the guarantee.
+   * the recovery-code deletion inside a single sink transaction of its own.
    */
-  private async writeAll(
+  private async writeRows(
     client: PrismaClient,
     credentials: readonly PasswordCredential[],
   ): Promise<void> {
-    const pending = credentials.map((credential) => ({
-      credential,
-      events: credential.clearDomainEvents(),
-    }));
-
-    for (const { credential } of pending) {
+    for (const credential of credentials) {
       await this.upsertCredential(client, credential);
-    }
-
-    for (const { credential, events } of pending) {
-      for (const event of events) {
-        await this.enqueue(client, event, credential.id.value, credential.userId);
-      }
     }
   }
 
@@ -123,65 +91,6 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
     }
 
     await client.credentials.create({ data: row });
-  }
-
-  /**
-   * Writes one outbox row per domain event.
-   *
-   * @remarks `dedup_key` is what makes a redelivered command safe: the unique index on
-   * `(dedup_key, type)` turns a second insert of the same fact into a no-op instead of a
-   * duplicate `credential.rotated`. The key ends in the event's version, so two *different*
-   * rotations of the same credential are still two events.
-   */
-  private async enqueue(
-    client: PrismaClient,
-    event: IDomainEvent,
-    credentialId: string,
-    userId: string,
-  ): Promise<void> {
-    const topic = TOPIC_FOR_EVENT[event.eventType];
-    if (!topic) {
-      // An unmapped event is a build-time oversight. Logging and continuing is deliberate:
-      // failing the transaction would roll back a perfectly valid password change over a
-      // topic that has not been wired up yet.
-      this.logger.warn(`No topic mapped for domain event "${event.eventType}"`);
-      return;
-    }
-
-    const dedupKey = `${event.eventType}:${credentialId}:${event.version}`;
-    const payload = readPayload(event);
-
-    await client.outbox_events.createMany({
-      data: [
-        {
-          id: event.eventId,
-          type: event.eventType,
-          aggregate_type: event.aggregateType,
-          aggregate_id: credentialId,
-          topic,
-          // `payload` is a JSON column, so it needs Prisma's Json input type rather than a
-          // plain Record; the cast is the documented boundary for that conversion.
-          payload: {
-            eventId: event.eventId,
-            type: topic,
-            schemaVersion: 1,
-            occurredAt: event.occurredAt.toISOString(),
-            aggregateId: credentialId,
-            aggregateType: event.aggregateType,
-            // The partition key is the *user*, not the credential: two credentials of one
-            // account have to land on the same partition or a consumer cannot order them.
-            partitionKey: userId,
-            payload: { ...payload, userId },
-          } as unknown as Prisma.InputJsonValue,
-          dedup_key: dedupKey,
-          status: 'pending',
-          attempts: 0,
-          next_attempt_at: new Date(),
-          trace_id: event.correlationId ?? crypto.randomUUID(),
-        },
-      ],
-      skipDuplicates: true,
-    });
   }
 
   async findByUser(
@@ -245,7 +154,7 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
     const events = set.clearDomainEvents();
     const rows = set.toRows();
 
-    await this.prisma.runInTransaction(async (client) => {
+    await this.sink.run(this.prisma, events, async (client) => {
       await client.recovery_codes.deleteMany({ where: { user_id: set.id } });
 
       if (rows.length > 0) {
@@ -260,10 +169,6 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
           skipDuplicates: true,
         });
       }
-
-      for (const event of events) {
-        await this.enqueue(client, event, set.id, set.id);
-      }
     });
   }
 
@@ -274,11 +179,11 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
   /**
    * Revokes every live credential and drops the recovery codes, in one transaction.
    *
-   * @remarks The rows are written first and the events in the same `runInTransaction`, so a
-   * consumer either hears about every revocation or none — never half of them. The recovery
-   * codes are deleted in that same transaction: revoking the passwords and then failing on
-   * the delete would leave an account with no password and a working bypass, which is the one
-   * outcome worse than having done nothing.
+   * @remarks The rows are written first and the events go through the same sink transaction,
+   * so a consumer either hears about every revocation or none — never half of them. The
+   * recovery codes are deleted in that same transaction: revoking the passwords and then
+   * failing on the delete would leave an account with no password and a working bypass, which
+   * is the one outcome worse than having done nothing.
    */
   async revokeAllCredentials(input: {
     userId: string;
@@ -300,9 +205,10 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
       revoked.push(credential);
     }
 
-    await this.prisma.runInTransaction(async (client) => {
+    const events = revoked.flatMap((credential) => credential.clearDomainEvents());
+    await this.sink.run(this.prisma, events, async (client) => {
       if (revoked.length > 0) {
-        await this.writeAll(client, revoked);
+        await this.writeRows(client, revoked);
       }
       await client.recovery_codes.deleteMany({ where: { user_id: input.userId } });
     });
@@ -355,13 +261,6 @@ export class PrismaCredentialRepository implements CredentialRepositoryPort {
       revoked_reason: credential.revokedReason,
     };
   }
-}
-
-function readPayload(event: IDomainEvent): Record<string, unknown> {
-  const candidate = event as unknown as { payload?: unknown };
-  return typeof candidate.payload === 'object' && candidate.payload !== null
-    ? (candidate.payload as Record<string, unknown>)
-    : {};
 }
 
 export { CREDENTIAL_REPOSITORY };

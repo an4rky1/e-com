@@ -1,0 +1,24 @@
+{
+  "name": "@app/billing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/billing/src",
+  "projectType": "application",
+  "tags": [
+    "type:app",
+    "domain:billing"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/billing/tsconfig.app.json --noEmit"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "TS_NODE_PROJECT=apps/billing/tsconfig.app.json node -r ts-node/register/transpile-only -r tsconfig-paths/register apps/billing/src/main.ts"
+      }
+    }
+  }
+}

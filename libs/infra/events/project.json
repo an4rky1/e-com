@@ -1,0 +1,26 @@
+{
+  "name": "@auth/infra/events",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/events/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/events/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/infra/events"
+      ],
+      "options": {
+        "jestConfig": "libs/infra/events/jest.config.ts"
+      }
+    }
+  }
+}

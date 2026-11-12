@@ -75,6 +75,38 @@ locals {
       database  = "audit_log"
       is_front  = false
     }
+    # Shop slice: products, baskets, stock, money and the order state machine. Ports match
+    # the gateway's `GATEWAY_*_URL` defaults and each service's `main.ts` gRPC bind.
+    catalog = {
+      http_port = 3011
+      grpc_port = 13011
+      database  = "catalog"
+      is_front  = false
+    }
+    cart = {
+      http_port = 3012
+      grpc_port = 13012
+      database  = "cart"
+      is_front  = false
+    }
+    inventory = {
+      http_port = 3013
+      grpc_port = 13013
+      database  = "inventory"
+      is_front  = false
+    }
+    billing = {
+      http_port = 3014
+      grpc_port = 13014
+      database  = "billing"
+      is_front  = false
+    }
+    order = {
+      http_port = 3015
+      grpc_port = 13015
+      database  = "order"
+      is_front  = false
+    }
     # The edge: stateless, no database, no gRPC server — the only service that talks to
     # its peers exclusively as a client. Its container port matches the compiled default
     # in `apps/api-gateway/src/main.ts` (3000), which is what the Makefile's stub and

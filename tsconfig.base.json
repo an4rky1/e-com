@@ -52,6 +52,7 @@
       "@auth/platform/observability": ["./libs/platform/observability/src/index.ts"],
       "@auth/platform/shutdown": ["./libs/platform/shutdown/src/index.ts"],
       "@auth/infra/cache": ["./libs/infra/cache/src/index.ts"],
+      "@auth/infra/events": ["./libs/infra/events/src/index.ts"],
       "@auth/infra/grpc": ["./libs/infra/grpc/src/index.ts"],
       "@auth/infra/idempotency": ["./libs/infra/idempotency/src/index.ts"],
       "@auth/infra/kafka": ["./libs/infra/kafka/src/index.ts"],
@@ -60,7 +61,21 @@
       "@auth/infra/queue": ["./libs/infra/queue/src/index.ts"],
       "@auth/infra/rate-limit": ["./libs/infra/rate-limit/src/index.ts"],
       "@auth/infra/redis": ["./libs/infra/redis/src/index.ts"],
-      "@auth/infra/saga": ["./libs/infra/saga/src/index.ts"]
+      "@auth/infra/saga": ["./libs/infra/saga/src/index.ts"],
+      "@auth/infra/distributed-locking": [
+        "./libs/infra/distributed-locking/src/index.ts"
+      ],
+      "@auth/infra/scheduler-cron": ["./libs/infra/scheduler-cron/src/index.ts"],
+      "@auth/infra/http-client": ["./libs/infra/http-client/src/index.ts"],
+      "@auth/infra/incoming-webhooks": [
+        "./libs/infra/incoming-webhooks/src/index.ts"
+      ],
+      "@auth/infra/encryption": ["./libs/infra/encryption/src/index.ts"],
+      "@shop/domains/catalog": ["./libs/domains/catalog/src/index.ts"],
+      "@shop/domains/cart": ["./libs/domains/cart/src/index.ts"],
+      "@shop/domains/order": ["./libs/domains/order/src/index.ts"],
+      "@shop/domains/inventory": ["./libs/domains/inventory/src/index.ts"],
+      "@shop/domains/billing": ["./libs/domains/billing/src/index.ts"]
     }
   }
 }

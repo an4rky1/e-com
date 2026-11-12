@@ -40,10 +40,12 @@ report() { # PASS|FAIL label detail
 declare -A PORT=(
   [identity]=3001 [access-control]=3002 [credential-vault]=3003 [session]=3004
   [auth-flow]=3005 [mfa]=3006 [api-key]=3007 [account-security]=3008
-  [notification]=3009 [audit-log]=3010 [api-gateway]=3000
+  [notification]=3009 [audit-log]=3010 [catalog]=3011 [cart]=3012
+  [inventory]=3013 [billing]=3014 [order]=3015 [api-gateway]=3000
 )
 ORDER=(identity access-control credential-vault session auth-flow mfa api-key \
-  account-security notification audit-log api-gateway front)
+  account-security notification audit-log catalog cart inventory billing order \
+  api-gateway front)
 
 healthy() { # service
   local svc="$1"

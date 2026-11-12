@@ -1,0 +1,101 @@
+/**
+ * catalog service schema — source of truth for the product document.
+ *
+ * @remarks The service's Prisma client is generated from this file into
+ * src/generated/prisma. Because each service generates its own client from its own
+ * schema, table ownership is a compile error rather than a convention: no other
+ * service's model is reachable from here.
+ *
+ * @remarks The product document is a *document* in the relational sense: one row for the
+ * card (name, category path, media keys, currency) and one row per variant, because a
+ * price is a fact about a variant and not about the product. Free-form variant attributes
+ * live in a Json column rather than an EAV pair of tables — they are read and written as
+ * one blob with the variant, never queried by attribute value.
+ */
+
+generator client {
+  provider        = "prisma-client-js"
+  output   = "../../libs/domains/catalog/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model products {
+  id            String    @id @db.Uuid
+  name          String
+  description   String    @default("")
+  /// Full path of the node in the category tree, e.g. `["shoes", "running"]`.
+  category_path String[]
+  /// Object-storage keys only. The bytes live in the file store; a URL would go stale.
+  media_keys    String[]
+  currency      String    @default("USD")
+  active        Boolean   @default(true)
+  version       Int       @default(1)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+
+  product_variants product_variants[]
+
+  @@index([category_path], map: "products_category_path_idx")
+}
+
+model product_variants {
+  id         String  @id @db.Uuid
+  product_id String  @db.Uuid
+  sku        String  @unique
+  /// Price in integer minor units. A float in a price column is a reconciliation bug.
+  price_minor Int
+  attrs      Json    @default("{}")
+  active     Boolean @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  product products @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([product_id], map: "product_variants_product_idx")
+}
+
+model outbox_dead_letters {
+  outbox_id     String        @id @db.Uuid
+  reason        String
+  payload       Json
+  last_error    String?
+  attempts      Int
+  trace_id      String?
+  failed_at     DateTime      @default(now()) @db.Timestamptz(6)
+  outbox_events outbox_events @relation(fields: [outbox_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model outbox_events {
+  id                  String               @id @db.Uuid
+  type                String
+  aggregate_type      String
+  aggregate_id        String
+  topic               String
+  payload             Json
+  dedup_key           String
+  status              OutboxStatus @default(pending)
+  attempts            Int                  @default(0)
+  next_attempt_at     DateTime             @default(now()) @db.Timestamptz(6)
+  last_error          String?
+  locked_at           DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?            @db.Timestamptz(6)
+  trace_id            String
+  outbox_dead_letters outbox_dead_letters?
+
+  @@unique([dedup_key, type], map: "outbox_events_dedup_idx")
+  @@index([status, next_attempt_at, created_at], map: "outbox_events_claim_idx")
+  @@index([status, attempts], map: "outbox_events_sweep_idx")
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+  dlq
+}

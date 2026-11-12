@@ -267,3 +267,414 @@ export interface AccountSecurityGrpcClient {
   ListDevices(request: { userId: string }): Promise<{ devices: Record<string, unknown>[] }>;
   RevokeDevice(request: { userId: string; deviceId: string }): Promise<{ ok: boolean }>;
 }
+// ---- catalog.v1 -------------------------------------------------------------
+
+/** Minor units as a string: int64 does not survive a JSON number at 53 bits. */
+export interface ShopMoney {
+  amountMinor: string;
+  currency: string;
+}
+
+export interface CatalogVariant {
+  sku: string;
+  price: ShopMoney;
+  attrs?: Record<string, string>;
+  active: boolean;
+}
+
+export interface CatalogProduct {
+  id: string;
+  name: string;
+  description: string;
+  categoryPath: readonly string[];
+  variants: readonly CatalogVariant[];
+  mediaKeys: readonly string[];
+  active: boolean;
+  version: number;
+  priceRangeMin?: ShopMoney;
+  priceRangeMax?: ShopMoney;
+}
+
+export interface CreateCatalogVariant {
+  sku: string;
+  price: ShopMoney;
+  attrs?: Record<string, string>;
+}
+
+export interface CreateProductRequest {
+  name: string;
+  description: string;
+  categoryPath: string[];
+  variants: CreateCatalogVariant[];
+  mediaKeys?: string[];
+}
+
+export interface SetVariantPriceRequest {
+  productId: string;
+  sku: string;
+  price: ShopMoney;
+}
+
+export interface ArchiveProductRequest {
+  productId: string;
+  reason: string;
+}
+
+export interface ListByCategoryRequest {
+  categoryPath: string[];
+  page: number;
+  pageSize: number;
+}
+
+export interface ProductList {
+  products: readonly CatalogProduct[];
+  total: number;
+}
+
+export interface GetPricingRequest {
+  skus: string[];
+}
+
+export interface PricedSku {
+  sku: string;
+  productId: string;
+  price: ShopMoney;
+  active: boolean;
+}
+
+export interface GetPricingResponse {
+  prices: PricedSku[];
+}
+
+export interface CatalogGrpcClient {
+  GetProduct(request: { id: string }): Promise<CatalogProduct>;
+  ListByCategory(request: ListByCategoryRequest): Promise<ProductList>;
+  GetPricing(request: GetPricingRequest): Promise<GetPricingResponse>;
+  CreateProduct(request: CreateProductRequest): Promise<CatalogProduct>;
+  SetVariantPrice(request: SetVariantPriceRequest): Promise<CatalogProduct>;
+  ArchiveProduct(request: ArchiveProductRequest): Promise<CatalogProduct>;
+}
+
+// ---- cart.v1 ---------------------------------------------------------------
+
+export interface CartItemView {
+  sku: string;
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+  totalPrice: ShopMoney;
+  addedAt: string;
+  updatedAt: string;
+  priceChanged: boolean;
+}
+
+export interface CartView {
+  sessionId: string;
+  userId: string;
+  items: readonly CartItemView[];
+  status: string;
+  itemCount: number;
+  subtotal: ShopMoney;
+  total: ShopMoney;
+  currency: string;
+  expiresAt: string;
+  version: number;
+}
+
+export interface GetCartRequest {
+  sessionId: string;
+  userId: string;
+}
+
+export interface AddItemRequest {
+  sessionId: string;
+  userId: string;
+  sku: string;
+  quantity: number;
+}
+
+export interface UpdateItemQtyRequest {
+  sessionId: string;
+  userId: string;
+  sku: string;
+  quantity: number;
+}
+
+export interface RemoveItemRequest {
+  sessionId: string;
+  userId: string;
+  sku: string;
+}
+
+export interface ClearCartRequest {
+  sessionId: string;
+  userId: string;
+}
+
+export interface CheckoutLine {
+  sku: string;
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+}
+
+export interface CheckoutLines {
+  lines: readonly CheckoutLine[];
+  subtotal: ShopMoney;
+  currency: string;
+  version: number;
+}
+
+export interface ValidateForCheckoutResponse {
+  valid: boolean;
+  unavailableSkus: readonly string[];
+  priceChanges: readonly { sku: string; oldPrice: ShopMoney; newPrice: ShopMoney }[];
+}
+
+export interface CartGrpcClient {
+  GetCart(request: GetCartRequest): Promise<CartView>;
+  AddItem(request: AddItemRequest): Promise<CartView>;
+  UpdateItemQty(request: UpdateItemQtyRequest): Promise<CartView>;
+  RemoveItem(request: RemoveItemRequest): Promise<CartView>;
+  ClearCart(request: ClearCartRequest): Promise<CartView>;
+  GetCheckoutLines(request: GetCartRequest): Promise<CheckoutLines>;
+  ValidateForCheckout(request: GetCartRequest): Promise<ValidateForCheckoutResponse>;
+}
+
+// ---- inventory.v1 ----------------------------------------------------------
+
+export interface ReserveLine {
+  sku: string;
+  qty: number;
+}
+
+export interface ReserveRequest {
+  orderId: string;
+  lines: ReserveLine[];
+  warehouseId: string;
+}
+
+export interface ReservedLine {
+  sku: string;
+  qty: number;
+  reservationId: string;
+}
+
+export interface RejectedLine {
+  sku: string;
+  qty: number;
+  reason: string;
+}
+
+export interface ReserveResponse {
+  fullyAccepted: boolean;
+  reserved: ReservedLine[];
+  rejected: RejectedLine[];
+}
+
+export interface ReleaseRequest {
+  orderId: string;
+  warehouseId: string;
+}
+
+export interface ReleaseResponse {
+  releasedLines: number;
+}
+
+export interface ShipRequest {
+  orderId: string;
+  lines: ReserveLine[];
+  warehouseId: string;
+}
+
+export interface AdjustStockRequest {
+  sku: string;
+  delta: number;
+  warehouseId: string;
+  reason: string;
+  adjustmentId: string;
+}
+
+export interface AdjustStockResponse {
+  onHand: number;
+  available: number;
+}
+
+export interface GetAvailableRequest {
+  sku: string;
+  warehouseId: string;
+}
+
+export interface GetAvailableResponse {
+  sku: string;
+  warehouseId: string;
+  onHand: number;
+  reserved: number;
+  safety: number;
+  available: number;
+}
+
+export interface InventoryGrpcClient {
+  Reserve(request: ReserveRequest): Promise<ReserveResponse>;
+  Release(request: ReleaseRequest): Promise<ReleaseResponse>;
+  Ship(request: ShipRequest): Promise<{ shipped: boolean }>;
+  AdjustStock(request: AdjustStockRequest): Promise<AdjustStockResponse>;
+  GetAvailable(request: GetAvailableRequest): Promise<GetAvailableResponse>;
+}
+
+// ---- billing.v1 ------------------------------------------------------------
+
+export interface ChargeLine {
+  sku: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+}
+
+export interface ChargeOrderRequest {
+  orderId: string;
+  /** Business-derived: `order:{orderId}:charge:{step}` — never a random UUID. */
+  idempotencyKey: string;
+  amount: ShopMoney;
+  paymentMethodToken: string;
+  customerId: string;
+  /** The lines the amount was computed from; billing recomputes and refuses a mismatch. */
+  lines: ChargeLine[];
+  /** Tax jurisdiction for the recomputation; empty means the configured default. */
+  customerCountry: string;
+}
+
+export interface NextAction {
+  type: string;
+  redirectUrl: string;
+  sdkPayload: string;
+}
+
+export interface ChargeOrderResponse {
+  paymentId: string;
+  status: string;
+  nextAction?: NextAction;
+  failureCode: string;
+}
+
+export interface RefundOrderRequest {
+  orderId: string;
+  paymentId: string;
+  /** Empty means a full refund. */
+  amount?: ShopMoney;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface RefundOrderResponse {
+  refundId: string;
+  status: string;
+  refundedTotal: ShopMoney;
+}
+
+export interface InvoiceLineView {
+  sku: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+  lineSubtotal: ShopMoney;
+  tax: ShopMoney;
+}
+
+export interface InvoiceView {
+  invoiceId: string;
+  orderId: string;
+  status: string;
+  lines: readonly InvoiceLineView[];
+  subtotal: ShopMoney;
+  discount: ShopMoney;
+  taxTotal: ShopMoney;
+  total: ShopMoney;
+  currency: string;
+  couponCode: string;
+  issuedAt: string;
+}
+
+export interface PreviewTotalsLine {
+  sku: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+}
+
+export interface PreviewTotalsRequest {
+  customerCountry: string;
+  couponCode: string;
+  lines: PreviewTotalsLine[];
+  currency: string;
+}
+
+export interface PreviewTotalsResponse {
+  invoice: InvoiceView;
+}
+
+export interface BillingGrpcClient {
+  ChargeOrder(request: ChargeOrderRequest): Promise<ChargeOrderResponse>;
+  RefundOrder(request: RefundOrderRequest): Promise<RefundOrderResponse>;
+  GetInvoice(request: { orderId: string }): Promise<InvoiceView>;
+  PreviewTotals(request: PreviewTotalsRequest): Promise<PreviewTotalsResponse>;
+}
+
+// ---- order.v1 --------------------------------------------------------------
+
+export interface OrderLineView {
+  sku: string;
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: ShopMoney;
+  totalPrice: ShopMoney;
+}
+
+export interface OrderView {
+  id: string;
+  userId: string;
+  status: string;
+  lines: readonly OrderLineView[];
+  subtotal: ShopMoney;
+  total: ShopMoney;
+  currency: string;
+  paymentId: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  cancelReason: string;
+}
+
+export interface CreateOrderRequest {
+  userId: string;
+  sessionId: string;
+  /** Caller-chosen, carried in the Idempotency-Key header. Required. */
+  idempotencyKey: string;
+  currency: string;
+  /** Opaque PSP token for the checkout charge; empty means the default test instrument. */
+  paymentMethodToken?: string;
+}
+
+export interface ListUserOrdersRequest {
+  userId: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface ListUserOrdersResponse {
+  orders: readonly OrderView[];
+  total: number;
+}
+
+export interface CancelOrderRequest {
+  orderId: string;
+  userId: string;
+  reason: string;
+}
+
+export interface OrderGrpcClient {
+  CreateOrder(request: CreateOrderRequest): Promise<OrderView>;
+  GetOrder(request: { orderId: string; userId: string }): Promise<OrderView>;
+  ListUserOrders(request: ListUserOrdersRequest): Promise<ListUserOrdersResponse>;
+  CancelOrder(request: CancelOrderRequest): Promise<OrderView>;
+}

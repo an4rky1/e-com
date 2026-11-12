@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package cart.v1;
+
+// Cart owns the shopper's in-progress selection: Redis-backed, TTL-bound, and a copy
+// of the price at add-to-cart time. It never computes the final checkout total (order
+// does) and never talks to the payment machinery.
+service CartService {
+  rpc GetCart (GetCartRequest) returns (Cart);
+  rpc AddItem (AddItemRequest) returns (Cart);
+  rpc UpdateItemQty (UpdateItemQtyRequest) returns (Cart);
+  rpc RemoveItem (RemoveItemRequest) returns (Cart);
+  rpc ClearCart (ClearCartRequest) returns (Cart);
+  // Snapshot of the lines the order service copies when it creates an order.
+  rpc GetCheckoutLines (GetCheckoutLinesRequest) returns (CheckoutLines);
+  // Pre-checkout validation: which lines changed price or vanished since add-time.
+  rpc ValidateForCheckout (ValidateForCheckoutRequest) returns (ValidateForCheckoutResponse);
+}
+
+message Money {
+  string amount_minor = 1;
+  string currency = 2;
+}
+
+message CartItem {
+  string sku = 1;
+  string product_id = 2;
+  string name = 3;
+  int32 quantity = 4;
+  Money unit_price = 5;
+  Money total_price = 6;
+  string added_at = 7;
+  string updated_at = 8;
+  // True when `product.v1.price_changed` moved the catalog price away from the
+  // snapshot. The total is never silently rewritten: the client must confirm.
+  bool price_changed = 9;
+}
+
+message Cart {
+  string session_id = 1;
+  string user_id = 2;
+  repeated CartItem items = 3;
+  // active | converting | converted | expired | abandoned.
+  string status = 4;
+  int32 item_count = 5;
+  Money subtotal = 6;
+  Money total = 7;
+  string currency = 8;
+  string expires_at = 9;
+  int32 version = 10;
+}
+
+message GetCartRequest {
+  string session_id = 1;
+  string user_id = 2;
+}
+
+message AddItemRequest {
+  string session_id = 1;
+  string user_id = 2;
+  string sku = 3;
+  int32 quantity = 4;
+}
+
+message UpdateItemQtyRequest {
+  string session_id = 1;
+  string user_id = 2;
+  string sku = 3;
+  int32 quantity = 4;
+}
+
+message RemoveItemRequest {
+  string session_id = 1;
+  string user_id = 2;
+  string sku = 3;
+}
+
+message ClearCartRequest {
+  string session_id = 1;
+  string user_id = 2;
+}
+
+message GetCheckoutLinesRequest {
+  string session_id = 1;
+  string user_id = 2;
+}
+
+message CheckoutLine {
+  string sku = 1;
+  string product_id = 2;
+  string name = 3;
+  int32 quantity = 4;
+  Money unit_price = 5;
+}
+
+message CheckoutLines {
+  repeated CheckoutLine lines = 1;
+  Money subtotal = 2;
+  string currency = 3;
+  int32 version = 4;
+}
+
+message ValidateForCheckoutRequest {
+  string session_id = 1;
+  string user_id = 2;
+}
+
+message PriceChange {
+  string sku = 1;
+  Money old_price = 2;
+  Money new_price = 3;
+}
+
+message ValidateForCheckoutResponse {
+  bool valid = 1;
+  repeated string unavailable_skus = 2;
+  repeated PriceChange price_changes = 3;
+}

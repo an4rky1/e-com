@@ -37,12 +37,12 @@ variables {
   environment = "dev"
 }
 
-run "the_catalog_becomes_exactly_twelve_tasks" {
+run "the_catalog_becomes_exactly_seventeen_tasks" {
   command = plan
 
   assert {
-    condition     = length(module.platform.task_definition) == 12 && length(module.platform.service_names) == 12
-    error_message = "the catalog has 11 backends plus the front; each needs one task definition and one service."
+    condition     = length(module.platform.task_definition) == 17 && length(module.platform.service_names) == 17
+    error_message = "the catalog has 16 backends plus the front; each needs one task definition and one service."
   }
 
   assert {
@@ -76,7 +76,12 @@ run "the_gateway_dials_cloud_map_names_not_localhost" {
       nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_ACCESS_CONTROL_URL"] == "access-control.dev.auth.internal:13002" &&
       nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_CREDENTIAL_VAULT_URL"] == "credential-vault.dev.auth.internal:13003" &&
       nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_SESSION_URL"] == "session.dev.auth.internal:13004" &&
-      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_AUTH_FLOW_URL"] == "auth-flow.dev.auth.internal:13005"
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_AUTH_FLOW_URL"] == "auth-flow.dev.auth.internal:13005" &&
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_CATALOG_URL"] == "catalog.dev.auth.internal:13011" &&
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_CART_URL"] == "cart.dev.auth.internal:13012" &&
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_INVENTORY_URL"] == "inventory.dev.auth.internal:13013" &&
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_BILLING_URL"] == "billing.dev.auth.internal:13014" &&
+      nonsensitive(module.platform.container_env)["api-gateway"]["GATEWAY_ORDER_URL"] == "order.dev.auth.internal:13015"
     )
     error_message = "the edge's peer table must resolve inside the VPC — localhost is the task itself in ECS."
   }
@@ -119,6 +124,11 @@ run "the_gateway_dials_cloud_map_names_not_localhost" {
         account-security = "3008"
         notification     = "3009"
         audit-log        = "3010"
+        catalog          = "3011"
+        cart             = "3012"
+        inventory        = "3013"
+        billing          = "3014"
+        order            = "3015"
         api-gateway      = "3000"
       }[name] if name != "front"
     ])
@@ -155,11 +165,11 @@ run "every_task_sees_only_the_secrets_it_reads" {
   }
 
   assert {
-    condition = length({
-      for name, secrets in nonsensitive(module.platform.container_secrets) :
+    condition = length(nonsensitive({
+      for name, secrets in module.platform.container_secrets :
       name => secrets if contains(keys(secrets), "DATABASE_URL")
-    }) == 10
-    error_message = "exactly the ten database-backed services may ask for a DATABASE_URL."
+    })) == 15
+    error_message = "exactly the fifteen database-backed services may ask for a DATABASE_URL."
   }
 }
 
@@ -283,10 +293,10 @@ run "http_only_is_the_default_and_scaling_is_not" {
   assert {
     condition = (
       module.platform.autoscaling_wiring.enabled &&
-      length(module.platform.autoscaling_wiring.services) == 12 &&
+      length(module.platform.autoscaling_wiring.services) == 17 &&
       module.platform.autoscaling_wiring.cpu_target_percent == 60
     )
-    error_message = "autoscaling is on by default for all twelve services, tracking 60% CPU."
+    error_message = "autoscaling is on by default for all seventeen services, tracking 60% CPU."
   }
 
   assert {

@@ -33,7 +33,13 @@ export interface ApiRoute {
  */
 export const API_PROXY_PREFIX = '/api';
 
-/** The public surface. Ten routes; anything a client can call is in here. */
+/**
+ * The public surface. Ten routes; anything a client can call is in here.
+ *
+ * @remarks Auth only. The storefront surface lives in {@link StorefrontRoutes} and is
+ * pinned by its own map: the gateway's contract spec compares its auth controllers against
+ * *this* object, so a catalog path landing here would read as a missing gateway route.
+ */
 export const ApiRoutes = {
   login: { method: 'POST', path: '/auth/login', authenticated: false },
   register: { method: 'POST', path: '/auth/register', authenticated: false },
@@ -53,6 +59,64 @@ export const ApiRoutes = {
   createUser: { method: 'POST', path: '/users', authenticated: false },
   setPassword: { method: 'POST', path: '/users/:id/password', authenticated: true },
 } as const satisfies Record<string, ApiRoute>;
+
+/**
+ * The storefront surface: catalog, cart, checkout, orders, and the PSP webhook.
+ *
+ * @remarks A separate map rather than more keys on {@link ApiRoutes}, because the two maps
+ * answer different questions with different owners. `ApiRoutes` is what the auth gateway
+ * serves *today*, and its contract spec holds the controllers to exactly that set — merging
+ * storefront paths into it would make every gateway spec red for routes no controller has
+ * yet. When the gateway gains the storefront controllers, this map becomes the second half
+ * of its contract, and the front reads both through {@link AllRoutes}.
+ */
+export const StorefrontRoutes = {
+  // Catalog reads are public: the vitrina is reachable before sign-in.
+  catalogList: { method: 'GET', path: '/catalog', authenticated: false },
+  catalogProduct: { method: 'GET', path: '/catalog/:id', authenticated: false },
+  catalogCreateProduct: {
+    method: 'POST',
+    path: '/catalog/admin/products',
+    authenticated: true,
+  },
+  catalogSetPrice: {
+    method: 'POST',
+    path: '/catalog/admin/price',
+    authenticated: true,
+  },
+
+  // Cart mutations are POST rather than PATCH/DELETE: the contract's verb set is GET|POST,
+  // and a body-carrying POST keeps the front's single `fetch` helper honest.
+  cartGet: { method: 'GET', path: '/cart', authenticated: true },
+  cartAddItem: { method: 'POST', path: '/cart/items', authenticated: true },
+  cartUpdateItem: { method: 'POST', path: '/cart/items/update', authenticated: true },
+  cartRemoveItem: { method: 'POST', path: '/cart/items/remove', authenticated: true },
+  cartClear: { method: 'POST', path: '/cart/clear', authenticated: true },
+
+  // Checkout is the order facade: it reads the cart, creates the order, and lets the
+  // order service drive reserve → charge → confirm through its saga.
+  checkoutPreview: { method: 'POST', path: '/checkout/preview', authenticated: true },
+  checkoutCreate: { method: 'POST', path: '/checkout', authenticated: true },
+
+  orderList: { method: 'GET', path: '/orders', authenticated: true },
+  orderGet: { method: 'GET', path: '/orders/:id', authenticated: true },
+  orderCancel: { method: 'POST', path: '/orders/:id/cancel', authenticated: true },
+
+  // The only unauthenticated write surface outside auth itself: the PSP calls it with a
+  // signed body, and the signature — not a session — is what proves authenticity.
+  paymentWebhook: { method: 'POST', path: '/webhooks/payment', authenticated: false },
+} as const satisfies Record<string, ApiRoute>;
+
+/**
+ * Everything a client may call, both maps in one object.
+ *
+ * @remarks The front's view: a page never cares which process answers a path, only what to
+ * send. The split survives in the two maps above, where it belongs to the gateway's specs.
+ */
+export const AllRoutes = { ...ApiRoutes, ...StorefrontRoutes } as const satisfies Record<
+  string,
+  ApiRoute
+>;
 
 /** The browser-side URL for a route: the gateway path behind the front's proxy prefix. */
 export const viaProxy = (route: ApiRoute): string => `${API_PROXY_PREFIX}${route.path}`;

@@ -1,8 +1,7 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
-import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/core';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client';
+import { DOMAIN_EVENT_SINK, type DomainEventSink } from '@auth/infra/events';
+import type { PrismaClient } from '../../generated/prisma/client';
 import {
   SESSION_REPOSITORY,
   type RefreshTokenMatch,
@@ -13,35 +12,21 @@ import { Session } from '../../domain/session.aggregate';
 import { TokenDigester } from '../../domain/value-objects/token-digester.vo';
 import { SESSION_PRISMA } from '../../session.config';
 
-/**
- * The domain-event -> topic mapping.
- *
- * @remarks Domain events name facts in the domain's language; topics are a transport
- * contract. Keeping the translation in one function means adding an event cannot accidentally
- * invent a topic name that no consumer subscribes to.
- */
-const TOPIC_FOR_EVENT: Record<string, string> = {
-  'session.issued': Topics.SESSION_ISSUED,
-  'session.refreshed': Topics.SESSION_REFRESHED,
-  'session.revoked': Topics.SESSION_REVOKED,
-  'session.token_reuse_detected': Topics.SESSION_REUSE_DETECTED,
-};
-
 @Injectable()
 export class PrismaSessionRepository implements SessionRepositoryPort {
-  private readonly logger = new Logger(PrismaSessionRepository.name);
-
   constructor(
     @Inject(SESSION_PRISMA) private readonly prisma: PrismaService<PrismaClient>,
+    @Inject(DOMAIN_EVENT_SINK) private readonly sink: DomainEventSink,
   ) {}
 
   /**
    * Writes the session, its tokens and its events atomically.
    *
-   * @remarks This is the transactional-outbox guarantee in its shortest form. The rows and the
-   * event envelopes go in through `runInTransaction`, so either a consumer eventually hears
-   * about the session or nothing about it exists at all. Emitting to Kafka after a separate
-   * commit would leave a window where a login succeeded and nobody was told.
+   * @remarks The sink owns the transaction, so the rows and the outbox rows for the mapped
+   * events commit together, and this service's handlers hear the facts only after that
+   * commit. Either a consumer eventually hears about the session or nothing about it exists
+   * at all — emitting to Kafka after a separate commit would leave a window where a login
+   * succeeded and nobody was told.
    */
   async save(session: Session): Promise<void> {
     await this.saveMany([session]);
@@ -58,19 +43,14 @@ export class PrismaSessionRepository implements SessionRepositoryPort {
     if (sessions.length === 0) return;
 
     const pending = sessions.map((session) => ({ session, events: session.clearDomainEvents() }));
+    const events = pending.flatMap(({ events }) => events);
 
-    await this.prisma.runInTransaction(async (client) => {
+    await this.sink.run(this.prisma, events, async (client) => {
       for (const { session } of pending) {
         await this.upsertSession(client, session);
 
         for (const token of session.refreshTokens) {
           await this.upsertToken(client, session, token);
-        }
-      }
-
-      for (const { session, events } of pending) {
-        for (const event of events) {
-          await this.enqueue(client, event, session.id.value);
         }
       }
     });
@@ -126,62 +106,6 @@ export class PrismaSessionRepository implements SessionRepositoryPort {
       where: { id: token.id },
       create: { id: token.id, session_id: session.id.value, ...data },
       update: data,
-    });
-  }
-
-  /**
-   * Writes one outbox row per domain event.
-   *
-   * @remarks `dedupKey` is what makes a redelivered command safe: the unique index on
-   * `(dedup_key, type)` turns a second insert of the same fact into a no-op instead of a
-   * duplicate `session.revoked`. The key ends in the aggregate version so two *different*
-   * revocations of the same session are still two events.
-   */
-  private async enqueue(
-    client: PrismaClient,
-    event: IDomainEvent,
-    sessionId: string,
-  ): Promise<void> {
-    const topic = TOPIC_FOR_EVENT[event.eventType];
-    if (!topic) {
-      // An unmapped event is a build-time oversight. Logging and continuing is deliberate:
-      // failing the transaction would roll back a perfectly valid sign-in over a topic that
-      // has not been wired up yet.
-      this.logger.warn(`No topic mapped for domain event "${event.eventType}"`);
-      return;
-    }
-
-    const dedupKey = `${event.eventType}:${sessionId}:${event.version}`;
-    const payload = readPayload(event);
-
-    await client.outbox_events.createMany({
-      data: [
-        {
-          id: event.eventId,
-          type: event.eventType,
-          aggregate_type: event.aggregateType,
-          aggregate_id: sessionId,
-          topic,
-          // `payload` is a JSON column, so it needs Prisma's Json input type rather than a
-          // plain Record; the cast is the documented boundary for that conversion.
-          payload: {
-            eventId: event.eventId,
-            type: topic,
-            schemaVersion: 1,
-            occurredAt: event.occurredAt.toISOString(),
-            aggregateId: sessionId,
-            aggregateType: event.aggregateType,
-            partitionKey: sessionId,
-            payload,
-          } as unknown as Prisma.InputJsonValue,
-          dedup_key: dedupKey,
-          status: 'pending',
-          attempts: 0,
-          next_attempt_at: new Date(),
-          trace_id: event.correlationId ?? crypto.randomUUID(),
-        },
-      ],
-      skipDuplicates: true,
     });
   }
 
@@ -262,13 +186,6 @@ export class PrismaSessionRepository implements SessionRepositoryPort {
 
     return { session, token };
   }
-}
-
-function readPayload(event: IDomainEvent): Record<string, unknown> {
-  const candidate = event as unknown as { payload?: unknown };
-  return typeof candidate.payload === 'object' && candidate.payload !== null
-    ? (candidate.payload as Record<string, unknown>)
-    : {};
 }
 
 export { SESSION_REPOSITORY };

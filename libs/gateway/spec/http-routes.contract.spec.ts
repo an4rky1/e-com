@@ -1,18 +1,23 @@
 /**
  * @fileoverview The gateway's routes, held to `@auth/contracts/http`.
  *
- * @remarks The contract file claims six routes with these paths, these methods and this
- * guard arrangement; the controllers are the runtime truth. Nothing enforces that they agree
- * at boot, so they are enforced here: a route renamed in a controller, a seventh route added
+ * @remarks Two maps, two assertions. Auth controllers are checked against `ApiRoutes`;
+ * storefront controllers against `StorefrontRoutes`. Nothing enforces that they agree at
+ * boot, so they are enforced here: a route renamed in a controller, a seventh route added
  * without a contract entry, or one that quietly gains or loses `@Public()` fails this test
  * instead of drifting until a browser trips over it.
  */
 import 'reflect-metadata';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { ApiRoutes } from '@auth/contracts/http';
+import { ApiRoutes, StorefrontRoutes } from '@auth/contracts/http';
 import { AuthController } from '../src/presentation/auth.controller';
 import { UsersController } from '../src/presentation/users.controller';
+import { CatalogController } from '../src/presentation/catalog.controller';
+import { CartController } from '../src/presentation/cart.controller';
+import { CheckoutController } from '../src/presentation/checkout.controller';
+import { OrdersController } from '../src/presentation/orders.controller';
+import { WebhooksController } from '../src/presentation/webhooks.controller';
 import { IS_PUBLIC_ROUTE } from '../src/presentation/decorators/route-metadata';
 
 type ReflectedRoute = {
@@ -52,28 +57,64 @@ const routesOf = (
   );
 };
 
-const ROUTES = [...routesOf(AuthController, 'auth'), ...routesOf(UsersController, 'users')];
+const AUTH_ROUTES = [
+  ...routesOf(AuthController, 'auth'),
+  ...routesOf(UsersController, 'users'),
+];
 
-describe('controllers vs @auth/contracts/http', () => {
+const STOREFRONT_ROUTES = [
+  ...routesOf(CatalogController, 'catalog'),
+  ...routesOf(CartController, 'cart'),
+  ...routesOf(CheckoutController, 'checkout'),
+  ...routesOf(OrdersController, 'orders'),
+  ...routesOf(WebhooksController, 'webhooks'),
+];
+
+describe('auth controllers vs ApiRoutes', () => {
   it('exposes exactly the contract paths — no more, no fewer', () => {
     const contract = Object.values(ApiRoutes)
       .map((route) => route.path)
       .sort();
-    const reflected = ROUTES.map((route) => route.path).sort();
+    const reflected = AUTH_ROUTES.map((route) => route.path).sort();
 
     expect(reflected).toEqual(contract);
   });
 
   it('uses the contract verb on every path', () => {
     for (const route of Object.values(ApiRoutes)) {
-      const reflected = ROUTES.find((found) => found.path === route.path);
+      const reflected = AUTH_ROUTES.find((found) => found.path === route.path);
       expect(reflected?.method).toBe(route.method);
     }
   });
 
   it('opens without a token exactly the routes the contract calls unauthenticated', () => {
     for (const route of Object.values(ApiRoutes)) {
-      const reflected = ROUTES.find((found) => found.path === route.path);
+      const reflected = AUTH_ROUTES.find((found) => found.path === route.path);
+      expect(reflected?.authenticated).toBe(route.authenticated);
+    }
+  });
+});
+
+describe('storefront controllers vs StorefrontRoutes', () => {
+  it('exposes exactly the contract paths — no more, no fewer', () => {
+    const contract = Object.values(StorefrontRoutes)
+      .map((route) => route.path)
+      .sort();
+    const reflected = STOREFRONT_ROUTES.map((route) => route.path).sort();
+
+    expect(reflected).toEqual(contract);
+  });
+
+  it('uses the contract verb on every path', () => {
+    for (const route of Object.values(StorefrontRoutes)) {
+      const reflected = STOREFRONT_ROUTES.find((found) => found.path === route.path);
+      expect(reflected?.method).toBe(route.method);
+    }
+  });
+
+  it('opens without a token exactly the routes the contract calls unauthenticated', () => {
+    for (const route of Object.values(StorefrontRoutes)) {
+      const reflected = STOREFRONT_ROUTES.find((found) => found.path === route.path);
       expect(reflected?.authenticated).toBe(route.authenticated);
     }
   });

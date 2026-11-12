@@ -14,6 +14,16 @@ export interface PublishOptions {
   aggregateType?: string;
   traceId?: string;
   /**
+   * Identity of the underlying fact. Defaults to a fresh uuid; passing the domain event's
+   * own id keeps the row, the envelope and the produced message correlatable end to end.
+   */
+  eventId?: string;
+  /**
+   * When the fact happened, ISO-8601. Defaults to now — correct only when publication is
+   * immediate, which is why the outbox (publication is a relay poll later) passes it.
+   */
+  occurredAt?: string;
+  /**
    * Stable identity of the fact. Defaults to `<type>:<aggregateId>`, which is what makes a
    * retried command a no-op instead of a duplicate event.
    */
@@ -75,14 +85,15 @@ export class OutboxService implements IIntegrationEventPublisher {
     // `trace_id` is NOT NULL in the schema, so a missing one is filled rather than skipped:
     // an untraceable event is far harder to debug than a synthetic root id.
     const traceId = options.traceId ?? crypto.randomUUID();
-    const eventId = crypto.randomUUID();
+    const eventId = options.eventId ?? crypto.randomUUID();
     const now = new Date();
+    const occurredAt = options.occurredAt ?? now.toISOString();
 
     const event: IntegrationEvent<TPayload> = {
       eventId,
       type: topic,
       schemaVersion: EVENT_SCHEMA_VERSION,
-      occurredAt: now.toISOString(),
+      occurredAt,
       aggregateId,
       aggregateType,
       partitionKey: options.partitionKey ?? aggregateId,

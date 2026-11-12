@@ -1,10 +1,7 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { type PrismaService } from '@auth/infra/prisma';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
-import { OutboxService } from '@auth/infra/outbox';
-import { Topics } from '@auth/contracts';
-import type { IDomainEvent } from '@auth/core';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client';
+import { DOMAIN_EVENT_SINK, type DomainEventSink } from '@auth/infra/events';
+import type { PrismaClient } from '../../generated/prisma/client';
 import {
   USER_REPOSITORY,
   type UserRepositoryPort,
@@ -13,40 +10,26 @@ import {
 import { User } from '../../domain/user.aggregate';
 import { IDENTITY_PRISMA } from '../../identity.config';
 
-/**
- * The `user.registered` -> `platform.user.registered.v1` mapping.
- *
- * @remarks Domain events name facts in the domain's language; topics are a transport
- * contract. Keeping the translation in one function means adding an event cannot accidentally
- * invent a topic name that no consumer subscribes to.
- */
-const TOPIC_FOR_EVENT: Record<string, string> = {
-  'user.registered': Topics.USER_REGISTERED,
-  'user.email_verified': Topics.USER_EMAIL_VERIFIED,
-  'user.deleted': Topics.USER_DELETED,
-};
-
 @Injectable()
 export class PrismaUserRepository implements UserRepositoryPort {
-  private readonly logger = new Logger(PrismaUserRepository.name);
-
   constructor(
     @Inject(IDENTITY_PRISMA) private readonly prisma: PrismaService<PrismaClient>,
-    private readonly outbox: OutboxService,
+    @Inject(DOMAIN_EVENT_SINK) private readonly sink: DomainEventSink,
   ) {}
 
   /**
    * Writes the user and its events atomically.
    *
-   * @remarks This is the transactional-outbox guarantee in its shortest form. The rows and
-   * the event envelopes go in through `runInTransaction`, so either a consumer eventually
-   * hears about the new user or nothing about it exists at all. Emitting to Kafka after a
-   * separate commit would leave a window where the account is live and unannounced.
+   * @remarks The sink opens the transaction, so the row and the `outbox_events` rows for the
+   * mapped events commit together, and the drained events reach this service's own handlers
+   * only after that commit. Either a consumer eventually hears about the new user or nothing
+   * about it exists at all — emitting to Kafka after a separate commit would leave a window
+   * where the account is live and unannounced.
    */
   async save(user: User): Promise<void> {
     const events = user.clearDomainEvents();
 
-    await this.prisma.runInTransaction(async (client) => {
+    await this.sink.run(this.prisma, events, async (client) => {
       await client.users.upsert({
         where: { id: user.id },
         create: {
@@ -74,65 +57,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
           deleted_reason: user.deletedReason,
         },
       });
-
-      for (const event of events) {
-        await this.enqueue(client, event, user.id);
-      }
-    });
-  }
-
-  /**
-   * Writes one outbox row per domain event.
-   *
-   * @remarks `dedupKey` is what makes a redelivered command safe: the unique index on
-   * `(dedup_key, type)` turns a second insert of the same fact into a no-op instead of a
-   * duplicate `user.registered`.
-   */
-  private async enqueue(
-    client: PrismaClient,
-    event: IDomainEvent,
-    userId: string,
-  ): Promise<void> {
-    const topic = TOPIC_FOR_EVENT[event.eventType];
-    if (!topic) {
-      // An unmapped event is a build-time oversight. Logging and continuing is deliberate:
-      // failing the transaction would roll back a perfectly valid user registration over a
-      // topic that has not been wired up yet.
-      this.logger.warn(`No topic mapped for domain event "${event.eventType}"`);
-      return;
-    }
-
-    const dedupKey = `${event.eventType}:${userId}:${event.version}`;
-    const payload = readPayload(event);
-
-    await client.outbox_events.createMany({
-      data: [
-        {
-          id: event.eventId,
-          type: event.eventType,
-          aggregate_type: event.aggregateType,
-          aggregate_id: userId,
-          topic,
-          // `payload` is a JSON column, so it needs Prisma's Json input type rather than a
-          // plain Record; the cast is the documented boundary for that conversion.
-          payload: {
-            eventId: event.eventId,
-            type: topic,
-            schemaVersion: 1,
-            occurredAt: event.occurredAt.toISOString(),
-            aggregateId: userId,
-            aggregateType: event.aggregateType,
-            partitionKey: userId,
-            payload,
-          } as unknown as Prisma.InputJsonValue,
-          dedup_key: dedupKey,
-          status: 'pending',
-          attempts: 0,
-          next_attempt_at: new Date(),
-          trace_id: event.correlationId ?? crypto.randomUUID(),
-        },
-      ],
-      skipDuplicates: true,
     });
   }
 
@@ -193,13 +117,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const rows = await this.prisma.tx.users.findMany();
     return rows.map(User.fromRow).filter((user) => spec.isSatisfiedBy(user)).length;
   }
-}
-
-function readPayload(event: IDomainEvent): Record<string, unknown> {
-  const candidate = event as unknown as { payload?: unknown };
-  return typeof candidate.payload === 'object' && candidate.payload !== null
-    ? (candidate.payload as Record<string, unknown>)
-    : {};
 }
 
 export { USER_REPOSITORY };

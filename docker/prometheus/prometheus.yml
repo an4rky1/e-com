@@ -23,4 +23,9 @@ scrape_configs:
           - localhost:3008 # account-security
           - localhost:3009 # notification
           - localhost:3010 # audit-log
+          - localhost:3011 # catalog
+          - localhost:3012 # cart
+          - localhost:3013 # inventory
+          - localhost:3014 # billing
+          - localhost:3015 # order
           - localhost:4000 # api-gateway (the edge)

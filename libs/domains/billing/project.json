@@ -1,0 +1,27 @@
+{
+  "name": "@shop/domains/billing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/domains/billing/src",
+  "projectType": "library",
+  "tags": [
+    "type:domain",
+    "domain:billing"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/domains/billing/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/domains/billing"
+      ],
+      "options": {
+        "jestConfig": "libs/domains/billing/jest.config.ts"
+      }
+    }
+  }
+}

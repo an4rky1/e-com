@@ -1,0 +1,26 @@
+{
+  "name": "@auth/infra/distributed-locking",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/distributed-locking/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/distributed-locking/tsconfig.lib.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/infra/distributed-locking"
+      ],
+      "options": {
+        "jestConfig": "libs/infra/distributed-locking/jest.config.ts"
+      }
+    }
+  }
+}

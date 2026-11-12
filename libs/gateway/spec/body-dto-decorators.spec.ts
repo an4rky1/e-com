@@ -12,6 +12,10 @@
 import 'reflect-metadata';
 import { AuthController } from '../src/presentation/auth.controller';
 import { UsersController } from '../src/presentation/users.controller';
+import { CatalogController } from '../src/presentation/catalog.controller';
+import { CartController } from '../src/presentation/cart.controller';
+import { CheckoutController } from '../src/presentation/checkout.controller';
+import { OrdersController } from '../src/presentation/orders.controller';
 import {
   CreateUserRequestDto,
   LoginRequestDto,
@@ -20,6 +24,16 @@ import {
   RegisterRequestDto,
   SetPasswordRequestDto,
 } from '../src/presentation/dto/gateway.dto';
+import {
+  AddCartItemDto,
+  CancelOrderDto,
+  CatalogCreateProductDto,
+  CatalogSetPriceDto,
+  CheckoutCreateDto,
+  CheckoutPreviewDto,
+  RemoveCartItemDto,
+  UpdateCartItemDto,
+} from '../src/presentation/dto/storefront.dto';
 
 interface BodyCase {
   readonly name: string;
@@ -65,6 +79,54 @@ const BODY_CASES: readonly BodyCase[] = [
     method: 'setPassword',
     dto: SetPasswordRequestDto,
   },
+  {
+    name: 'CatalogController.createProduct',
+    controller: CatalogController,
+    method: 'createProduct',
+    dto: CatalogCreateProductDto,
+  },
+  {
+    name: 'CatalogController.setPrice',
+    controller: CatalogController,
+    method: 'setPrice',
+    dto: CatalogSetPriceDto,
+  },
+  {
+    name: 'CartController.addItem',
+    controller: CartController,
+    method: 'addItem',
+    dto: AddCartItemDto,
+  },
+  {
+    name: 'CartController.updateItem',
+    controller: CartController,
+    method: 'updateItem',
+    dto: UpdateCartItemDto,
+  },
+  {
+    name: 'CartController.removeItem',
+    controller: CartController,
+    method: 'removeItem',
+    dto: RemoveCartItemDto,
+  },
+  {
+    name: 'CheckoutController.preview',
+    controller: CheckoutController,
+    method: 'preview',
+    dto: CheckoutPreviewDto,
+  },
+  {
+    name: 'CheckoutController.create',
+    controller: CheckoutController,
+    method: 'create',
+    dto: CheckoutCreateDto,
+  },
+  {
+    name: 'OrdersController.cancel',
+    controller: OrdersController,
+    method: 'cancel',
+    dto: CancelOrderDto,
+  },
 ];
 
 /** How Nest reads it: `ContextUtils.reflectCallbackParamtypes` — metadata keyed by method. */
@@ -80,8 +142,8 @@ describe('@Body() parameters carry their DTO class into the metadata', () => {
     expect(paramtypesOf(bodyCase)).toContain(bodyCase.dto);
   });
 
-  it('has six body-reading handlers to check', () => {
+  it('has fourteen body-reading handlers to check', () => {
     // An empty table would make every assertion above pass for the wrong reason.
-    expect(BODY_CASES.length).toBe(6);
+    expect(BODY_CASES.length).toBe(14);
   });
 });
