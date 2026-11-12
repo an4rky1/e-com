@@ -28,7 +28,12 @@ import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  // `rawBody: true` keeps the request's exact bytes on `req.rawBody` after the JSON
+  // parser has run. The payment webhook's HMAC is over those bytes: without this the
+  // stream is consumed by the parser and there is nothing left to verify a signature
+  // against, so every legitimate delivery would fail and every forged one would be
+  // unverifiable.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.enableShutdownHooks();
 

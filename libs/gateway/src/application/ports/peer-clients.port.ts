@@ -432,4 +432,15 @@ export interface BillingClientPort {
     lines: readonly { sku: string; quantity: number; unitPrice: ShopMoney }[];
     currency: string;
   }): Promise<GatewayInvoiceView>;
+  /**
+   * Forwards one provider webhook to billing, which verifies the signature.
+   *
+   * @remarks The edge never parses or trusts the body: it hands billing the exact bytes
+   * and the signature header, because "was this authentic" is a money question and this
+   * service owns no secret that could answer it.
+   */
+  handlePaymentWebhook(input: {
+    rawBody: string;
+    signature: string;
+  }): Promise<{ outcome: string; paymentId: string; status: string }>;
 }

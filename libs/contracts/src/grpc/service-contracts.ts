@@ -612,11 +612,28 @@ export interface PreviewTotalsResponse {
   invoice: InvoiceView;
 }
 
+export interface HandlePaymentWebhookRequest {
+  /** The provider's raw JSON body, byte-for-byte as received. */
+  rawBody: string;
+  /** `t=<unix-seconds>,v1=<hex-hmac>` — verified by billing, never by the edge. */
+  signature: string;
+}
+
+export interface HandlePaymentWebhookResponse {
+  /** `applied` | `duplicate` | `ignored`. */
+  outcome: string;
+  paymentId: string;
+  status: string;
+}
+
 export interface BillingGrpcClient {
   ChargeOrder(request: ChargeOrderRequest): Promise<ChargeOrderResponse>;
   RefundOrder(request: RefundOrderRequest): Promise<RefundOrderResponse>;
   GetInvoice(request: { orderId: string }): Promise<InvoiceView>;
   PreviewTotals(request: PreviewTotalsRequest): Promise<PreviewTotalsResponse>;
+  HandlePaymentWebhook(
+    request: HandlePaymentWebhookRequest,
+  ): Promise<HandlePaymentWebhookResponse>;
 }
 
 // ---- order.v1 --------------------------------------------------------------

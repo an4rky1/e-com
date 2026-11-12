@@ -51,6 +51,20 @@ export interface SaveRefundInput {
   readonly voidedInvoice: Invoice | null;
 }
 
+/**
+ * A webhook's write: the payment's new status, and — only when it settled — the invoice
+ * that must go `paid` alongside it.
+ *
+ * @remarks The invoice is optional because most deliveries (`processing`,
+ * `requires_action`) move no money and leave the bill alone; a settled payment without
+ * its bill marked paid would be a payment nobody can reconcile.
+ */
+export interface SavePaymentUpdateInput {
+  readonly payment: Payment;
+  /** Present only when this delivery settled the payment and the bill must follow. */
+  readonly settledInvoice: Invoice | null;
+}
+
 export interface BillingRepositoryPort {
   /** The payment a retried charge must answer with, or `null` for a first attempt. */
   findPaymentByIdempotencyKey(idempotencyKey: string): Promise<Payment | null>;
@@ -80,6 +94,15 @@ export interface BillingRepositoryPort {
    * buffered event in one transaction.
    */
   saveRefund(input: SaveRefundInput): Promise<void>;
+
+  /**
+   * Writes a webhook's status change — the payment, the optional settled invoice and
+   * every buffered event — in one transaction.
+   *
+   * @remarks Same atomicity contract as {@link saveCharge}: a payment marked `succeeded`
+   * whose invoice stayed `issued` would be a fact in two tables that disagree.
+   */
+  savePaymentUpdate(input: SavePaymentUpdateInput): Promise<void>;
 
   /** Live payment count — the readiness probe's question: "can this service still work?" */
   countPayments(): Promise<number>;

@@ -19,6 +19,8 @@ import { GrpcControllerBase, GrpcMethod } from '@auth/infra/grpc';
 import type {
   ChargeOrderRequest,
   ChargeOrderResponse,
+  HandlePaymentWebhookRequest,
+  HandlePaymentWebhookResponse,
   InvoiceView,
   PreviewTotalsRequest,
   PreviewTotalsResponse,
@@ -118,6 +120,29 @@ export class BillingGrpcController extends GrpcControllerBase {
     });
 
     return { invoice: previewToView(totals, request.couponCode) };
+  }
+
+  /**
+   * Applies a provider webhook.
+   *
+   * @remarks The raw body and signature are forwarded unread: this layer translates, it
+   * does not decide authenticity — the handler verifies the HMAC over the exact bytes the
+   * provider signed, before any parse.
+   */
+  @GrpcMethod(SERVICE, 'HandlePaymentWebhook')
+  async handlePaymentWebhook(
+    request: HandlePaymentWebhookRequest,
+  ): Promise<HandlePaymentWebhookResponse> {
+    const result = await this.billing.handlePaymentWebhook({
+      rawBody: request.rawBody ?? '',
+      signature: request.signature ?? '',
+    });
+
+    return {
+      outcome: result.outcome,
+      paymentId: result.paymentId,
+      status: result.status,
+    };
   }
 }
 

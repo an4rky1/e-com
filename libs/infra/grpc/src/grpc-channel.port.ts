@@ -115,6 +115,9 @@ export const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
   '/inventory.v1.InventoryService/AdjustStock',
   '/billing.v1.BillingService/ChargeOrder',
   '/billing.v1.BillingService/RefundOrder',
+  // A redelivered webhook whose status already matches answers without a write, so a
+  // transport retry of the same delivery is free — the aggregate owns the idempotency.
+  '/billing.v1.BillingService/HandlePaymentWebhook',
 ]);
 
 export type RetryDecision =

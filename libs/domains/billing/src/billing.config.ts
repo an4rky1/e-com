@@ -43,6 +43,13 @@ export const Defaults = {
   PSP_PROVIDER: 'fake' as PspProviderName,
   /** Deadline applied to outbound gRPC calls by callers that honour it. */
   GRPC_DEADLINE_MS: 5_000,
+  /**
+   * Clock-skew tolerance for the webhook timestamp, in seconds.
+   *
+   * @remarks Five minutes: wide enough for a slow queue, narrow enough that a replayed
+   * capture ages out before an attacker can grind through it.
+   */
+  WEBHOOK_TOLERANCE_SEC: 300,
 } as const;
 
 /**
@@ -87,6 +94,13 @@ export const billingSchema = z.object({
   DEFAULT_TAX_COUNTRY: envString(Defaults.DEFAULT_TAX_COUNTRY),
   PSP_PROVIDER: envString(Defaults.PSP_PROVIDER),
   GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
+  /**
+   * Shared secret the provider signs webhooks with. Empty means "verify nothing succeeds":
+   * a missing secret must reject every delivery, never accept one, so an operator who
+   * forgets it gets loud failures on the webhook path rather than an open endpoint.
+   */
+  WEBHOOK_SECRET: envString(''),
+  WEBHOOK_TOLERANCE_SEC: envInt(Defaults.WEBHOOK_TOLERANCE_SEC, { min: 1, max: 3_600 }),
 });
 
 export type BillingEnvConfig = z.infer<typeof billingSchema>;
@@ -97,6 +111,9 @@ export interface BillingConfig {
   readonly defaultTaxCountry: string;
   readonly pspProvider: PspProviderName;
   readonly grpcDeadlineMs: number;
+  /** HMAC secret for provider webhooks; empty rejects every delivery. */
+  readonly webhookSecret: string;
+  readonly webhookToleranceSec: number;
 }
 
 /**
@@ -143,6 +160,8 @@ export function resolveBillingConfig(env: NodeJS.ProcessEnv = process.env): Bill
     defaultTaxCountry,
     pspProvider: provider as PspProviderName,
     grpcDeadlineMs: parsed.GRPC_DEADLINE_MS,
+    webhookSecret: parsed.WEBHOOK_SECRET,
+    webhookToleranceSec: parsed.WEBHOOK_TOLERANCE_SEC,
   };
 
   return resolveModuleConfig(config, {});

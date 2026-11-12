@@ -23,6 +23,7 @@ import {
   type BillingRepositoryPort,
   type Coupon,
   type SaveChargeInput,
+  type SavePaymentUpdateInput,
   type SaveRefundInput,
 } from '../../domain/ports/billing-repository.port';
 import { BILLING_PRISMA } from '../../billing.config';
@@ -153,6 +154,32 @@ export class PrismaBillingRepository implements BillingRepositoryPort {
         [
           ...payment.clearDomainEvents(),
           ...(voidedInvoice ? voidedInvoice.clearDomainEvents() : []),
+        ],
+        { client, logger: this.logger, topics: BILLING_TOPICS },
+      );
+    });
+  }
+
+  async savePaymentUpdate(input: SavePaymentUpdateInput): Promise<void> {
+    const { payment, settledInvoice } = input;
+
+    return this.prisma.runInTransaction(async (client) => {
+      await client.payments.update({
+        where: { id: payment.id },
+        data: payment.toUpdate(),
+      });
+
+      if (settledInvoice) {
+        await client.invoices.update({
+          where: { id: settledInvoice.id },
+          data: settledInvoice.toUpdate(),
+        });
+      }
+
+      await enqueueEvents(
+        [
+          ...payment.clearDomainEvents(),
+          ...(settledInvoice ? settledInvoice.clearDomainEvents() : []),
         ],
         { client, logger: this.logger, topics: BILLING_TOPICS },
       );

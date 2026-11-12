@@ -32,6 +32,7 @@ import {
 import { PrismaClient } from './generated/prisma/client';
 import { ChargeOrderHandler } from './application/commands/charge-order.handler';
 import { RefundOrderHandler } from './application/commands/refund-order.handler';
+import { HandlePaymentWebhookHandler } from './application/commands/handle-payment-webhook.handler';
 import { GetInvoiceHandler, PreviewTotalsHandler } from './application/queries/billing.queries';
 import { BillingService } from './application/facade/billing.service';
 import { BILLING_REPOSITORY } from './domain/ports/billing-repository.port';
@@ -94,6 +95,7 @@ export function createBillingModule(options: BillingModuleOptions): DynamicModul
 
       ChargeOrderHandler,
       RefundOrderHandler,
+      HandlePaymentWebhookHandler,
       GetInvoiceHandler,
       PreviewTotalsHandler,
 

@@ -94,3 +94,34 @@ export class RefundOrderCommand extends Command<RefundResult> {
     super();
   }
 }
+
+/** What a verified webhook delivery did. */
+export interface WebhookResult {
+  /** `applied` — status moved; `duplicate` — already there, nothing written. */
+  readonly outcome: 'applied' | 'duplicate';
+  readonly paymentId: string;
+  readonly status: string;
+}
+
+/**
+ * Applies one provider webhook: verify the signature over the raw body, then move the
+ * payment to the status the provider reported.
+ *
+ * @remarks The raw body and signature arrive together and are verified before any parse:
+ * a payload that has not been authenticated must never reach the status rules, or an
+ * attacker who can hit the endpoint can settle any payment they can name.
+ *
+ * @remarks Idempotent by status, not by event id: a redelivery whose status already
+ * matches answers `duplicate` without a write, so a provider retrying until it sees a
+ * 2xx cannot bump `version` or re-announce a settled payment.
+ */
+export class HandlePaymentWebhookCommand extends Command<WebhookResult> {
+  readonly commandId: string = crypto.randomUUID();
+
+  constructor(
+    readonly rawBody: string,
+    readonly signature: string,
+  ) {
+    super();
+  }
+}

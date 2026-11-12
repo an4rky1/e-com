@@ -14,10 +14,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   ChargeOrderCommand,
+  HandlePaymentWebhookCommand,
   RefundOrderCommand,
   type ChargeLineInput,
   type ChargeResult,
   type RefundResult,
+  type WebhookResult,
 } from '../commands/billing.commands';
 import type { Invoice } from '../../domain/invoice.entity';
 import type { ComputedTotals, TotalsLineInput } from '../../domain/totals';
@@ -79,6 +81,20 @@ export class BillingService {
         input.reason,
         input.amountMinor,
       ),
+    );
+  }
+
+  /**
+   * Applies one provider webhook: verifies the signature over the raw body, then moves
+   * the payment to the status the provider reported.
+   *
+   * @remarks Idempotent by status — a redelivery whose status already matches answers
+   * `duplicate` without a write, so a provider retrying until it sees a 2xx cannot
+   * bump `version` or re-announce a settled payment.
+   */
+  handlePaymentWebhook(input: { rawBody: string; signature: string }): Promise<WebhookResult> {
+    return this.commandBus.execute(
+      new HandlePaymentWebhookCommand(input.rawBody, input.signature),
     );
   }
 

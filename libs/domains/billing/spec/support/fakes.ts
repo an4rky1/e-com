@@ -24,6 +24,7 @@ import type {
   BillingRepositoryPort,
   Coupon,
   SaveChargeInput,
+  SavePaymentUpdateInput,
   SaveRefundInput,
 } from '../../src/domain/ports/billing-repository.port';
 
@@ -46,6 +47,8 @@ export const testBillingConfig = (overrides: Partial<BillingConfig> = {}): Billi
   defaultTaxCountry: 'US',
   pspProvider: 'fake',
   grpcDeadlineMs: 5_000,
+  webhookSecret: 'test-webhook-secret',
+  webhookToleranceSec: 300,
   ...overrides,
 });
 
@@ -130,6 +133,21 @@ export class InMemoryBillingRepository implements BillingRepositoryPort {
     for (const event of [
       ...input.payment.clearDomainEvents(),
       ...(input.voidedInvoice ? input.voidedInvoice.clearDomainEvents() : []),
+    ]) {
+      this.outbox.push(capture(event, this.topics));
+    }
+  }
+
+  async savePaymentUpdate(input: SavePaymentUpdateInput): Promise<void> {
+    this.commits += 1;
+    this.payments.set(input.payment.id, input.payment);
+    if (input.settledInvoice) {
+      this.invoices.set(input.settledInvoice.orderId, input.settledInvoice);
+    }
+
+    for (const event of [
+      ...input.payment.clearDomainEvents(),
+      ...(input.settledInvoice ? input.settledInvoice.clearDomainEvents() : []),
     ]) {
       this.outbox.push(capture(event, this.topics));
     }

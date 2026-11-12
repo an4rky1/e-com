@@ -178,6 +178,21 @@ export class StorefrontService {
     });
   }
 
+  // ---- webhooks --------------------------------------------------------------------
+
+  /**
+   * Forwards one provider webhook to billing.
+   *
+   * @remarks No principal and no session: the signature is the credential, and billing
+   * verifies it. The edge's only job is to hand over the exact bytes it received.
+   */
+  handlePaymentWebhook(input: {
+    rawBody: string;
+    signature: string;
+  }): Promise<{ outcome: string; paymentId: string; status: string }> {
+    return this.billing.handlePaymentWebhook(input);
+  }
+
   // ---- orders ------------------------------------------------------------------------
 
   listOrders(

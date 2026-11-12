@@ -2,9 +2,11 @@
  * @fileoverview HTTP transport for the public catalog.
  *
  * @remarks Reads are `@Public()`: the vitrina has to work before sign-in. The two admin
- * writes sit behind the class guards and declare no extra permission — the contract marks
- * them `authenticated: true`, and which role may create a product is access-control's data
- * to seed when admin tooling lands.
+ * writes sit behind the class guards *and* declare a permission each — the contract marks
+ * them `authenticated: true`, and "which role may create a product" is access-control's
+ * data, not this controller's. Without the declaration any signed-in caller could write;
+ * with it, `PermissionsGuard` asks access-control once per permission and refuses when
+ * the answer is no.
  */
 import {
   Body,
@@ -20,7 +22,7 @@ import type { CatalogListQuery, ProductList } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
-import { Public } from './decorators/route-metadata';
+import { Public, RequirePermissions } from './decorators/route-metadata';
 // Values on purpose — see the note in `auth.controller.ts`.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { CatalogCreateProductDto, CatalogSetPriceDto } from './dto/storefront.dto';
@@ -65,6 +67,7 @@ export class CatalogController {
     return this.storefront.getProduct(id);
   }
 
+  @RequirePermissions('catalog:product.create')
   @Post('admin/products')
   @HttpCode(201)
   createProduct(@Body() body: CatalogCreateProductDto) {
@@ -84,6 +87,7 @@ export class CatalogController {
     });
   }
 
+  @RequirePermissions('catalog:product.set-price')
   @Post('admin/price')
   @HttpCode(200)
   setPrice(@Body() body: CatalogSetPriceDto) {

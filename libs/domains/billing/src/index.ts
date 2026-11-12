@@ -37,13 +37,16 @@ export { BillingHealthIndicator } from './billing.health';
 // ---- commands ------------------------------------------------------------------
 export {
   ChargeOrderCommand,
+  HandlePaymentWebhookCommand,
   RefundOrderCommand,
   type ChargeLineInput,
   type ChargeResult,
   type RefundResult,
+  type WebhookResult,
 } from './application/commands/billing.commands';
 export { ChargeOrderHandler } from './application/commands/charge-order.handler';
 export { RefundOrderHandler } from './application/commands/refund-order.handler';
+export { HandlePaymentWebhookHandler } from './application/commands/handle-payment-webhook.handler';
 
 // ---- queries -------------------------------------------------------------------
 export {
@@ -64,6 +67,7 @@ export {
   type PaymentProps,
   type PaymentRow,
   type PaymentStatus,
+  type WebhookApplyOutcome,
 } from './domain/payment.entity';
 export {
   Invoice,
@@ -97,6 +101,7 @@ export {
   type BillingRepositoryPort,
   type Coupon,
   type SaveChargeInput,
+  type SavePaymentUpdateInput,
   type SaveRefundInput,
 } from './domain/ports/billing-repository.port';
 export {

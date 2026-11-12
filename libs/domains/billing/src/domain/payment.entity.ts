@@ -30,6 +30,29 @@ export type PaymentStatus =
 /** Statuses from which money may be refunded. */
 export const REFUNDABLE_PAYMENT_STATUSES: ReadonlySet<PaymentStatus> = new Set(['succeeded']);
 
+/**
+ * Statuses a webhook may move a payment *to*, keyed by where it is now.
+ *
+ * @remarks Forward-only: `succeeded` and `failed` are terminal for a given attempt, so a
+ * late delivery cannot walk a settled payment backwards and a replayed failure cannot
+ * erase a success. An empty set means "this status accepts no further webhook".
+ */
+const WEBHOOK_TRANSITIONS: Readonly<Record<PaymentStatus, ReadonlySet<PaymentStatus>>> = {
+  requires_payment_method: new Set<PaymentStatus>([
+    'requires_action',
+    'processing',
+    'succeeded',
+    'failed',
+  ]),
+  requires_action: new Set<PaymentStatus>(['processing', 'succeeded', 'failed']),
+  processing: new Set<PaymentStatus>(['succeeded', 'failed']),
+  succeeded: new Set<PaymentStatus>(),
+  failed: new Set<PaymentStatus>(),
+};
+
+/** What `applyProviderStatus` did with the delivery. */
+export type WebhookApplyOutcome = 'applied' | 'duplicate';
+
 /** One `payments` row, exactly as the column names spell it. */
 export interface PaymentRow {
   id: string;
@@ -148,6 +171,60 @@ export class Payment extends AggregateRoot<string> {
     );
   }
 
+  /**
+   * Applies a provider-reported status from a verified webhook.
+   *
+   * @remarks `duplicate` for a redelivery whose status already matches: the write is
+   * skipped, the version does not move, and no event is re-announced — a PSP retrying
+   * until it sees a 2xx must not be able to bump `version` or collide a `dedup_key`.
+   *
+   * @remarks An illegal transition (a success walking back to `processing`, a failure
+   * overwriting a settled payment) is refused rather than clamped: the provider is either
+   * lying, replaying an old capture, or talking about a different attempt, and storing
+   * any of those would rewrite where the money actually is.
+   *
+   * @remarks `succeeded` / `failed` announce the same events `fromProvider` does, so a
+   * payment that settled through a webhook and one that settled synchronously are told
+   * to consumers by the same code.
+   */
+  applyProviderStatus(input: {
+    status: PaymentStatus;
+    failureCode?: string | null;
+    now?: Date;
+  }): WebhookApplyOutcome {
+    const now = input.now ?? new Date();
+
+    if (input.status === this.props.status) {
+      return 'duplicate';
+    }
+
+    if (!WEBHOOK_TRANSITIONS[this.props.status].has(input.status)) {
+      throw new ValidationException('illegal payment status transition', {
+        paymentId: this.id,
+        from: this.props.status,
+        to: input.status,
+      });
+    }
+
+    this.props.status = input.status;
+    if (input.status === 'failed') {
+      this.props.failureCode = input.failureCode ?? this.props.failureCode;
+    }
+    this.bump(now);
+
+    if (input.status === 'succeeded') {
+      this.addDomainEvent(
+        new PaymentSucceeded(this.props.orderId, this.toPayload(), this.props.version),
+      );
+    } else if (input.status === 'failed') {
+      this.addDomainEvent(
+        new PaymentFailed(this.props.orderId, this.toPayload(), this.props.version),
+      );
+    }
+
+    return 'applied';
+  }
+
   get orderId(): string {
     return this.props.orderId;
   }
@@ -263,12 +340,14 @@ export class Payment extends AggregateRoot<string> {
   /** Columns an update may write. Identity, key and amount never move. */
   toUpdate(): {
     status: string;
+    failure_code: string | null;
     refunded_minor: number;
     version: number;
     updated_at: Date;
   } {
     return {
       status: this.props.status,
+      failure_code: this.props.failureCode,
       refunded_minor: this.props.refundedMinor,
       version: this.props.version,
       updated_at: this.updatedAt,

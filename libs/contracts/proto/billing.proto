@@ -15,6 +15,10 @@ service BillingService {
   // Tax-before-discount, coupon-after-tax, invoice-fixed — the frozen calculation
   // order, exposed so the storefront can show a preview that matches the charge.
   rpc PreviewTotals (PreviewTotalsRequest) returns (PreviewTotalsResponse);
+  // Applies a provider webhook: verifies the signature over the raw body, then moves the
+  // payment to the status the provider reported. Idempotent — a redelivered event whose
+  // status already matches answers without a second write.
+  rpc HandlePaymentWebhook (HandlePaymentWebhookRequest) returns (HandlePaymentWebhookResponse);
 }
 
 message Money {
@@ -117,4 +121,20 @@ message PreviewTotalsResponse {
 
 message GetInvoiceRequest {
   string order_id = 1;
+}
+
+message HandlePaymentWebhookRequest {
+  // The provider's raw JSON body, byte-for-byte as received — the signature is over
+  // this, so re-serialising before verify would invalidate every legitimate delivery.
+  string raw_body = 1;
+  // `t=<unix-seconds>,v1=<hex-hmac>` — forwarded unread; billing verifies it.
+  string signature = 2;
+}
+
+message HandlePaymentWebhookResponse {
+  // applied | duplicate | ignored — whether this delivery changed anything.
+  string outcome = 1;
+  string payment_id = 2;
+  // The payment's status after this delivery.
+  string status = 3;
 }

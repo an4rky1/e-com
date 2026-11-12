@@ -200,6 +200,7 @@ describe('Payment persistence', () => {
     expect(payment.toUpdate()).toEqual({
       status: 'succeeded',
       refunded_minor: 0,
+      failure_code: null,
       version: 1,
       updated_at: T0,
     });
