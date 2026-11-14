@@ -50,6 +50,7 @@ export class BillingService {
     customerId: string;
     lines: readonly ChargeLineInput[];
     customerCountry?: string;
+    couponCode?: string;
   }): Promise<ChargeResult> {
     return this.commandBus.execute(
       new ChargeOrderCommand(
@@ -61,6 +62,7 @@ export class BillingService {
         input.customerId,
         input.lines,
         input.customerCountry,
+        input.couponCode,
       ),
     );
   }

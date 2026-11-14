@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import {
   Defaults,
   resolveBillingConfig,
+  shippingRateFor,
   taxRateFor,
 } from '../src/billing.config';
 
@@ -23,6 +24,7 @@ describe('resolveBillingConfig', () => {
     const config = resolveBillingConfig({});
 
     expect(config.taxRatesByCountry).toEqual({ US: 0, DE: 1900, FR: 2000, GB: 2000 });
+    expect(config.shippingRatesByCountry).toEqual({ US: 500, DE: 499, FR: 499, GB: 399 });
     expect(config.defaultTaxCountry).toBe('US');
     expect(config.pspProvider).toBe('fake');
     expect(config.grpcDeadlineMs).toBe(Defaults.GRPC_DEADLINE_MS);
@@ -31,10 +33,12 @@ describe('resolveBillingConfig', () => {
   it('accepts a well-formed tax table and upper-cases its keys', () => {
     const config = resolveBillingConfig({
       BILLING_TAX_RATES_BY_COUNTRY: '{"jp": 1000, "US": 888}',
+      BILLING_SHIPPING_RATES_BY_COUNTRY: '{"jp": 800, "US": 500}',
       BILLING_DEFAULT_TAX_COUNTRY: 'jp',
     });
 
     expect(config.taxRatesByCountry).toEqual({ JP: 1000, US: 888 });
+    expect(config.shippingRatesByCountry).toEqual({ JP: 800, US: 500 });
     expect(config.defaultTaxCountry).toBe('JP');
   });
 
@@ -65,12 +69,38 @@ describe('resolveBillingConfig', () => {
     ).toThrow(/US must be an integer between 0 and 10000/);
   });
 
+  it('refuses a shipping table that is not JSON', () => {
+    expect(() => resolveBillingConfig({ BILLING_SHIPPING_RATES_BY_COUNTRY: 'US=500' })).toThrow(
+      /SHIPPING_RATES_BY_COUNTRY must be a JSON object/,
+    );
+  });
+
+  it('refuses a shipping rate that is not a non-negative integer', () => {
+    expect(() =>
+      resolveBillingConfig({ BILLING_SHIPPING_RATES_BY_COUNTRY: '{"US": 5.5}' }),
+    ).toThrow(/US must be an integer between 0 and 1000000/);
+    expect(() =>
+      resolveBillingConfig({ BILLING_SHIPPING_RATES_BY_COUNTRY: '{"US": -1}' }),
+    ).toThrow(/US must be an integer between 0 and 1000000/);
+  });
+
   it('refuses a default country that carries no rate', () => {
     // The fallback chain has to end somewhere with a number: a default absent from the
     // table would make every unknown jurisdiction resolve to zero tax.
     expect(() =>
       resolveBillingConfig({ BILLING_DEFAULT_TAX_COUNTRY: 'ZZ' }),
     ).toThrow(/DEFAULT_TAX_COUNTRY "ZZ" has no rate/);
+  });
+
+  it('refuses a default country that carries no shipping rate', () => {
+    // Shipping falls back through the same default; a default known to tax but missing
+    // from the shipping map would end that chain at an undefined lookup.
+    expect(() =>
+      resolveBillingConfig({
+        BILLING_TAX_RATES_BY_COUNTRY: '{"ZZ": 0}',
+        BILLING_DEFAULT_TAX_COUNTRY: 'ZZ',
+      }),
+    ).toThrow(/DEFAULT_TAX_COUNTRY "ZZ" has no rate in SHIPPING_RATES_BY_COUNTRY/);
   });
 
   it('refuses an empty default country', () => {
@@ -115,5 +145,22 @@ describe('taxRateFor', () => {
     });
 
     expect(taxRateFor(euFirst, 'ZZ')).toBe(1_900);
+  });
+});
+
+describe('shippingRateFor', () => {
+  const config = resolveBillingConfig({});
+
+  it('answers the flat charge for a country the table knows', () => {
+    expect(shippingRateFor(config, 'US')).toBe(500);
+    expect(shippingRateFor(config, 'de')).toBe(499);
+    expect(shippingRateFor(config, ' GB ')).toBe(399);
+  });
+
+  it('falls back to the default for a country it has never heard of', () => {
+    // Same rule as tax: an unknown jurisdiction must not be able to make shipping free.
+    expect(shippingRateFor(config, 'ZZ')).toBe(500);
+    expect(shippingRateFor(config, '')).toBe(500);
+    expect(shippingRateFor(config, undefined)).toBe(500);
   });
 });

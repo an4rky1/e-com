@@ -32,6 +32,15 @@ export const Defaults = {
    */
   TAX_RATES_BY_COUNTRY: { US: 0, DE: 1900, FR: 2000, GB: 2000 } as Readonly<Record<string, number>>,
   /**
+   * Flat delivery charge by ISO country code, in minor units.
+   *
+   * @remarks Same shape as the tax map on purpose: one jurisdiction lookup style for both
+   * money rules a checkout adds, so an operator who learns to override one learns to
+   * override the other. `standard` is the only method this build ships; a second method
+   * would extend this map's values rather than invent a second lookup.
+   */
+  SHIPPING_RATES_BY_COUNTRY: { US: 500, DE: 499, FR: 499, GB: 399 } as Readonly<Record<string, number>>,
+  /**
    * Country used when a request does not name one.
    *
    * @remarks A charge with no jurisdiction is not "no tax" — it is a jurisdiction the
@@ -53,34 +62,34 @@ export const Defaults = {
 } as const;
 
 /**
- * Parses `BILLING_TAX_RATES_BY_COUNTRY` out of its JSON string form.
+ * Parses a `*_RATES_BY_COUNTRY` env var out of its JSON string form.
  *
  * @remarks A JSON blob is the only shape that fits an env var, and the only shape that
  * survives "an operator edits one number". Every failure mode — malformed JSON, a
  * non-object, a non-integer rate, a negative rate — is refused at boot rather than
- * silently reading `NaN` into a tax calculation on the first request.
+ * silently reading `NaN` into a money calculation on the first request.
  */
-function parseTaxRates(raw: string): Record<string, number> {
+function parseRates(raw: string, setting: string, max: number): Record<string, number> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error(
-      'Invalid BILLING configuration: TAX_RATES_BY_COUNTRY must be a JSON object',
+      `Invalid BILLING configuration: ${setting} must be a JSON object`,
     );
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error(
-      'Invalid BILLING configuration: TAX_RATES_BY_COUNTRY must be a JSON object',
+      `Invalid BILLING configuration: ${setting} must be a JSON object`,
     );
   }
 
   const rates: Record<string, number> = {};
   for (const [country, rate] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof rate !== 'number' || !Number.isSafeInteger(rate) || rate < 0 || rate > 10_000) {
+    if (typeof rate !== 'number' || !Number.isSafeInteger(rate) || rate < 0 || rate > max) {
       throw new Error(
-        `Invalid BILLING configuration: TAX_RATES_BY_COUNTRY.${country} must be an integer between 0 and 10000`,
+        `Invalid BILLING configuration: ${setting}.${country} must be an integer between 0 and ${max}`,
       );
     }
     rates[country.trim().toUpperCase()] = rate;
@@ -91,6 +100,7 @@ function parseTaxRates(raw: string): Record<string, number> {
 
 export const billingSchema = z.object({
   TAX_RATES_BY_COUNTRY: envString(JSON.stringify(Defaults.TAX_RATES_BY_COUNTRY)),
+  SHIPPING_RATES_BY_COUNTRY: envString(JSON.stringify(Defaults.SHIPPING_RATES_BY_COUNTRY)),
   DEFAULT_TAX_COUNTRY: envString(Defaults.DEFAULT_TAX_COUNTRY),
   PSP_PROVIDER: envString(Defaults.PSP_PROVIDER),
   GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
@@ -108,6 +118,8 @@ export type BillingEnvConfig = z.infer<typeof billingSchema>;
 export interface BillingConfig {
   /** Country code (upper-case) -> tax rate in basis points. */
   readonly taxRatesByCountry: Readonly<Record<string, number>>;
+  /** Country code (upper-case) -> flat delivery charge in minor units. */
+  readonly shippingRatesByCountry: Readonly<Record<string, number>>;
   readonly defaultTaxCountry: string;
   readonly pspProvider: PspProviderName;
   readonly grpcDeadlineMs: number;
@@ -131,7 +143,13 @@ export interface BillingConfig {
 export function resolveBillingConfig(env: NodeJS.ProcessEnv = process.env): BillingConfig {
   const parsed = readNamespacedEnv('BILLING', billingSchema, env);
 
-  const taxRatesByCountry = parseTaxRates(parsed.TAX_RATES_BY_COUNTRY);
+  const taxRatesByCountry = parseRates(parsed.TAX_RATES_BY_COUNTRY, 'TAX_RATES_BY_COUNTRY', 10_000);
+  // Minor units, not basis points: the ceiling is a delivery price ($10 000), not a percentage.
+  const shippingRatesByCountry = parseRates(
+    parsed.SHIPPING_RATES_BY_COUNTRY,
+    'SHIPPING_RATES_BY_COUNTRY',
+    1_000_000,
+  );
   const defaultTaxCountry = parsed.DEFAULT_TAX_COUNTRY.trim().toUpperCase();
 
   if (defaultTaxCountry.length === 0) {
@@ -142,6 +160,14 @@ export function resolveBillingConfig(env: NodeJS.ProcessEnv = process.env): Bill
   if (!(defaultTaxCountry in taxRatesByCountry)) {
     throw new Error(
       `Invalid BILLING configuration: DEFAULT_TAX_COUNTRY "${defaultTaxCountry}" has no rate in TAX_RATES_BY_COUNTRY`,
+    );
+  }
+  if (!(defaultTaxCountry in shippingRatesByCountry)) {
+    // Same boot-failure rule as tax: every request that omits a jurisdiction resolves
+    // through the default, and a default with no shipping rate would make that fallback
+    // chain end at an undefined lookup.
+    throw new Error(
+      `Invalid BILLING configuration: DEFAULT_TAX_COUNTRY "${defaultTaxCountry}" has no rate in SHIPPING_RATES_BY_COUNTRY`,
     );
   }
 
@@ -157,6 +183,7 @@ export function resolveBillingConfig(env: NodeJS.ProcessEnv = process.env): Bill
   // {@link BillingConfig} by construction.
   const config: BillingConfig = {
     taxRatesByCountry,
+    shippingRatesByCountry,
     defaultTaxCountry,
     pspProvider: provider as PspProviderName,
     grpcDeadlineMs: parsed.GRPC_DEADLINE_MS,
@@ -180,4 +207,18 @@ export function taxRateFor(config: BillingConfig, country: string | undefined): 
     return config.taxRatesByCountry[normalised];
   }
   return config.taxRatesByCountry[config.defaultTaxCountry];
+}
+
+/**
+ * The flat delivery charge a jurisdiction is charged, falling back to the configured default.
+ *
+ * @remarks Same unknown-country rule as {@link taxRateFor}: a storefront that sends a
+ * country code this build has not heard of must not be able to make shipping free.
+ */
+export function shippingRateFor(config: BillingConfig, country: string | undefined): number {
+  const normalised = (country ?? '').trim().toUpperCase();
+  if (normalised.length > 0 && normalised in config.shippingRatesByCountry) {
+    return config.shippingRatesByCountry[normalised];
+  }
+  return config.shippingRatesByCountry[config.defaultTaxCountry];
 }

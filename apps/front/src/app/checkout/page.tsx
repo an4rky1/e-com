@@ -28,6 +28,20 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState('');
   const [country, setCountry] = useState('');
 
+  /**
+   * Edits either pricing input.
+   *
+   * @remarks The quote on screen was priced with the inputs as they were; keeping it
+   * visible under new ones would offer a "Place order" button charging a price the
+   * customer is no longer looking at — billing reconciles against the current inputs.
+   */
+  const changePricingInput =
+    (apply: (value: string) => void) =>
+    (value: string): void => {
+      apply(value);
+      setPreview(null);
+    };
+
   const loadPreview = async () => {
     setBusy(true);
     setMessage(null);
@@ -54,7 +68,12 @@ export default function CheckoutPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const body: CheckoutCreateRequest = {};
+      // The same jurisdiction and coupon the preview was priced with: billing
+      // reconciles the charge against them, and a mismatch is a refused charge.
+      const body: CheckoutCreateRequest = {
+        ...(country ? { customerCountry: country } : {}),
+        ...(coupon ? { couponCode: coupon } : {}),
+      };
       const created = await storefrontFetch<OrderView>(StorefrontRoutes.checkoutCreate, {
         body: JSON.stringify(body),
         headers: { 'Idempotency-Key': crypto.randomUUID() },
@@ -85,7 +104,7 @@ export default function CheckoutPage() {
             value={country}
             maxLength={2}
             placeholder="US"
-            onChange={(event) => setCountry(event.target.value)}
+            onChange={(event) => changePricingInput(setCountry)(event.target.value)}
             style={{ width: '4rem' }}
           />
           <label htmlFor="coupon">Coupon</label>
@@ -93,7 +112,7 @@ export default function CheckoutPage() {
             id="coupon"
             value={coupon}
             maxLength={32}
-            onChange={(event) => setCoupon(event.target.value)}
+            onChange={(event) => changePricingInput(setCoupon)(event.target.value)}
           />
           <button type="button" onClick={() => void loadPreview()} disabled={busy}>
             {busy && !order ? 'Previewing…' : 'Preview totals'}
@@ -122,8 +141,13 @@ export default function CheckoutPage() {
             </ul>
             <p>
               Subtotal {formatMoney(preview.lines.subtotal)} · Tax{' '}
-              {formatMoney(preview.invoice.taxTotal)} · Discount{' '}
-              {formatMoney(preview.invoice.discount)} · Total{' '}
+              {formatMoney(preview.invoice.taxTotal)}
+              {/* An older gateway knows no delivery charge and omits the field; a
+                  Shipping row for money that was never priced would be a lie. */}
+              {preview.invoice.shipping ? (
+                <> · Shipping {formatMoney(preview.invoice.shipping)}</>
+              ) : null}{' '}
+              · Discount {formatMoney(preview.invoice.discount)} · Total{' '}
               <strong>{formatMoney(preview.invoice.total)}</strong>
             </p>
             <p className={preview.validation.valid ? styles.muted : styles.error}>

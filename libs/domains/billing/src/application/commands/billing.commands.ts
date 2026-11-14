@@ -52,10 +52,9 @@ export interface RefundResult {
 /**
  * Charges an order once per `idempotencyKey`.
  *
- * @remarks `amountMinor` must equal what the lines recompute to, tax included and no
- * discount — `ChargeOrderRequest` carries no coupon, so a charge is always full price.
- * The mismatch check is what makes "the amount cannot be reconciled against its own
- * lines" impossible to store.
+ * @remarks `amountMinor` must equal what the lines recompute to — tax and shipping
+ * included, coupon applied when one was named. The mismatch check is what makes "the
+ * amount cannot be reconciled against its own lines" impossible to store.
  */
 export class ChargeOrderCommand extends Command<ChargeResult> {
   readonly commandId: string = crypto.randomUUID();
@@ -69,6 +68,7 @@ export class ChargeOrderCommand extends Command<ChargeResult> {
     readonly customerId: string,
     readonly lines: readonly ChargeLineInput[],
     readonly customerCountry?: string,
+    readonly couponCode?: string,
   ) {
     super();
   }

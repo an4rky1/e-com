@@ -23,7 +23,12 @@ import {
   PAYMENT_PROVIDER,
   type PaymentProviderPort,
 } from '../../domain/ports/payment-provider.port';
-import { BILLING_CONFIG, taxRateFor, type BillingConfig } from '../../billing.config';
+import {
+  BILLING_CONFIG,
+  shippingRateFor,
+  taxRateFor,
+  type BillingConfig,
+} from '../../billing.config';
 import { Payment } from '../../domain/payment.entity';
 import { Invoice } from '../../domain/invoice.entity';
 import { computeTotals, type ComputedTotals } from '../../domain/totals';
@@ -57,7 +62,7 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
       throw new ValidationException('charge requires at least one line', { orderId });
     }
 
-    // The retry answers here, before the amount is reconciled and long before the PSP is
+    // The retry answers here, before the coupon is resolved and long before the PSP is
     // reached: "the same key returns the same result" is the whole contract.
     const existing = await this.billing.findPaymentByIdempotencyKey(idempotencyKey);
     if (existing) {
@@ -69,12 +74,29 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
       };
     }
 
-    // Recomputed from the lines with no discount: `ChargeOrderRequest` carries no coupon,
-    // so a charge is always full price and the caller's `amount` must equal it exactly.
+    // Resolved exactly as the preview resolves it — same table, same active-only rule —
+    // so a charge can never take a different amount than the preview the customer saw.
+    // Refused rather than ignored: silently charging full price for a code the customer
+    // entered is a price that changed under them.
+    let coupon: { code: string; percentOff: number } | undefined;
+    const requestedCode = command.couponCode?.trim() ?? '';
+    if (requestedCode.length > 0) {
+      const found = await this.billing.findCoupon(requestedCode);
+      if (!found || !found.active) {
+        throw new ValidationException('coupon is unknown or inactive', {
+          orderId,
+          couponCode: requestedCode,
+        });
+      }
+      coupon = { code: found.code, percentOff: found.percentOff };
+    }
+
     const totals = computeTotals({
       lines: command.lines,
       currency: command.currency,
       taxRateBps: taxRateFor(this.config, command.customerCountry),
+      shippingMinor: shippingRateFor(this.config, command.customerCountry),
+      coupon,
     });
 
     if (totals.totalMinor !== command.amountMinor) {
@@ -108,7 +130,7 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
       customerId: command.customerId ?? '',
     });
 
-    const invoice = await this.invoiceFor(orderId, totals, payment, command);
+    const invoice = await this.invoiceFor(orderId, totals, payment, command, coupon?.code);
 
     await this.billing.saveCharge({ payment, invoice });
 
@@ -133,6 +155,7 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
     totals: ComputedTotals,
     payment: Payment,
     command: ChargeOrderCommand,
+    couponCode?: string,
   ): Promise<Invoice> {
     const existing = await this.billing.findInvoiceByOrderId(orderId);
 
@@ -143,7 +166,11 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
         // A failed charge still leaves a bill: the order side needs something to
         // reconcile against, and "no invoice" is indistinguishable from "never charged".
         status: payment.status === 'succeeded' ? 'paid' : 'issued',
-        country: command.customerCountry?.trim() || null,
+        // Uppercased to the form the rates were actually read under: the bill an
+        // auditor opens must name the jurisdiction that was charged, not the casing
+        // the storefront happened to type.
+        country: command.customerCountry?.trim().toUpperCase() || null,
+        couponCode: couponCode ?? null,
       });
     }
 
@@ -151,7 +178,7 @@ export class ChargeOrderHandler implements ICommandHandler<ChargeOrderCommand, C
       return existing;
     }
 
-    existing.applyTotals(totals);
+    existing.applyTotals(totals, new Date(), couponCode ?? null);
     if (payment.status === 'succeeded') {
       existing.markPaid();
     }

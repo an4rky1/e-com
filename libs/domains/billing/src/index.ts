@@ -19,6 +19,7 @@ export {
   KNOWN_PSP_PROVIDERS,
   billingSchema,
   resolveBillingConfig,
+  shippingRateFor,
   taxRateFor,
   type BillingConfig,
   type BillingEnvConfig,

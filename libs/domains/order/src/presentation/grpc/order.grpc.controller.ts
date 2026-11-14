@@ -35,7 +35,9 @@ const SERVICE = 'OrderService';
  *
  * @remarks `CreateOrder` carries the idempotency key in the request body for the internal
  * transport; an external gateway may also surface it as an `Idempotency-Key` header and
- * copy it here — the domain only ever sees the field.
+ * copy it here — the domain only ever sees the field. The jurisdiction and coupon ride
+ * along so the checkout saga can have billing price the charge under the same terms the
+ * storefront's preview was quoted with.
  */
 @Controller()
 export class OrderGrpcController extends GrpcControllerBase {
@@ -51,6 +53,8 @@ export class OrderGrpcController extends GrpcControllerBase {
       idempotencyKey: request.idempotencyKey ?? '',
       currency: request.currency ?? '',
       paymentMethodToken: request.paymentMethodToken ?? '',
+      customerCountry: request.customerCountry ?? '',
+      couponCode: request.couponCode ?? '',
     });
   }
 

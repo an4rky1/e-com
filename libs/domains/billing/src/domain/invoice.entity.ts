@@ -40,6 +40,7 @@ export interface InvoiceRow {
   subtotal_minor: number;
   discount_minor: number;
   tax_minor: number;
+  shipping_minor: number;
   total_minor: number;
   currency: string;
   coupon_code: string | null;
@@ -66,6 +67,7 @@ export interface InvoiceProps {
   subtotalMinor: number;
   discountMinor: number;
   taxMinor: number;
+  shippingMinor: number;
   totalMinor: number;
   currency: string;
   couponCode: string | null;
@@ -115,6 +117,7 @@ export class Invoice extends AggregateRoot<string> {
         subtotalMinor: input.totals.subtotalMinor,
         discountMinor: input.totals.discountMinor,
         taxMinor: input.totals.taxMinor,
+        shippingMinor: input.totals.shippingMinor,
         totalMinor: input.totals.totalMinor,
         currency: input.totals.currency,
         couponCode: input.couponCode ?? null,
@@ -148,6 +151,7 @@ export class Invoice extends AggregateRoot<string> {
         subtotalMinor: row.subtotal_minor,
         discountMinor: row.discount_minor,
         taxMinor: row.tax_minor,
+        shippingMinor: row.shipping_minor,
         totalMinor: row.total_minor,
         currency: row.currency,
         couponCode: row.coupon_code,
@@ -184,6 +188,10 @@ export class Invoice extends AggregateRoot<string> {
     return this.props.taxMinor;
   }
 
+  get shippingMinor(): number {
+    return this.props.shippingMinor;
+  }
+
   get totalMinor(): number {
     return this.props.totalMinor;
   }
@@ -215,14 +223,22 @@ export class Invoice extends AggregateRoot<string> {
    * second one at a new version would tell consumers an invoice exists twice. The totals
    * still move, because a bill that kept the numbers of a charge that never settled
    * would be a bill for the wrong amount.
+   *
+   * @remarks `couponCode` is passed through because the discount figure is meaningless
+   * without the code that produced it: a retry under a different code must rewrite both,
+   * never one.
    */
-  applyTotals(totals: ComputedTotals, now: Date = new Date()): void {
+  applyTotals(totals: ComputedTotals, now: Date = new Date(), couponCode?: string | null): void {
     this.props.lines = totals.lines.map((line) => ({ ...line }));
     this.props.subtotalMinor = totals.subtotalMinor;
     this.props.discountMinor = totals.discountMinor;
     this.props.taxMinor = totals.taxMinor;
+    this.props.shippingMinor = totals.shippingMinor;
     this.props.totalMinor = totals.totalMinor;
     this.props.currency = totals.currency;
+    if (couponCode !== undefined) {
+      this.props.couponCode = couponCode;
+    }
     this.bump(now);
   }
 
@@ -268,6 +284,7 @@ export class Invoice extends AggregateRoot<string> {
       subtotal_minor: this.props.subtotalMinor,
       discount_minor: this.props.discountMinor,
       tax_minor: this.props.taxMinor,
+      shipping_minor: this.props.shippingMinor,
       total_minor: this.props.totalMinor,
       currency: this.props.currency,
       coupon_code: this.props.couponCode,
@@ -285,6 +302,7 @@ export class Invoice extends AggregateRoot<string> {
     subtotal_minor: number;
     discount_minor: number;
     tax_minor: number;
+    shipping_minor: number;
     total_minor: number;
     currency: string;
     coupon_code: string | null;
@@ -298,6 +316,7 @@ export class Invoice extends AggregateRoot<string> {
       subtotal_minor: this.props.subtotalMinor,
       discount_minor: this.props.discountMinor,
       tax_minor: this.props.taxMinor,
+      shipping_minor: this.props.shippingMinor,
       total_minor: this.props.totalMinor,
       currency: this.props.currency,
       coupon_code: this.props.couponCode,
@@ -325,6 +344,7 @@ export class Invoice extends AggregateRoot<string> {
     orderId: string;
     totalMinor: number;
     taxMinor: number;
+    shippingMinor: number;
     discountMinor: number;
     currency: string;
     couponCode?: string;
@@ -334,6 +354,7 @@ export class Invoice extends AggregateRoot<string> {
       orderId: this.props.orderId,
       totalMinor: this.props.totalMinor,
       taxMinor: this.props.taxMinor,
+      shippingMinor: this.props.shippingMinor,
       discountMinor: this.props.discountMinor,
       currency: this.props.currency,
       ...(this.props.couponCode ? { couponCode: this.props.couponCode } : {}),

@@ -1,5 +1,5 @@
 /**
- * @fileoverview The frozen money calculation: tax, then coupon, then total.
+ * @fileoverview The frozen money calculation: tax and shipping, then coupon, then total.
  *
  * @remarks One pure function, no I/O and no clock, because this is the arithmetic every
  * other part of billing merely transports: the charge recomputes it to refuse a mismatched
@@ -8,10 +8,11 @@
  * taken to disagree.
  *
  * @remarks The order is part of the contract, not an implementation detail:
- * **tax before discount, coupon after tax**. Tax is computed on the undiscounted line
- * subtotals — a coupon reduces what the customer owes, not what the jurisdiction taxed —
- * and the coupon then applies to the post-tax amount. Changing either order silently
- * changes every price the storefront has ever shown.
+ * **tax and shipping before discount, coupon after both**. Tax is computed on the
+ * undiscounted line subtotals — a coupon reduces what the customer owes, not what the
+ * jurisdiction taxed — shipping joins the gross the same way, and the coupon then applies
+ * to the post-tax, post-shipping amount. Changing any of these orders silently changes
+ * every price the storefront has ever shown.
  *
  * @remarks Every figure is an integer in minor units. A float in a money path diverges
  * from the first sum computed in a different order, and the difference is real money.
@@ -45,6 +46,7 @@ export interface ComputedTotals {
   readonly lines: readonly ComputedLine[];
   readonly subtotalMinor: number;
   readonly taxMinor: number;
+  readonly shippingMinor: number;
   readonly discountMinor: number;
   readonly totalMinor: number;
   readonly currency: string;
@@ -55,12 +57,17 @@ export interface ComputeTotalsInput {
   readonly currency: string;
   /** Basis points: 1900 = 19%. Resolved from the jurisdiction by the caller. */
   readonly taxRateBps: number;
-  /** Absent means no coupon, which is the charge path: `ChargeOrderRequest` carries none. */
+  /**
+   * Flat delivery charge in minor units, resolved from the jurisdiction by the caller.
+   * Absent means zero — a digital-only checkout with nothing to ship.
+   */
+  readonly shippingMinor?: number;
+  /** Absent means no coupon. Both the preview and the charge path carry one when the customer named a code. */
   readonly coupon?: CouponInput;
 }
 
 /**
- * Computes subtotal, per-line tax, coupon discount and total, in that order.
+ * Computes subtotal, per-line tax, shipping, coupon discount and total, in that order.
  *
  * @remarks Per-line rounding rather than one tax figure on the aggregate subtotal: the
  * invoice shows a tax amount *per line*, and a tax computed on the sum would not equal
@@ -92,6 +99,13 @@ export function computeTotals(input: ComputeTotalsInput): ComputedTotals {
         percentOff: input.coupon.percentOff,
       });
     }
+  }
+
+  const shippingMinor = input.shippingMinor ?? 0;
+  if (!Number.isSafeInteger(shippingMinor) || shippingMinor < 0) {
+    throw new ValidationException('shipping must be a non-negative integer in minor units', {
+      shippingMinor,
+    });
   }
 
   const lines: ComputedLine[] = [];
@@ -135,9 +149,10 @@ export function computeTotals(input: ComputeTotalsInput): ComputedTotals {
     taxMinor += lineTaxMinor;
   }
 
-  // The coupon applies to the post-tax amount: tax was computed first, on undiscounted
-  // lines, and the discount is the last step before the total. See the file header.
-  const grossMinor = subtotalMinor + taxMinor;
+  // The coupon applies to the post-tax, post-shipping amount: tax was computed first, on
+  // undiscounted lines, shipping joins the gross unchanged, and the discount is the last
+  // step before the total. See the file header.
+  const grossMinor = subtotalMinor + taxMinor + shippingMinor;
   const discountMinor = input.coupon
     ? Math.round((grossMinor * input.coupon.percentOff) / 100)
     : 0;
@@ -146,6 +161,7 @@ export function computeTotals(input: ComputeTotalsInput): ComputedTotals {
     lines,
     subtotalMinor,
     taxMinor,
+    shippingMinor,
     discountMinor,
     totalMinor: Math.max(0, grossMinor - discountMinor),
     currency,

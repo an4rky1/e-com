@@ -379,6 +379,8 @@ export interface InvoicePayload {
   orderId: string;
   totalMinor: number;
   taxMinor: number;
+  /** Absent on events published before delivery charging existed. */
+  shippingMinor?: number;
   discountMinor: number;
   currency: string;
   couponCode?: string;

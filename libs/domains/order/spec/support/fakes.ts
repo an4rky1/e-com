@@ -15,10 +15,13 @@
  * forward and compensating steps — which is the whole point of a saga.
  */
 import type { IDomainEvent } from '@auth/core';
+import { ValidationException } from '@auth/platform/error-handling';
 import type {
   ChargeOrderRequest,
   ChargeOrderResponse,
   CheckoutLines,
+  PreviewTotalsRequest,
+  PreviewTotalsResponse,
   RefundOrderRequest,
   RefundOrderResponse,
   ReleaseResponse,
@@ -192,18 +195,75 @@ export class FakeInventoryPeer implements InventoryPeerPort {
 
 export type ChargeStatus = 'succeeded' | 'failed' | 'requires_action' | 'processing';
 
+/**
+ * Billing's default jurisdiction in tests: no tax, a flat delivery charge. Mirrors
+ * `Defaults.SHIPPING_RATES_BY_COUNTRY.US` so the double prices like the real handler —
+ * a charge carrying the bare subtotal would be refused there.
+ */
+const FAKE_SHIPPING_MINOR = 500;
+
 /** Scripted billing peer. */
 export class FakeBillingPeer implements BillingPeerPort {
   readonly charges: ChargeOrderRequest[] = [];
+  readonly previews: PreviewTotalsRequest[] = [];
   readonly refunds: RefundOrderRequest[] = [];
   chargeCount = 0;
+  /** Scripts a peer outage at the pricing step: `previewTotals` rejects with it. */
+  previewFailure?: Error;
+  /** Scripts the broken contract the saga guards: an answer whose total is empty. */
+  previewWithoutTotal = false;
+  private lastPreviewTotalMinor: string | null = null;
 
   constructor(
     private readonly status: ChargeStatus = 'succeeded',
     private readonly failureCode = 'card_declined',
   ) {}
 
+  async previewTotals(request: PreviewTotalsRequest): Promise<PreviewTotalsResponse> {
+    this.previews.push(request);
+    if (this.previewFailure) throw this.previewFailure;
+
+    const subtotal = request.lines.reduce(
+      (sum, line) => sum + line.quantity * Number(line.unitPrice.amountMinor),
+      0,
+    );
+    const totalMinor = this.previewWithoutTotal
+      ? ''
+      : String(subtotal + FAKE_SHIPPING_MINOR);
+    this.lastPreviewTotalMinor = totalMinor;
+    return {
+      invoice: {
+        invoiceId: '',
+        orderId: '',
+        status: 'draft',
+        lines: [],
+        subtotal: { amountMinor: String(subtotal), currency: request.currency },
+        discount: { amountMinor: '0', currency: request.currency },
+        taxTotal: { amountMinor: '0', currency: request.currency },
+        shipping: { amountMinor: String(FAKE_SHIPPING_MINOR), currency: request.currency },
+        total: { amountMinor: totalMinor, currency: request.currency },
+        currency: request.currency,
+        couponCode: '',
+        issuedAt: '',
+      },
+    };
+  }
+
   async charge(request: ChargeOrderRequest): Promise<ChargeOrderResponse> {
+    // Mirrors the real handler's reconciliation: an amount that disagrees with the
+    // previewed totals is refused before any provider call, so a saga that charged its
+    // own line subtotal instead of billing's figure fails here rather than silently.
+    if (
+      this.lastPreviewTotalMinor !== null &&
+      request.amount.amountMinor !== this.lastPreviewTotalMinor
+    ) {
+      throw new ValidationException('charge amount does not match lines', {
+        orderId: request.orderId,
+        expected: this.lastPreviewTotalMinor,
+        received: request.amount.amountMinor,
+      });
+    }
+
     this.charges.push(request);
     this.chargeCount += 1;
 

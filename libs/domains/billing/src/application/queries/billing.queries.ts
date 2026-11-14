@@ -17,7 +17,12 @@ import {
   BILLING_REPOSITORY,
   type BillingRepositoryPort,
 } from '../../domain/ports/billing-repository.port';
-import { BILLING_CONFIG, taxRateFor, type BillingConfig } from '../../billing.config';
+import {
+  BILLING_CONFIG,
+  shippingRateFor,
+  taxRateFor,
+  type BillingConfig,
+} from '../../billing.config';
 import type { Invoice } from '../../domain/invoice.entity';
 import { computeTotals, type ComputedTotals, type TotalsLineInput } from '../../domain/totals';
 
@@ -97,6 +102,9 @@ export class PreviewTotalsHandler
       lines: query.lines,
       currency: query.currency,
       taxRateBps: taxRateFor(this.config, query.customerCountry),
+      // The same delivery figure the charge will reconcile against: a preview that
+      // omits it undercharges the display and the charge then fails the match.
+      shippingMinor: shippingRateFor(this.config, query.customerCountry),
       coupon,
     });
   }

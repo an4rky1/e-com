@@ -14,6 +14,12 @@
  * @remarks `requires_action` (3DS) is a success-shaped answer: stock stays held, the order
  * stays `pending_payment` with its `paymentId` attached, and the client completes
  * authentication out of band. It is not a failure and must not trigger compensation.
+ *
+ * @remarks The charge is *priced* by billing before it is taken: the saga previews the
+ * totals over the frozen lines and charges exactly that figure. Tax, delivery and coupons
+ * live in billing's config, so a total computed on this side would drift from the one the
+ * charge handler reconciles against — and a drift there is a refused charge, not a
+ * discount.
  */
 import { SagaOrchestrator, type ISagaStep } from '@auth/core';
 import { ValidationException } from '@auth/platform/error-handling';
@@ -39,6 +45,10 @@ export interface CheckoutContext {
   readonly warehouseId: string;
   /** Fingerprint of the request payload, stored so a different payload under the same key is a conflict. */
   readonly requestFingerprint: string;
+  /** Jurisdiction billing priced the preview at; empty means its configured default. */
+  readonly customerCountry: string;
+  /** Coupon the customer named; passed to preview and charge alike so the two agree. */
+  readonly couponCode: string;
   /** Set by the snapshot step once the cart has been copied. */
   order?: Order;
   lines?: CheckoutLines;
@@ -207,25 +217,48 @@ function chargeStep(deps: CheckoutDeps): ISagaStep<CheckoutContext> {
       const order = context.order;
       if (!order) throw new Error('charge requires an order');
 
+      const lines = order.lines.map((line) => ({
+        sku: line.sku,
+        quantity: line.quantity,
+        unitPrice: {
+          amountMinor: String(line.unitPriceMinor),
+          currency: order.currency,
+        },
+      }));
+
+      // Billing prices the charge: tax and delivery are computed from its own config,
+      // and its reconciliation refuses any amount that disagrees with these figures.
+      // The order layer owns only its lines — asking it for a total would either
+      // duplicate billing's rates or charge a subtotal the handler will not accept.
+      // Jurisdiction and coupon are the customer's own preview inputs, passed to both
+      // calls unchanged: a charge priced under different inputs than the preview is
+      // the price-changing-under-the-customer bug this whole path exists to prevent.
+      const preview = await deps.billing.previewTotals({
+        customerCountry: context.customerCountry,
+        couponCode: context.couponCode,
+        lines,
+        currency: order.currency,
+      });
+      const totalMinor = preview.invoice?.total?.amountMinor;
+      if (!totalMinor) {
+        // A peer that answers without a total is a broken contract; the line subtotal
+        // is not a fallback; it is the figure the charge would be refused for.
+        throw new Error(`billing preview returned no total for order ${order.id}`);
+      }
+
       const request: ChargeOrderRequest = {
         orderId: order.id,
         // Business-derived, never a randomUUID: billing keys its own idempotency on it.
         idempotencyKey: `order:${order.id}:charge:1`,
         amount: {
-          amountMinor: String(order.totalMinor),
+          amountMinor: totalMinor,
           currency: order.currency,
         },
         paymentMethodToken: context.paymentMethodToken,
         customerId: order.userId,
-        lines: order.lines.map((line) => ({
-          sku: line.sku,
-          quantity: line.quantity,
-          unitPrice: {
-            amountMinor: String(line.unitPriceMinor),
-            currency: order.currency,
-          },
-        })),
-        customerCountry: '',
+        lines,
+        customerCountry: context.customerCountry,
+        couponCode: context.couponCode,
       };
 
       const response = await deps.billing.charge(request);

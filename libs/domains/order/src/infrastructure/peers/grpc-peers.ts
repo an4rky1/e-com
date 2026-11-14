@@ -20,6 +20,8 @@ import type {
   ChargeOrderRequest,
   ChargeOrderResponse,
   CheckoutLines,
+  PreviewTotalsRequest,
+  PreviewTotalsResponse,
   RefundOrderRequest,
   RefundOrderResponse,
   ReleaseResponse,
@@ -44,6 +46,7 @@ const METHOD = {
   RELEASE: '/inventory.v1.InventoryService/Release',
   CHARGE: '/billing.v1.BillingService/ChargeOrder',
   REFUND: '/billing.v1.BillingService/RefundOrder',
+  PREVIEW: '/billing.v1.BillingService/PreviewTotals',
 } as const;
 
 /** Shared call + translate plumbing. */
@@ -138,6 +141,22 @@ export class GrpcInventoryPeer extends PeerAdapter implements InventoryPeerPort 
 }
 
 export class GrpcBillingPeer extends PeerAdapter implements BillingPeerPort {
+  async previewTotals(request: PreviewTotalsRequest): Promise<PreviewTotalsResponse> {
+    return this.call(METHOD.PREVIEW, {
+      customerCountry: request.customerCountry,
+      couponCode: request.couponCode,
+      lines: request.lines.map((line) => ({
+        sku: line.sku,
+        quantity: line.quantity,
+        unitPrice: {
+          amountMinor: String(line.unitPrice.amountMinor),
+          currency: line.unitPrice.currency,
+        },
+      })),
+      currency: request.currency,
+    });
+  }
+
   async charge(request: ChargeOrderRequest): Promise<ChargeOrderResponse> {
     // Money is re-serialised here rather than passed through: the peer's wire shape wants
     // strings, and a caller that already holds minor units should not have to know that.
@@ -159,6 +178,7 @@ export class GrpcBillingPeer extends PeerAdapter implements BillingPeerPort {
         },
       })),
       customerCountry: request.customerCountry,
+      ...(request.couponCode ? { couponCode: request.couponCode } : {}),
     });
   }
 

@@ -41,12 +41,15 @@ message ChargeOrderRequest {
   // client-side SDK. Card numbers never reach this service.
   string payment_method_token = 4;
   string customer_id = 5;
-  // The lines the amount was computed from. Billing recomputes subtotal + tax from
-  // them and refuses a charge whose amount does not match: an amount that cannot be
-  // reconciled against its own lines is the definition of a money bug.
+  // The lines the amount was computed from. Billing recomputes subtotal + tax +
+  // shipping from them and refuses a charge whose amount does not match: an amount that
+  // cannot be reconciled against its own lines is the definition of a money bug.
   repeated ChargeLine lines = 6;
-  // Tax jurisdiction for the recomputation. Empty means the configured default.
+  // Tax (and shipping) jurisdiction for the recomputation. Empty means the configured default.
   string customer_country = 7;
+  // Coupon the customer named, if any. Billing resolves it against the coupons table and
+  // refuses an unknown or inactive code rather than charging full price silently.
+  string coupon_code = 8;
 }
 
 message NextAction {
@@ -100,6 +103,8 @@ message Invoice {
   string currency = 9;
   string coupon_code = 10;
   string issued_at = 11;
+  // Flat delivery charge; part of the gross the coupon applies to.
+  Money shipping = 12;
 }
 
 message PreviewTotalsLine {

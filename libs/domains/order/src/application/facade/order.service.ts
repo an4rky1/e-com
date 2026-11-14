@@ -38,6 +38,8 @@ export class OrderService {
     idempotencyKey: string;
     currency: string;
     paymentMethodToken?: string;
+    customerCountry?: string;
+    couponCode?: string;
   }): Promise<OrderView> {
     return this.commandBus.execute(
       new CreateOrderCommand(
@@ -46,6 +48,8 @@ export class OrderService {
         input.idempotencyKey,
         input.currency,
         input.paymentMethodToken ?? '',
+        input.customerCountry ?? '',
+        input.couponCode ?? '',
       ),
     );
   }

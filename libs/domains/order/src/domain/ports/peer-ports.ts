@@ -6,13 +6,15 @@
  * {@link GrpcChannel}; tests use in-memory doubles.
  *
  * @remarks Three peers, three jobs. Cart is read (and cleared) once at creation; inventory
- * reserves and releases stock; billing charges and refunds. Order never reaches into any
- * of their tables — the only coupling is this contract.
+ * reserves and releases stock; billing prices, charges and refunds. Order never reaches into
+ * any of their tables — the only coupling is this contract.
  */
 import type {
   ChargeOrderRequest,
   ChargeOrderResponse,
   CheckoutLines,
+  PreviewTotalsRequest,
+  PreviewTotalsResponse,
   RefundOrderRequest,
   RefundOrderResponse,
   ReleaseResponse,
@@ -58,6 +60,14 @@ export interface InventoryPeerPort {
 }
 
 export interface BillingPeerPort {
+  /**
+   * Prices a charge before it happens: the exact totals billing will reconcile the
+   * charge against — lines, tax and shipping jurisdiction, coupon — resolved on
+   * billing's side. Tax and delivery are billing's to compute, so the saga charges
+   * this figure and never its own line subtotal.
+   */
+  previewTotals(request: PreviewTotalsRequest): Promise<PreviewTotalsResponse>;
+
   /**
    * Charges an order. Idempotent per business key: the same key returns the same result
    * and never a second charge.

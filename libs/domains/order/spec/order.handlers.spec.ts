@@ -64,6 +64,8 @@ function command(overrides: Partial<{
   idempotencyKey: string;
   currency: string;
   paymentMethodToken: string;
+  customerCountry: string;
+  couponCode: string;
 }> = {}): CreateOrderCommand {
   return new CreateOrderCommand(
     overrides.userId ?? USER_ID,
@@ -71,6 +73,8 @@ function command(overrides: Partial<{
     overrides.idempotencyKey ?? IDEMPOTENCY_KEY,
     overrides.currency ?? 'USD',
     overrides.paymentMethodToken ?? 'pm_card_visa',
+    overrides.customerCountry ?? '',
+    overrides.couponCode ?? '',
   );
 }
 
@@ -97,6 +101,21 @@ describe('CreateOrderHandler', () => {
     expect(second.status).toBe(first.status);
   });
 
+  it('hands the command jurisdiction and coupon to billing for preview and charge', async () => {
+    const { handler, billing } = makeHandler();
+
+    await handler.execute(command({ customerCountry: 'DE', couponCode: 'SAVE10' }));
+
+    expect(billing.previews[0]).toMatchObject({
+      customerCountry: 'DE',
+      couponCode: 'SAVE10',
+    });
+    expect(billing.charges[0]).toMatchObject({
+      customerCountry: 'DE',
+      couponCode: 'SAVE10',
+    });
+  });
+
   it('refuses the same key with a different payload as IDEMPOTENCY_CONFLICT', async () => {
     const { handler } = makeHandler();
     await handler.execute(command());
@@ -112,6 +131,29 @@ describe('CreateOrderHandler', () => {
     const error = await thrownAsync(() => handler.execute(conflicting));
     expect(error).toBeInstanceOf(ResourceAlreadyExistsException);
     expect((error as Error).message).toContain('IDEMPOTENCY_CONFLICT');
+  });
+
+  it('refuses the same key with a different coupon or jurisdiction as IDEMPOTENCY_CONFLICT', async () => {
+    // Both inputs change what billing charges: a retry that silently swapped one would
+    // replay an order priced under terms the second delivery never agreed to.
+    const { handler } = makeHandler();
+    await handler.execute(command({ customerCountry: 'DE', couponCode: 'SAVE10' }));
+
+    for (const diverged of [
+      command({ customerCountry: 'DE', couponCode: 'SAVE20' }),
+      command({ customerCountry: 'FR', couponCode: 'SAVE10' }),
+    ]) {
+      const error = await thrownAsync(() => handler.execute(diverged));
+      expect(error).toBeInstanceOf(ResourceAlreadyExistsException);
+      expect((error as Error).message).toContain('IDEMPOTENCY_CONFLICT');
+    }
+
+    // Case is not meaningful to the country (billing uppercases before rating), so
+    // 'de' replays as the original — while a coupon's case is the code itself.
+    const replay = await handler.execute(
+      command({ customerCountry: 'de', couponCode: 'SAVE10' }),
+    );
+    expect(replay.status).toBe(OrderStatus.PAID);
   });
 
   it('requires an idempotency key', async () => {

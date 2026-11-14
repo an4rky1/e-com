@@ -44,6 +44,10 @@ export interface CheckoutPreviewInput {
 }
 
 export interface CheckoutCreateInput {
+  /** The jurisdiction the preview was priced at; the charge must reconcile against it. */
+  readonly customerCountry?: string;
+  /** The coupon the preview discounted with; passed through so the two cannot diverge. */
+  readonly couponCode?: string;
   readonly currency?: string;
   readonly paymentMethodToken?: string;
   /** From the `Idempotency-Key` header; generated when the client did not send one. */
@@ -165,6 +169,13 @@ export class StorefrontService {
     return { lines, validation, invoice };
   }
 
+  /**
+   * Creates the order, forwarding the pricing terms the preview was quoted with.
+   *
+   * @remarks Jurisdiction and coupon are not this edge's to re-derive: billing prices
+   * the charge inside the saga, and only the customer's own inputs keep that figure
+   * equal to the one displayed one screen ago.
+   */
   createCheckout(
     principal: GatewayPrincipal,
     input: CheckoutCreateInput = {},
@@ -173,6 +184,8 @@ export class StorefrontService {
       userId: principal.userId,
       sessionId: principal.sessionId,
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      customerCountry: input.customerCountry ?? '',
+      couponCode: input.couponCode ?? '',
       currency: input.currency ?? 'USD',
       paymentMethodToken: input.paymentMethodToken,
     });

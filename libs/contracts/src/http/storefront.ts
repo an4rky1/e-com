@@ -88,6 +88,10 @@ export interface CheckoutPreviewResponse {
 }
 
 export interface CheckoutCreateRequest {
+  /** The jurisdiction the preview was priced at; empty means the configured default. */
+  customerCountry?: string;
+  /** The coupon the preview discounted with; the charge refuses unknown codes. */
+  couponCode?: string;
   currency?: string;
   paymentMethodToken?: string;
 }

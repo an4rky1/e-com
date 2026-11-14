@@ -100,6 +100,7 @@ export class PrismaBillingRepository implements BillingRepositoryPort {
           subtotal_minor: invoice.subtotalMinor,
           discount_minor: invoice.discountMinor,
           tax_minor: invoice.taxMinor,
+          shipping_minor: invoice.shippingMinor,
           total_minor: invoice.totalMinor,
           currency: invoice.currency,
           coupon_code: invoice.couponCode,

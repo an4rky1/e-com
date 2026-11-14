@@ -541,8 +541,10 @@ export interface ChargeOrderRequest {
   customerId: string;
   /** The lines the amount was computed from; billing recomputes and refuses a mismatch. */
   lines: ChargeLine[];
-  /** Tax jurisdiction for the recomputation; empty means the configured default. */
+  /** Tax (and shipping) jurisdiction for the recomputation; empty means the configured default. */
   customerCountry: string;
+  /** Coupon the customer named, if any; unknown or inactive codes are refused. */
+  couponCode?: string;
 }
 
 export interface NextAction {
@@ -589,6 +591,8 @@ export interface InvoiceView {
   subtotal: ShopMoney;
   discount: ShopMoney;
   taxTotal: ShopMoney;
+  /** Flat delivery charge; part of the gross the coupon applies to. */
+  shipping: ShopMoney;
   total: ShopMoney;
   currency: string;
   couponCode: string;
@@ -670,6 +674,10 @@ export interface CreateOrderRequest {
   currency: string;
   /** Opaque PSP token for the checkout charge; empty means the default test instrument. */
   paymentMethodToken?: string;
+  /** The jurisdiction the preview was priced at; empty means billing's default. */
+  customerCountry?: string;
+  /** The coupon the preview discounted with; billing refuses an unknown one. */
+  couponCode?: string;
 }
 
 export interface ListUserOrdersRequest {

@@ -20,6 +20,10 @@ export class CreateOrderCommand {
     readonly idempotencyKey: string,
     readonly currency: string,
     readonly paymentMethodToken: string,
+    /** The jurisdiction billing priced the preview at; empty means its default. */
+    readonly customerCountry = '',
+    /** The coupon the preview discounted with; empty means none. */
+    readonly couponCode = '',
   ) {}
 }
 

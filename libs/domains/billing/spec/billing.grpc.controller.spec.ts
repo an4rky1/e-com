@@ -48,10 +48,14 @@ import {
   testBillingConfig,
 } from './support/fakes';
 
-/** 2 × 10.00: at the default 0% jurisdiction that is exactly 2000 to pay. */
-const TOTAL_US = 2_000;
-/** The same lines under German VAT: 2000 + 19% = 2380. */
-const TOTAL_DE = 2_380;
+/** 2 × 10.00: the frozen subtotal every default-jurisdiction line below starts from. */
+const SUBTOTAL = 2_000;
+/** The default jurisdiction's (US) flat delivery charge. */
+const SHIP_US = 500;
+/** Subtotal + default shipping: 0% tax, so exactly 2500 to pay. */
+const TOTAL_US = 2_500;
+/** The same lines under German VAT and DE shipping: 2000 + 380 + 499 = 2879. */
+const TOTAL_DE = 2_879;
 
 const money = (amountMinor: string, currency = 'EUR'): ShopMoney => ({ amountMinor, currency });
 
@@ -66,10 +70,10 @@ class DispatchBus {
   }
 }
 
-function build() {
+function build(configOverrides: Parameters<typeof testBillingConfig>[0] = {}) {
   const repository = new InMemoryBillingRepository();
   const provider = new FakePaymentProvider();
-  const config = testBillingConfig();
+  const config = testBillingConfig(configOverrides);
 
   const commandHandlers = new Map<object, (command: object) => Promise<unknown>>(
     [
@@ -105,7 +109,7 @@ function build() {
 const chargeRequest = (overrides: Partial<ChargeOrderRequest> = {}): ChargeOrderRequest => ({
   orderId: ORDER_ID,
   idempotencyKey: `order:${ORDER_ID}:charge:1`,
-  amount: money('2000'),
+  amount: money('2500'),
   paymentMethodToken: 'pm_card_visa',
   customerId: 'customer-1',
   lines: [{ sku: 'SKU-1', quantity: 2, unitPrice: money('1000') }],
@@ -181,12 +185,13 @@ describe('BillingGrpcController.ChargeOrder', () => {
     const response = await controller.chargeOrder(chargeRequest());
 
     expect(response.status).toBe('succeeded');
-    // The provider's contract is integers: a `"2000"` that stayed a string would multiply
-    // against a numeric quantity as `"2000" * 2` in some paths and `NaN` in others.
+    // The provider's contract is integers: a `"2500"` that stayed a string would multiply
+    // against a numeric quantity as `"2500" * 2` in some paths and `NaN` in others.
     expect(provider.charges[0]).toMatchObject({ amountMinor: TOTAL_US, currency: 'EUR' });
     expect(repository.invoices.get(ORDER_ID)).toMatchObject({
       status: 'paid',
-      subtotalMinor: TOTAL_US,
+      subtotalMinor: SUBTOTAL,
+      shippingMinor: SHIP_US,
       totalMinor: TOTAL_US,
     });
   });
@@ -281,12 +286,13 @@ describe('BillingGrpcController.ChargeOrder', () => {
     const { controller, repository } = build();
 
     await controller.chargeOrder(
-      chargeRequest({ amount: money('2380'), customerCountry: 'DE' }),
+      chargeRequest({ amount: money('2879'), customerCountry: 'DE' }),
     );
 
     expect(repository.invoices.get(ORDER_ID)).toMatchObject({
       status: 'paid',
       taxMinor: 380,
+      shippingMinor: 499,
       totalMinor: TOTAL_DE,
       country: 'DE',
     });
@@ -364,7 +370,7 @@ describe('BillingGrpcController.RefundOrder', () => {
     expect(response).toEqual({
       refundId: expect.any(String),
       status: 'succeeded',
-      refundedTotal: { amountMinor: '2000', currency: 'EUR' },
+      refundedTotal: { amountMinor: '2500', currency: 'EUR' },
     });
     expect(repository.invoices.get(ORDER_ID)?.status).toBe('void');
     expect(provider.refunds).toHaveLength(1);
@@ -379,7 +385,7 @@ describe('BillingGrpcController.RefundOrder', () => {
 
       const response = await controller.refundOrder(refundRequest(paymentId, { amount }));
 
-      expect(response.refundedTotal).toEqual({ amountMinor: '2000', currency: 'EUR' });
+      expect(response.refundedTotal).toEqual({ amountMinor: '2500', currency: 'EUR' });
       expect(provider.refunds).toHaveLength(1);
     }
   });
@@ -445,7 +451,8 @@ describe('BillingGrpcController.GetInvoice', () => {
       subtotal: { amountMinor: '2000', currency: 'EUR' },
       discount: { amountMinor: '0', currency: 'EUR' },
       taxTotal: { amountMinor: '0', currency: 'EUR' },
-      total: { amountMinor: '2000', currency: 'EUR' },
+      shipping: { amountMinor: '500', currency: 'EUR' },
+      total: { amountMinor: '2500', currency: 'EUR' },
       currency: 'EUR',
       couponCode: '',
       issuedAt: expect.any(String),
@@ -464,6 +471,7 @@ describe('BillingGrpcController.GetInvoice', () => {
         subtotal_minor: 2_000,
         discount_minor: 0,
         tax_minor: 0,
+        shipping_minor: 0,
         total_minor: 2_000,
         currency: 'EUR',
         coupon_code: 'SAVE10',
@@ -524,7 +532,8 @@ describe('BillingGrpcController.PreviewTotals', () => {
       subtotal: { amountMinor: '2000', currency: 'EUR' },
       discount: { amountMinor: '0', currency: 'EUR' },
       taxTotal: { amountMinor: '0', currency: 'EUR' },
-      total: { amountMinor: '2000', currency: 'EUR' },
+      shipping: { amountMinor: '500', currency: 'EUR' },
+      total: { amountMinor: '2500', currency: 'EUR' },
       currency: 'EUR',
       couponCode: '',
       issuedAt: '',
@@ -542,15 +551,17 @@ describe('BillingGrpcController.PreviewTotals', () => {
     const response = await controller.previewTotals(previewRequest({ couponCode: ' SAVE10 ' }));
 
     expect(response.invoice.couponCode).toBe('SAVE10');
-    expect(response.invoice.discount).toEqual({ amountMinor: '200', currency: 'EUR' });
-    expect(response.invoice.total).toEqual({ amountMinor: '1800', currency: 'EUR' });
+    expect(response.invoice.discount).toEqual({ amountMinor: '250', currency: 'EUR' });
+    expect(response.invoice.total).toEqual({ amountMinor: '2250', currency: 'EUR' });
   });
 
   it('stays quiet about a coupon that discounted nothing', async () => {
     // The domain refuses a 0% coupon outright, so the only way a valid coupon discounts
     // nothing is a cart that is already free. Echoing its code would advertise a saving
     // the preview never applied.
-    const { controller, repository } = build();
+    // Free shipping is what makes that cart free: a flat delivery charge would still
+    // leave 5.00 to discount.
+    const { controller, repository } = build({ shippingRatesByCountry: {} });
     repository.coupons.set('SAVE10', { code: 'SAVE10', percentOff: 10, active: true });
 
     const response = await controller.previewTotals(
@@ -570,7 +581,7 @@ describe('BillingGrpcController.PreviewTotals', () => {
     const response = await controller.previewTotals(previewRequest({ customerCountry: 'DE' }));
 
     expect(response.invoice.taxTotal).toEqual({ amountMinor: '380', currency: 'EUR' });
-    expect(response.invoice.total).toEqual({ amountMinor: '2380', currency: 'EUR' });
+    expect(response.invoice.total).toEqual({ amountMinor: '2879', currency: 'EUR' });
   });
 
   it('refuses an unknown coupon rather than previewing a price it will not honour', async () => {

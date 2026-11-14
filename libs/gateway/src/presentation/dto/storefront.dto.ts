@@ -150,6 +150,16 @@ export class CheckoutPreviewDto implements CheckoutPreviewRequest {
 export class CheckoutCreateDto implements CheckoutCreateRequest {
   @IsOptional()
   @IsString()
+  @MaxLength(2)
+  customerCountry?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  couponCode?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(CURRENCY_LENGTH)
   currency?: string;
 

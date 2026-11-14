@@ -389,6 +389,10 @@ export interface OrderClientPort {
     userId: string;
     sessionId: string;
     idempotencyKey: string;
+    /** The jurisdiction billing priced the preview at; charge reconciles against it. */
+    customerCountry: string;
+    /** The coupon the preview discounted with; billing refuses an unknown one. */
+    couponCode: string;
     currency: string;
     paymentMethodToken?: string;
   }): Promise<GatewayOrderView>;
@@ -419,6 +423,7 @@ export interface GatewayInvoiceView {
   readonly subtotal: ShopMoney;
   readonly discount: ShopMoney;
   readonly taxTotal: ShopMoney;
+  readonly shipping: ShopMoney;
   readonly total: ShopMoney;
   readonly currency: string;
   readonly couponCode: string;

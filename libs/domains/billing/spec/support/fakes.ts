@@ -44,6 +44,7 @@ export const TOPICS = {
 /** A config object for tests: the real defaults, without touching `process.env`. */
 export const testBillingConfig = (overrides: Partial<BillingConfig> = {}): BillingConfig => ({
   taxRatesByCountry: { US: 0, DE: 1900, FR: 2000, GB: 2000 },
+  shippingRatesByCountry: { US: 500, DE: 499, FR: 499, GB: 399 },
   defaultTaxCountry: 'US',
   pspProvider: 'fake',
   grpcDeadlineMs: 5_000,

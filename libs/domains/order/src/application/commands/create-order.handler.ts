@@ -101,6 +101,8 @@ export class CreateOrderHandler
       paymentMethodToken: command.paymentMethodToken ?? '',
       warehouseId: this.config.defaultWarehouse,
       requestFingerprint: fingerprint,
+      customerCountry: command.customerCountry ?? '',
+      couponCode: command.couponCode ?? '',
     };
 
     try {
@@ -175,9 +177,16 @@ export class CreateOrderHandler
  * the first's order).
  */
 function fingerprintOf(command: CreateOrderCommand): string {
-  return [
+  // JSON rather than a joined string: the coupon is free text, and an unescaped
+  // delimiter would let two different payloads build the same fingerprint.
+  return JSON.stringify([
     command.userId.trim(),
     command.sessionId.trim(),
     (command.currency ?? '').trim().toUpperCase(),
-  ].join('|');
+    // Uppercased because billing normalises jurisdiction codes before rating; the
+    // coupon keeps its case because the lookup does not — two codes that price
+    // differently must never share a fingerprint.
+    (command.customerCountry ?? '').trim().toUpperCase(),
+    (command.couponCode ?? '').trim(),
+  ]);
 }

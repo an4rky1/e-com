@@ -47,11 +47,15 @@ import {
   testBillingConfig,
 } from './support/fakes';
 
-/** 2 × 10.00: at the default 0% jurisdiction that is exactly 2000 to pay. */
+/** 2 × 10.00: the frozen subtotal every default-jurisdiction line below starts from. */
 const LINES: readonly ChargeLineInput[] = [{ sku: 'SKU-1', quantity: 2, unitPriceMinor: 1_000 }];
-const TOTAL_US = 2_000;
-/** The same lines under German VAT: 2000 + 19% = 2380. */
-const TOTAL_DE = 2_380;
+const SUBTOTAL = 2_000;
+/** The default jurisdiction's (US) flat delivery charge. */
+const SHIP_US = 500;
+/** Subtotal + default shipping: 0% tax, so exactly 2500 to pay. */
+const TOTAL_US = 2_500;
+/** The same lines under German VAT and DE shipping: 2000 + 380 + 499 = 2879. */
+const TOTAL_DE = 2_879;
 
 const context = () => {
   const repository = new InMemoryBillingRepository();
@@ -79,6 +83,7 @@ const chargeCommand = (
     customerId?: string;
     lines?: readonly ChargeLineInput[];
     customerCountry?: string;
+    couponCode?: string;
   } = {},
 ): ChargeOrderCommand =>
   new ChargeOrderCommand(
@@ -90,6 +95,7 @@ const chargeCommand = (
     overrides.customerId ?? 'customer-1',
     overrides.lines ?? LINES,
     overrides.customerCountry,
+    overrides.couponCode,
   );
 
 /** Charges once through the public path, then isolates the outbox for the test's subject. */
@@ -131,8 +137,9 @@ describe('ChargeOrderCommand', () => {
     expect(invoice).toMatchObject({
       orderId: ORDER_ID,
       status: 'paid',
-      subtotalMinor: TOTAL_US,
+      subtotalMinor: SUBTOTAL,
       taxMinor: 0,
+      shippingMinor: SHIP_US,
       totalMinor: TOTAL_US,
       country: null,
     });
@@ -240,9 +247,45 @@ describe('ChargeOrderCommand', () => {
     expect(harness.repository.invoices.get(ORDER_ID)).toMatchObject({
       status: 'paid',
       taxMinor: 380,
+      shippingMinor: 499,
       totalMinor: TOTAL_DE,
       country: 'DE',
     });
+  });
+
+  it('charges the coupon the customer named, at the previewed price', async () => {
+    const harness = context();
+    harness.repository.coupons.set('SAVE10', { code: 'SAVE10', percentOff: 10, active: true });
+
+    // gross = 2000 + 0 tax + 500 shipping = 2500; 10% off = 250; total 2250.
+    const result = await harness.charge.execute(
+      chargeCommand({ amountMinor: 2_250, couponCode: ' SAVE10 ' }),
+    );
+
+    expect(result.status).toBe('succeeded');
+    expect(harness.repository.invoices.get(ORDER_ID)).toMatchObject({
+      status: 'paid',
+      discountMinor: 250,
+      totalMinor: 2_250,
+      couponCode: 'SAVE10',
+    });
+    expect(harness.provider.charges[0]).toMatchObject({ amountMinor: 2_250 });
+  });
+
+  it('refuses a coupon the store does not honour, before the provider is reached', async () => {
+    const harness = context();
+
+    const error = await harness.charge
+      .execute(chargeCommand({ couponCode: 'NOPE' }))
+      .then(
+        () => null,
+        (thrown: unknown) => thrown as ValidationException,
+      );
+
+    expect(error).toBeInstanceOf(ValidationException);
+    expect(error?.message).toMatch(/coupon is unknown or inactive/);
+    expect(harness.provider.charges).toHaveLength(0);
+    expect(harness.repository.commits).toBe(0);
   });
 
   it('declines through the provider and still leaves a bill', async () => {
@@ -294,12 +337,13 @@ describe('ChargeOrderCommand', () => {
 
     const cheaper: readonly ChargeLineInput[] = [{ sku: 'SKU-2', quantity: 1, unitPriceMinor: 500 }];
     await harness.charge.execute(
-      chargeCommand({ idempotencyKey: `order:${ORDER_ID}:charge:2`, amountMinor: 500, lines: cheaper }),
+      // 500 lines + 500 default shipping: the amount must still reconcile exactly.
+      chargeCommand({ idempotencyKey: `order:${ORDER_ID}:charge:2`, amountMinor: 1_000, lines: cheaper }),
     );
 
     const invoice = harness.repository.invoices.get(ORDER_ID);
     expect(harness.repository.invoices.size).toBe(1);
-    expect(invoice).toMatchObject({ status: 'paid', subtotalMinor: 500, totalMinor: 500 });
+    expect(invoice).toMatchObject({ status: 'paid', subtotalMinor: 500, totalMinor: 1_000 });
     // The lines are replaced, not merged, and `invoice.issued` is not re-announced: the
     // row already exists, and a second announcement would say it exists twice.
     expect(invoice?.lines).toHaveLength(1);
@@ -315,14 +359,14 @@ describe('ChargeOrderCommand', () => {
 
     const cheaper: readonly ChargeLineInput[] = [{ sku: 'SKU-2', quantity: 1, unitPriceMinor: 500 }];
     await harness.charge.execute(
-      chargeCommand({ idempotencyKey: `order:${ORDER_ID}:charge:2`, amountMinor: 500, lines: cheaper }),
+      chargeCommand({ idempotencyKey: `order:${ORDER_ID}:charge:2`, amountMinor: 1_000, lines: cheaper }),
     );
 
     // The settled figures are what an audit must find; a later attempt — even a
     // successful one — may not move them.
     expect(harness.repository.invoices.get(ORDER_ID)).toMatchObject({
       status: 'paid',
-      subtotalMinor: TOTAL_US,
+      subtotalMinor: SUBTOTAL,
       totalMinor: TOTAL_US,
       version: 1,
     });
@@ -610,8 +654,9 @@ describe('PreviewTotalsQuery', () => {
     );
 
     expect(totals).toMatchObject({
-      subtotalMinor: TOTAL_US,
+      subtotalMinor: SUBTOTAL,
       taxMinor: 0,
+      shippingMinor: SHIP_US,
       discountMinor: 0,
       totalMinor: TOTAL_US,
       currency: 'EUR',
@@ -631,8 +676,8 @@ describe('PreviewTotalsQuery', () => {
       new PreviewTotalsQuery(LINES, 'EUR', undefined, ' SAVE10 '),
     );
 
-    expect(totals.discountMinor).toBe(200);
-    expect(totals.totalMinor).toBe(1_800);
+    expect(totals.discountMinor).toBe(250);
+    expect(totals.totalMinor).toBe(2_250);
   });
 
   it('taxes at the customer jurisdiction', async () => {

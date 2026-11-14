@@ -41,7 +41,7 @@ function freshOrder(overrides: Partial<Parameters<typeof Order.create>[0]> = {})
       },
     ],
     idempotencyKey: 'key-1',
-    requestFingerprint: 'user-1|session-1|USD',
+    requestFingerprint: '["user-1","session-1","USD"]',
     now: T0,
     ...overrides,
   });

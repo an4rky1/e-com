@@ -56,6 +56,8 @@ export class CheckoutController {
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<OrderView> {
     return this.storefront.createCheckout(principal, {
+      customerCountry: body.customerCountry,
+      couponCode: body.couponCode,
       currency: body.currency,
       paymentMethodToken: body.paymentMethodToken,
       idempotencyKey,

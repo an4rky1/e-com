@@ -182,6 +182,7 @@ type WireInvoice = {
   subtotal?: WireMoney;
   discount?: WireMoney;
   taxTotal?: WireMoney;
+  shipping?: WireMoney;
   total?: WireMoney;
   currency?: string;
   couponCode?: string;
@@ -202,6 +203,7 @@ const toInvoice = (wire: WireInvoice) => ({
   subtotal: toShopMoney(wire.subtotal),
   discount: toShopMoney(wire.discount),
   taxTotal: toShopMoney(wire.taxTotal),
+  shipping: toShopMoney(wire.shipping),
   total: toShopMoney(wire.total),
   currency: wire.currency ?? '',
   couponCode: wire.couponCode ?? '',
@@ -395,6 +397,8 @@ export class GrpcOrderClient implements OrderClientPort {
     userId: string;
     sessionId: string;
     idempotencyKey: string;
+    customerCountry: string;
+    couponCode: string;
     currency: string;
     paymentMethodToken?: string;
   }) {
@@ -403,6 +407,8 @@ export class GrpcOrderClient implements OrderClientPort {
         userId: input.userId,
         sessionId: input.sessionId,
         idempotencyKey: input.idempotencyKey,
+        customerCountry: input.customerCountry,
+        couponCode: input.couponCode,
         currency: input.currency,
         paymentMethodToken: input.paymentMethodToken ?? '',
       }),

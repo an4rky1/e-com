@@ -76,6 +76,8 @@ model invoices {
   subtotal_minor Int
   discount_minor Int       @default(0)
   tax_minor      Int
+  /// Flat delivery charge in minor units; part of the gross the coupon applies to.
+  shipping_minor Int       @default(0)
   total_minor    Int
   currency       String
   coupon_code    String?

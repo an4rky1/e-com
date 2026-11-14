@@ -3,9 +3,9 @@
  *
  * @remarks These are the numbers a storefront displays and a PSP collects, so the suite
  * is deliberately literal: concrete inputs, concrete outputs, no property that could hide
- * a rounding difference. The order — tax before discount, coupon after tax — is the part
- * that silently changes every price if it ever moves, and it is asserted directly rather
- * than inferred.
+ * a rounding difference. The order — tax and shipping before discount, coupon after both —
+ * is the part that silently changes every price if it ever moves, and it is asserted
+ * directly rather than inferred.
  *
  * @remarks Per-line rounding is asserted too: the invoice shows a tax *per line*, so the
  * tax the totals carry must equal the sum of the taxes the lines display, or a
@@ -69,6 +69,33 @@ describe('computeTotals — the frozen order', () => {
     });
 
     expect(totals.discountMinor).toBe(0);
+    expect(totals.totalMinor).toBe(1_000);
+  });
+
+  it('adds shipping to the gross before the coupon — delivery is not free with a code', () => {
+    // 2 × 10.00 = 20.00 subtotal, 19% tax = 3.80, shipping 4.99, gross 28.79.
+    // 10% coupon = 2.879 → 2.88 off the post-tax, post-shipping amount.
+    const totals = computeTotals({
+      lines: [{ sku: 'SKU-1', quantity: 2, unitPriceMinor: 1_000 }],
+      currency: 'EUR',
+      taxRateBps: 1_900,
+      shippingMinor: 499,
+      coupon: { code: 'SAVE10', percentOff: 10 },
+    });
+
+    expect(totals.shippingMinor).toBe(499);
+    expect(totals.discountMinor).toBe(288);
+    expect(totals.totalMinor).toBe(2_591);
+  });
+
+  it('treats an absent shipping figure as zero', () => {
+    const totals = computeTotals({
+      lines: [{ sku: 'SKU-1', quantity: 1, unitPriceMinor: 1_000 }],
+      currency: 'USD',
+      taxRateBps: 0,
+    });
+
+    expect(totals.shippingMinor).toBe(0);
     expect(totals.totalMinor).toBe(1_000);
   });
 });
@@ -185,6 +212,15 @@ describe('computeTotals — refusals', () => {
     expect(() => computeTotals({ lines: [line], currency: 'EUR', taxRateBps: 10_001 })).toThrow(
       ValidationException,
     );
+  });
+
+  it('refuses a negative or fractional shipping figure', () => {
+    expect(() =>
+      computeTotals({ lines: [line], currency: 'EUR', taxRateBps: 0, shippingMinor: -1 }),
+    ).toThrow(ValidationException);
+    expect(() =>
+      computeTotals({ lines: [line], currency: 'EUR', taxRateBps: 0, shippingMinor: 5.5 }),
+    ).toThrow(ValidationException);
   });
 
   it('refuses a coupon that could take the bill below zero', () => {

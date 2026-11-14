@@ -56,6 +56,13 @@ message CreateOrderRequest {
   // Empty means the configured default test instrument; card numbers never reach
   // this service.
   string payment_method_token = 5;
+  // The jurisdiction the storefront preview was priced at; empty means billing's
+  // configured default. Carried so the charge reconciles against the same figures
+  // the customer was shown.
+  string customer_country = 6;
+  // The coupon the preview discounted with; billing refuses an unknown or inactive
+  // code rather than charging a different price than the one displayed.
+  string coupon_code = 7;
 }
 
 message GetOrderRequest {

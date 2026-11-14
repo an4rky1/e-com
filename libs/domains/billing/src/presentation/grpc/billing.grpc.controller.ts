@@ -60,6 +60,7 @@ export class BillingGrpcController extends GrpcControllerBase {
         unitPriceMinor: parseShopMoney(line.unitPrice, `lines[${index}].unitPrice`),
       })),
       customerCountry: request.customerCountry,
+      couponCode: request.couponCode,
     });
 
     return {
@@ -164,6 +165,7 @@ function invoiceToView(invoice: Invoice): InvoiceView {
     subtotal: toShopMoney(invoice.subtotalMinor, currency),
     discount: toShopMoney(invoice.discountMinor, currency),
     taxTotal: toShopMoney(invoice.taxMinor, currency),
+    shipping: toShopMoney(invoice.shippingMinor, currency),
     total: toShopMoney(invoice.totalMinor, currency),
     currency,
     couponCode: invoice.couponCode ?? '',
@@ -195,6 +197,7 @@ function previewToView(totals: ComputedTotals, requestedCoupon?: string): Invoic
     subtotal: toShopMoney(totals.subtotalMinor, totals.currency),
     discount: toShopMoney(totals.discountMinor, totals.currency),
     taxTotal: toShopMoney(totals.taxMinor, totals.currency),
+    shipping: toShopMoney(totals.shippingMinor, totals.currency),
     total: toShopMoney(totals.totalMinor, totals.currency),
     currency: totals.currency,
     couponCode,
