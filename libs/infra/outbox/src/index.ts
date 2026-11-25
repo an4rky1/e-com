@@ -25,5 +25,11 @@ export type {
   NewOutboxEntry,
   OutboxRepositoryPort,
 } from './outbox.repository.port';
+export {
+  buildOutboxRows,
+  type BuildOutboxRowsOptions,
+  type OutboxEnvelopeEvent,
+  type OutboxRow,
+} from './enqueue-events';
 export type { EventPublisher } from './publisher.port';
 export { createOutboxModule, type OutboxModuleOptions } from './outbox.module';

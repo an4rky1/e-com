@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { envBoolean, envInt, envString, readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import { MAX_PAGE_SIZE } from '@auth/contracts/http/api';
 import { ApiKeyPrefix } from './domain/value-objects/api-key-prefix.vo';
 
 /** This service's own Prisma client. Never shared with another domain lib. */
@@ -37,7 +38,7 @@ export const Defaults = {
    * and worthless to a key that has just been issued. Operators can turn it off.
    */
   TRACK_LAST_USED: true,
-  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE,
 } as const;
 
 /**

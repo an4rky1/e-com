@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -14,14 +15,12 @@ import { createKafkaModule } from '@auth/infra/kafka';
 import { ShutdownService } from '@auth/platform/shutdown';
 import { createNotificationModule } from '@auth/domains/notification';
 
-
-
 @Module({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('notification'),
-    ObservabilityModule.forRoot('notification'),
+    HealthModule.forRoot(ServiceNames.NOTIFICATION),
+    ObservabilityModule.forRoot(ServiceNames.NOTIFICATION),
     // Supplies the Kafka consumer the notification module exports but does not
     // provide: the module is consumer-only and takes its transport from here.
     createKafkaModule(),

@@ -1,12 +1,18 @@
 import {
   API_PROXY_PREFIX,
+  AdminRoutes,
   AllRoutes,
   ApiRoutes,
+  DEFAULT_PAGE_SIZE,
   DISPLAY_NAME_MAX_LENGTH,
   EMAIL_MAX_LENGTH,
+  GUEST_ID_MAX_LENGTH,
+  MAX_PAGE_SIZE,
   OAUTH_PROVIDERS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  REFRESH_TOKEN_MAX_LENGTH,
+  REFRESH_TOKEN_MIN_LENGTH,
   StorefrontRoutes,
   apiErrorMessage,
   isApiErrorResponse,
@@ -16,10 +22,11 @@ import {
 } from '../src/http';
 
 describe('http surface', () => {
-  it('pins the ten auth routes a client may call', () => {
+  it('pins the twelve auth routes a client may call', () => {
     expect(Object.keys(ApiRoutes)).toEqual([
       'login',
       'register',
+      'acquireGuest',
       'refresh',
       'logout',
       'me',
@@ -27,6 +34,7 @@ describe('http surface', () => {
       'oauthStart',
       'oauthCallback',
       'createUser',
+      'getUser',
       'setPassword',
     ]);
     expect(ApiRoutes.login).toEqual({
@@ -37,6 +45,11 @@ describe('http surface', () => {
     expect(ApiRoutes.register).toEqual({
       method: 'POST',
       path: '/auth/register',
+      authenticated: false,
+    });
+    expect(ApiRoutes.acquireGuest).toEqual({
+      method: 'POST',
+      path: '/auth/guest',
       authenticated: false,
     });
     expect(ApiRoutes.oauthProviders).toEqual({
@@ -59,25 +72,34 @@ describe('http surface', () => {
       path: '/users',
       authenticated: false,
     });
+    expect(ApiRoutes.getUser).toEqual({
+      method: 'GET',
+      path: '/users/:id',
+      authenticated: true,
+    });
     expect(ApiRoutes.setPassword).toEqual({
       method: 'POST',
       path: '/users/:id/password',
       authenticated: true,
     });
-    expect(ApiRoutes.me).toEqual({ method: 'GET', path: '/auth/me', authenticated: true });
+    expect(ApiRoutes.me).toEqual({ method: 'GET', path: '/auth/me', authenticated: false });
   });
 
-  it('marks exactly the credential-free routes as unauthenticated', () => {
-    // The public set is registration, the token exchanges and the OAuth walk — everything a
-    // person with no account yet has to reach. Anything else asking to be reachable without
-    // a token is a hole, not a convenience.
+  it('marks exactly the routes that need no bearer as unauthenticated', () => {
+    // "Unauthenticated" means no *bearer*, not "no identity": the set is registration, the
+    // token exchanges, the OAuth walk, the guest placeholder and the guest-callable
+    // `/auth/me` — everything a person with no account yet has to reach. The guest routes
+    // still refuse a request that carries neither credential, but anything else asking to
+    // open without a bearer is a hole, not a convenience.
     const publicRoutes = Object.entries(ApiRoutes)
       .filter(([, route]) => !route.authenticated)
       .map(([name]) => name);
     expect(publicRoutes).toEqual([
       'login',
       'register',
+      'acquireGuest',
       'refresh',
+      'me',
       'oauthProviders',
       'oauthStart',
       'oauthCallback',
@@ -96,6 +118,7 @@ describe('http surface', () => {
       'cartUpdateItem',
       'cartRemoveItem',
       'cartClear',
+      'cartMerge',
       'checkoutPreview',
       'checkoutCreate',
       'orderList',
@@ -118,19 +141,59 @@ describe('http surface', () => {
       path: '/checkout',
       authenticated: true,
     });
+    // The merge is the one cart route that stays behind the bearer: its guest id names
+    // the source, never the account the basket is folded into.
+    expect(StorefrontRoutes.cartMerge).toEqual({
+      method: 'POST',
+      path: '/cart/merge',
+      authenticated: true,
+    });
   });
 
   it('marks exactly the storefront routes without a session', () => {
-    // Browsing the catalog needs no account; the PSP webhook is signed, not sessioned.
+    // Browsing the catalog needs no account; the basket needs an *identity* but not a
+    // session — a guest id in `X-Guest-Id` reaches it. Checkout and the merge do require
+    // a session: they act on the account, not on the browser. The PSP webhook is signed,
+    // not sessioned.
     const publicRoutes = Object.entries(StorefrontRoutes)
       .filter(([, route]) => !route.authenticated)
       .map(([name]) => name);
-    expect(publicRoutes).toEqual(['catalogList', 'catalogProduct', 'paymentWebhook']);
+    expect(publicRoutes).toEqual([
+      'catalogList',
+      'catalogProduct',
+      'cartGet',
+      'cartAddItem',
+      'cartUpdateItem',
+      'cartRemoveItem',
+      'cartClear',
+      'paymentWebhook',
+    ]);
   });
 
-  it('joins both maps into the client-facing surface without collisions', () => {
+  it('exposes the administrative surface only behind the bearer', () => {
+    expect(AdminRoutes.rolesList).toEqual({
+      method: 'GET',
+      path: '/access-control/roles',
+      authenticated: true,
+    });
+    expect(AdminRoutes.roleGrant).toEqual({
+      method: 'POST',
+      path: '/access-control/users/:userId/roles',
+      authenticated: true,
+    });
+    expect(AdminRoutes.roleRevoke).toEqual({
+      method: 'POST',
+      path: '/access-control/users/:userId/roles/revoke',
+      authenticated: true,
+    });
+    expect(Object.values(AdminRoutes).every((route) => route.authenticated)).toBe(true);
+  });
+
+  it('joins every map into the client-facing surface without collisions', () => {
     expect(Object.keys(AllRoutes)).toHaveLength(
-      Object.keys(ApiRoutes).length + Object.keys(StorefrontRoutes).length,
+      Object.keys(ApiRoutes).length +
+        Object.keys(StorefrontRoutes).length +
+        Object.keys(AdminRoutes).length,
     );
     for (const name of Object.keys(ApiRoutes)) {
       expect(AllRoutes[name as keyof typeof ApiRoutes]).toBe(
@@ -168,11 +231,18 @@ describe('http surface', () => {
 describe('http field limits', () => {
   it('pins the numbers both gates check against', () => {
     // Editing one of these without editing the gateway's decorators would turn this line
-    // red — which is the point of having them in one file.
+    // red — which is the point of having them in one file. The password bounds are the
+    // vault's floor and ceiling too: credential-vault imports them, so one edit moves
+    // the edge, the form and the policy together.
     expect(EMAIL_MAX_LENGTH).toBe(254);
-    expect(PASSWORD_MIN_LENGTH).toBe(8);
-    expect(PASSWORD_MAX_LENGTH).toBe(512);
+    expect(PASSWORD_MIN_LENGTH).toBe(12);
+    expect(PASSWORD_MAX_LENGTH).toBe(256);
+    expect(REFRESH_TOKEN_MIN_LENGTH).toBe(20);
+    expect(REFRESH_TOKEN_MAX_LENGTH).toBe(512);
     expect(DISPLAY_NAME_MAX_LENGTH).toBe(200);
+    expect(GUEST_ID_MAX_LENGTH).toBe(64);
+    expect(DEFAULT_PAGE_SIZE).toBe(20);
+    expect(MAX_PAGE_SIZE).toBe(100);
   });
 });
 

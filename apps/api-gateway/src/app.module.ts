@@ -8,6 +8,7 @@
  * @remarks No `createKafkaPublisher()`. Every other app has one; this one has nothing to
  * publish, because it owns no state and therefore has nothing to announce a change to.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -20,7 +21,7 @@ import { createGatewayModule } from '@auth/gateway';
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    ObservabilityModule.forRoot('api-gateway'),
+    ObservabilityModule.forRoot(ServiceNames.API_GATEWAY),
 
     createGatewayModule(),
   ],

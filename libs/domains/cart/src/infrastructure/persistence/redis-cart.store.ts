@@ -16,10 +16,8 @@ import { Logger } from '@nestjs/common';
 import { DependencyUnavailableException } from '@auth/platform/error-handling';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
-import {
-  CART_STATUSES,
-  type StoredCart,
-} from '../../domain/cart.aggregate';
+import type { StoredCart } from '../../domain/cart.aggregate';
+import { CART_STATUSES } from '../../domain/value-objects/cart-status.vo';
 import type { CartStorePort, SaveCartInput } from '../../domain/ports/cart-store.port';
 import type { CartConfig } from '../../cart.config';
 

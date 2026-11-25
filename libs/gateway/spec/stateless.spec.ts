@@ -147,14 +147,14 @@ describe('the library reaches only the layers its tag allows', () => {
 });
 
 describe('the app shell is thin', () => {
-  it('imports only its own library and the platform', () => {
+  it('imports only its own library, the platform and the shared contracts', () => {
     const roots = new Set(
       specifiersOf(APP_SOURCES)
         .filter((specifier) => specifier.startsWith('@auth/'))
         .map((specifier) => specifier.split('/').slice(0, 2).join('/')),
     );
 
-    expect([...roots].sort()).toEqual(['@auth/gateway', '@auth/platform']);
+    expect([...roots].sort()).toEqual(['@auth/contracts', '@auth/gateway', '@auth/platform']);
   });
 
   it('opens no gRPC listener, because the gateway is a client and never a server', () => {

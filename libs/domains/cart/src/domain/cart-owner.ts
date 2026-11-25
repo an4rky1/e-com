@@ -42,6 +42,14 @@ const sessionKey = (sessionId: string): string => `session:${sessionId}`;
 const userKey = (userId: string): string => `user:${userId}`;
 
 /**
+ * The key a session-scoped cart lives under, for callers that address a guest cart
+ * directly rather than through {@link resolveCartOwner} — the explicit merge names its
+ * source this way, because the guest document was written under this key while the
+ * browser had no user at all.
+ */
+export const sessionCartKey = (sessionId: string): string => sessionKey(sessionId);
+
+/**
  * Resolves the cart a request addresses.
  *
  * @remarks Refuses a request with neither identifier. There is no "the cart" without one

@@ -10,6 +10,5 @@ export interface OutboxConfig {
   maxRetries: number;
   baseRetryDelayMs: number;
   maxRetryDelayMs: number;
-  cleanupIntervalMs: number;
   retentionHours: number;
 }

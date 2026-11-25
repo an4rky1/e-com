@@ -29,6 +29,7 @@ import {
   type OrderClientPort,
   type ShopMoney,
 } from '../ports/peer-clients.port';
+import { cartIdentityFrom } from '../cart-identity';
 import type { GatewayPrincipal } from '../ports/gateway-principal';
 
 export interface CatalogListInput {
@@ -107,32 +108,45 @@ export class StorefrontService {
   // ---- cart --------------------------------------------------------------------------
 
   getCart(principal: GatewayPrincipal): Promise<GatewayCartView> {
-    return this.cart.getCart(identityOf(principal));
+    return this.cart.getCart(cartIdentityFrom(principal));
   }
 
   addItem(
     principal: GatewayPrincipal,
     input: { sku: string; quantity: number },
   ): Promise<GatewayCartView> {
-    return this.cart.addItem(identityOf(principal), input);
+    return this.cart.addItem(cartIdentityFrom(principal), input);
   }
 
   updateItem(
     principal: GatewayPrincipal,
     input: { sku: string; quantity: number },
   ): Promise<GatewayCartView> {
-    return this.cart.updateItemQty(identityOf(principal), input);
+    return this.cart.updateItemQty(cartIdentityFrom(principal), input);
   }
 
   removeItem(
     principal: GatewayPrincipal,
     input: { sku: string },
   ): Promise<GatewayCartView> {
-    return this.cart.removeItem(identityOf(principal), input);
+    return this.cart.removeItem(cartIdentityFrom(principal), input);
   }
 
   clearCart(principal: GatewayPrincipal): Promise<GatewayCartView> {
-    return this.cart.clearCart(identityOf(principal));
+    return this.cart.clearCart(cartIdentityFrom(principal));
+  }
+
+  /**
+   * Folds the guest basket this browser presented while anonymous into the caller's cart.
+   *
+   * @remarks Called once, right after sign-in — the one moment both identities exist at
+   * once: the account being signed into and the guest id the browser still holds. The
+   * guest id comes from a header rather than a body for the same reason cart identity
+   * does: it is transport metadata, and a body field that could name a cart is a second
+   * authority next to the bearer.
+   */
+  mergeGuestCart(principal: GatewayPrincipal, guestSessionId: string): Promise<{ merged: boolean }> {
+    return this.cart.mergeGuestCart(cartIdentityFrom(principal), guestSessionId);
   }
 
   // ---- checkout ----------------------------------------------------------------------
@@ -149,7 +163,7 @@ export class StorefrontService {
     principal: GatewayPrincipal,
     input: CheckoutPreviewInput = {},
   ): Promise<CheckoutPreviewResult> {
-    const identity = identityOf(principal);
+    const identity = cartIdentityFrom(principal);
     const [lines, validation] = await Promise.all([
       this.cart.getCheckoutLines(identity),
       this.cart.validateForCheckout(identity),
@@ -235,7 +249,3 @@ export class StorefrontService {
   }
 }
 
-const identityOf = (principal: GatewayPrincipal): CartIdentityInput => ({
-  userId: principal.userId,
-  sessionId: principal.sessionId,
-});

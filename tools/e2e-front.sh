@@ -13,34 +13,10 @@
 # The gateway refuses `POST /users/:id/password` to the account's own caller — that refusal is
 # the privilege boundary — so a front cannot sign anyone in without a password that already
 # exists somewhere else.
-set -uo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$ROOT"
 
-# The stack has to be up before a service can boot. A stopped Postgres otherwise
-# surfaces as "service never started", which reads as a code failure.
-shell_source="$(dirname "$0")/preflight-stack.sh"
-[ -f "$shell_source" ] && . "$shell_source"
-
-export PRISMA_QUERY_ENGINE_LIBRARY="$ROOT/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node"
-export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
-export KAFKA_BROKERS=localhost:9092
-export KAFKA_ENABLED=true
-export KAFKAJS_NO_PARTITIONER_WARNING=1
-export OUTBOX_POLL_INTERVAL_MS=300
-
-# Throwaway secrets. These are throwaway on purpose — nothing durable is created here.
-export VAULT_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
-export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
-export MFA_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
-# Shared by every process this script boots: the token each gRPC peer presents and each gRPC
-# controller checks.
-export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
-
-LOG=/tmp/opencode
+. "$ROOT/tools/e2e-common.sh"
 
 # Two randomised blocks, drawn independently, for the same reason the gateway harness does
 # it: a fixed block collides with a concurrent run and the collision reads as a service being

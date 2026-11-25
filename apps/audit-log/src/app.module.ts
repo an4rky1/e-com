@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -28,8 +29,8 @@ const eventPublisher = createKafkaPublisher();
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('audit-log'),
-    ObservabilityModule.forRoot('audit-log'),
+    HealthModule.forRoot(ServiceNames.AUDIT_LOG),
+    ObservabilityModule.forRoot(ServiceNames.AUDIT_LOG),
     // Supplies the Kafka consumer the audit-log module exports but does not provide: the
     // module is consume-driven and takes its transport from here.
     createKafkaModule(),

@@ -16,6 +16,7 @@
  */
 import type {
   AccessControlClientPort,
+  AccessControlRolePage,
   AuthFlowClientPort,
   CredentialVaultClientPort,
   FlowProgress,
@@ -85,8 +86,6 @@ export const principalOf = (
   userId: USER_ID,
   email: EMAIL,
   sessionId: SESSION_ID,
-  roles: ['member'],
-  permissions: ['users:read'],
   ...overrides,
 });
 
@@ -160,11 +159,14 @@ export class FakeIdentityClient implements IdentityClientPort {
   createError: unknown;
   getError: unknown;
   resolveError: unknown;
+  acquireError: unknown;
   /** What `ResolveOauthUser` answers with. Defaults to "found the account behind the link". */
   resolved: { user: GatewayUser; created: boolean } | null = null;
 
   readonly created: GatewayUserInput[] = [];
   readonly fetchedById: string[] = [];
+  /** Every id `AcquireGuestUser` was presented with — `undefined` for a first visit. */
+  readonly acquired: (string | undefined)[] = [];
   readonly resolvedFor: {
     provider: string;
     subject: string;
@@ -176,6 +178,12 @@ export class FakeIdentityClient implements IdentityClientPort {
   async createUser(input: GatewayUserInput): Promise<GatewayUser> {
     this.created.push(input);
     if (this.createError) throw this.createError;
+    return this.user;
+  }
+
+  async acquireGuestUser(userId?: string): Promise<GatewayUser> {
+    this.acquired.push(userId);
+    if (this.acquireError) throw this.acquireError;
     return this.user;
   }
 
@@ -200,10 +208,26 @@ export class FakeIdentityClient implements IdentityClientPort {
 
 export class FakeAccessControlClient implements AccessControlClientPort {
   roles: string[] = ['member'];
-  permissions: string[] = ['users:read', 'users:password:set'];
+  permissions: string[] = ['users:read', 'users:password.set'];
   getError: unknown;
+  grantError: unknown;
 
   readonly granted: { userId: string; permission: string }[] = [];
+
+  /** Every role grant the edge attempted, including the baseline one at sign-up. */
+  readonly roleGrants: { userId: string; role: string; grantedBy?: string }[] = [];
+
+  readonly roleRevocations: { userId: string; role: string }[] = [];
+  readonly roleListQueries: { search?: string; page?: number; limit?: number }[] = [];
+  listError: unknown;
+  rolePage: AccessControlRolePage = {
+    roles: [
+      { name: 'user', permissions: ['orders:read'], description: null, isSystem: true },
+    ],
+    total: 1,
+    page: 1,
+    limit: 20,
+  };
 
   /** Every user whose full grant set was read. Distinguishes "asked" from "never asked". */
   readonly permissionLookups: string[] = [];
@@ -228,6 +252,36 @@ export class FakeAccessControlClient implements AccessControlClientPort {
         ? 'granted by role'
         : 'no role grants this permission',
     };
+  }
+
+  async grantRole(input: {
+    userId: string;
+    role: string;
+    grantedBy?: string;
+  }): Promise<readonly string[]> {
+    this.roleGrants.push(input);
+    if (this.grantError) throw this.grantError;
+    if (!this.roles.includes(input.role)) this.roles.push(input.role);
+    return [...this.roles];
+  }
+
+  async revokeRole(input: {
+    userId: string;
+    role: string;
+  }): Promise<readonly string[]> {
+    this.roleRevocations.push(input);
+    this.roles = this.roles.filter((role) => role !== input.role);
+    return [...this.roles];
+  }
+
+  async listRoles(input: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {}): Promise<AccessControlRolePage> {
+    this.roleListQueries.push(input);
+    if (this.listError) throw this.listError;
+    return this.rolePage;
   }
 }
 
@@ -396,7 +450,8 @@ export const fakeOAuthService = (
   http: OAuthHttpPort = new FakeOAuthHttp(),
   identity: IdentityClientPort = new FakeIdentityClient(),
   sessions: SessionClientPort = new FakeSessionClient(),
-): OAuthService => new OAuthService(config, http, identity, sessions);
+  accessControl: AccessControlClientPort = new FakeAccessControlClient(),
+): OAuthService => new OAuthService(config, http, identity, sessions, accessControl);
 
 // ---- transport ---------------------------------------------------------------------
 

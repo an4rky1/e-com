@@ -117,6 +117,64 @@ compensating revoke of that credential (best-effort — it never masks the origi
 failed registration leaves no user and, normally, no credential. `password` is gated at 8–512
 characters at the edge; the vault's own 12–256 floor is what the credential enforces.
 
+## Actors, roles and permissions
+
+Every caller is one of four actor kinds, and the names live in one place —
+`libs/contracts/src/access.ts` — so the gateway, access-control, the front and the seeds cannot
+spell a permission differently.
+
+| Actor | Where it comes from | Can do |
+|---|---|---|
+| `guest` | identity mints a placeholder row (`status: guest`) for an anonymous browser; it owns a cart under `session:<id>` | basket, and anything else a guest-capable route accepts |
+| `user` | the baseline role every created account is granted | shop, check out, read/cancel own orders |
+| `moderator` | granted by an admin | a user's rights plus catalogue writes and account reads |
+| `admin` | granted by an admin or bootstrapped | every permission, including credentials, roles and policies |
+
+`user`, `moderator` and `admin` are RBAC roles stored by access-control; `guest` is an account
+*status*, so the gateway derives it in `GET /auth/me` rather than requiring an assignment no
+one could make. `me` answers `actorKind` (strongest held kind) alongside `roles` and
+`permissions` — the kind is for rendering, the permission list is what guards enforce.
+
+Route permissions are declared with `@RequirePermissions(PERMISSIONS.…)` and answered by
+access-control per request; nothing in the gateway maps a role to a permission. Orders are the
+one place where a permission and ownership both apply: the route checks `orders:read` or
+`orders:cancel`, and the order service still scopes the query to the caller's id, so the
+permission says "may use orders", never "may read any order".
+
+The assignable system roles are seeded when access-control boots (`user`, `moderator`,
+`admin`, all `isSystem`); `guest` is not seeded, because it is identity's status rather than
+a row in `roles`. A database upgraded from an earlier build may still contain an unused
+`guest` row — it is harmless and assigns nothing. The catalogue is **authoritative in both
+directions**: a restart adds a newly introduced slug, withdraws one the catalogue no longer
+names and refreshes the description. A deployment that needs extra rights creates a custom
+role; extending a system role would be silently undone on the next boot. Seeding is
+controlled by `ACCESS_CONTROL_SEED_SYSTEM_ROLES` (default `true`).
+
+Registration, `POST /users` and a first OAuth sign-in grant the baseline `user` role; a grant
+failure is logged rather than failing a completed account creation, because shopper features
+are scoped by ownership and an operator can repeat the idempotent grant. An account created
+before that baseline existed has no role until one is granted. There is deliberately no
+self-healing on read: an account whose roles were all revoked must stay revoked until an
+operator grants one.
+
+### Role administration
+
+Bootstrap the first administrator with `ACCESS_CONTROL_BOOTSTRAP_ADMIN_USER_IDS` (comma-
+separated user ids) on the access-control process. That grant runs through the normal
+idempotent command, so restarting does not duplicate it. After that, use the gateway — it is
+the public edge and terminates the bearer:
+
+| Route | Permission | Meaning |
+|---|---|---|
+| `GET /access-control/roles` | `roles:read` | the catalogue, paged and searchable, system roles included |
+| `POST /access-control/users/:userId/roles` | `roles:grant` | add one role; body `{ "role": "moderator" }` |
+| `POST /access-control/users/:userId/roles/revoke` | `roles:revoke` | remove one role; body `{ "role": "moderator" }` |
+
+Both mutations answer with the account's whole remaining role set, and both are idempotent:
+re-granting a held role or revoking an absent one is a success, not a conflict. `grantedBy` is
+the authenticated caller and cannot be chosen by the body. `guest` is not in the catalogue at
+all: it is identity's account status, reported by `/auth/me` and never assignable.
+
 ## OAuth providers (Google, GitHub, Telegram)
 
 Nothing here is needed to boot. Every `GATEWAY_OAUTH_*` value defaults to the empty string,

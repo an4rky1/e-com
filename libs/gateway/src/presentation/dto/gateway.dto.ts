@@ -13,10 +13,23 @@
  * routes that act for another user take that user from the path and their authority from
  * access-control.
  */
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import {
+  ROLE_NAME_MAX_LENGTH,
+  ROLE_NAME_MIN_LENGTH,
+  ROLE_NAME_PATTERN,
+} from '@auth/contracts';
 import {
   DISPLAY_NAME_MAX_LENGTH,
   EMAIL_MAX_LENGTH,
+  GUEST_ID_MAX_LENGTH,
   LOCALE_MAX_LENGTH,
   LOCALE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -26,17 +39,22 @@ import {
   REASON_MAX_LENGTH,
 } from '@auth/contracts/http';
 import type {
+  AcquireGuestUserRequest,
+  AcquireGuestUserResponse,
+  ChangeUserRoleRequest,
   CreateUserRequest,
-  CurrentUserResponse,
   LoginRequest,
   LogoutRequest,
   LogoutResponse,
   OAuthProvidersResponse,
+  Principal,
+  RoleListResponse,
   RefreshRequest,
   RegisterRequest,
   SetPasswordRequest,
   TokenPair,
   UserResponse,
+  UserRolesResponse,
 } from '@auth/contracts/http';
 
 export class LoginRequestDto implements LoginRequest {
@@ -134,6 +152,52 @@ export class SetPasswordRequestDto implements SetPasswordRequest {
   password!: string;
 }
 
+/**
+ * The guest id this browser held before — optional, because a first visit has none.
+ *
+ * @remarks `@IsString` rather than `@IsUUID` on purpose: the contract promises that *anything*
+ * which is not a live guest row buys the caller a fresh placeholder, and a value refused here
+ * for its shape would be a stricter answer than identity gives its other transports. The
+ * length gate keeps the field bounded; the format judgement stays in identity.
+ */
+export class AcquireGuestUserRequestDto implements AcquireGuestUserRequest {
+  @IsOptional()
+  @IsString()
+  @MaxLength(GUEST_ID_MAX_LENGTH)
+  userId?: string;
+}
+
+/**
+ * The role a grant or revoke names.
+ *
+ * @remarks Validated against the same pattern the domain uses, so a malformed name is a 400
+ * naming `role` rather than a domain error forwarded from another service. The role's
+ * existence is still access-control's answer — this class only knows what a name looks like.
+ */
+export class ChangeUserRoleRequestDto implements ChangeUserRoleRequest {
+  @IsString()
+  @MinLength(ROLE_NAME_MIN_LENGTH)
+  @MaxLength(ROLE_NAME_MAX_LENGTH)
+  @Matches(ROLE_NAME_PATTERN, { message: 'role must be lower snake case' })
+  role!: string;
+}
+
+/** Paging for the role catalogue; both numbers arrive as query strings. */
+export class RoleListQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(ROLE_NAME_MAX_LENGTH)
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  page?: string;
+
+  @IsOptional()
+  @IsString()
+  limit?: string;
+}
+
 // ---- responses ---------------------------------------------------------------------
 //
 // Aliases, not shapes: the gateway's response types *are* the contract's types, so a handler
@@ -141,9 +205,12 @@ export class SetPasswordRequestDto implements SetPasswordRequest {
 
 export type TokenPairResponseDto = TokenPair;
 export type UserResponseDto = UserResponse;
-export type CurrentUserResponseDto = CurrentUserResponse;
+export type PrincipalDto = Principal;
 export type LogoutResponseDto = LogoutResponse;
 export type OAuthProvidersResponseDto = OAuthProvidersResponse;
+export type AcquireGuestUserResponseDto = AcquireGuestUserResponse;
+export type RoleListResponseDto = RoleListResponse;
+export type UserRolesResponseDto = UserRolesResponse;
 
 /**
  * Stamps the token type onto a pair.

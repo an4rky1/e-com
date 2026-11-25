@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
-import { GrpcRetryRegistry } from './grpc-channel.port';
+import { DEFAULT_DEADLINE_MS, GrpcRetryRegistry } from './grpc-channel.port';
 import type { GrpcCallOptions, GrpcChannel } from './grpc-channel.port';
 import { NestGrpcChannel, statusCodeOf } from './nest-grpc-channel';
 
@@ -19,7 +19,7 @@ export class RetryingGrpcChannel implements GrpcChannel {
   constructor(
     private readonly inner: GrpcChannel,
     private readonly registry: GrpcRetryRegistry,
-    private readonly defaultDeadlineMs = 3_000,
+    private readonly defaultDeadlineMs = DEFAULT_DEADLINE_MS,
   ) {}
 
   async unary<TRequest extends object, TResponse>(

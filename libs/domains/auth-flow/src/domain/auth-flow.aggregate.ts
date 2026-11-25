@@ -49,6 +49,9 @@ export const AUTH_FLOW_AGGREGATE = 'AuthFlow';
 /** Written to `auth_flows.failure_reason` when the attempt budget ran out. */
 export const MAX_ATTEMPTS_REASON = 'max_attempts_exhausted';
 
+/** Attempt budget used when the caller does not name one. */
+export const DEFAULT_MAX_ATTEMPTS = 5;
+
 /**
  * @remarks The payload is `AuthFlowChangedPayload` from the integration contract, verbatim.
  *
@@ -197,7 +200,7 @@ export class AuthFlow extends AggregateRoot<AuthFlowId> {
       'INVALID_VALUE',
     );
     Ensure.positive(input.ttlMs, 'ttlMs');
-    Ensure.positive(input.maxAttempts ?? 5, 'maxAttempts');
+    Ensure.positive(input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS, 'maxAttempts');
 
     const now = input.now ?? new Date();
     const id = AuthFlowId.create(input.id);
@@ -213,7 +216,7 @@ export class AuthFlow extends AggregateRoot<AuthFlowId> {
         clientIp: input.clientIp ?? null,
         userAgent: input.userAgent ?? null,
         attemptCount: 0,
-        maxAttempts: input.maxAttempts ?? 5,
+        maxAttempts: input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
         startedAt: now,
         expiresAt: new Date(now.getTime() + input.ttlMs),
         completedAt: null,

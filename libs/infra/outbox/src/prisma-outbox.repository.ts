@@ -19,6 +19,8 @@ import {
 } from './outbox.tokens';
 import type { EventPublisher } from './publisher.port';
 
+const ERROR_TRUNCATION_LENGTH = 2_000;
+
 /** Minimal shape of the generated outbox delegate; keeps this lib client-agnostic. */
 interface OutboxDelegate {
   create(args: { data: Record<string, unknown> }): Promise<unknown>;
@@ -168,7 +170,7 @@ export class PrismaOutboxRepository implements OutboxRepositoryPort {
       where: { id },
       data: {
         status: 'pending',
-        last_error: error.slice(0, 2_000),
+        last_error: error.slice(0, ERROR_TRUNCATION_LENGTH),
         next_attempt_at: nextAttemptAt,
         locked_at: null,
         attempts: { increment: 1 },
@@ -193,7 +195,7 @@ export class PrismaOutboxRepository implements OutboxRepositoryPort {
         where: { id },
         data: {
           status: 'dlq',
-          last_error: error.slice(0, 2_000),
+          last_error: error.slice(0, ERROR_TRUNCATION_LENGTH),
           locked_at: null,
           published_at: new Date(),
         },
@@ -204,7 +206,7 @@ export class PrismaOutboxRepository implements OutboxRepositoryPort {
           outbox_id: id,
           reason: String(record.type),
           payload: record.payload,
-          last_error: error.slice(0, 2_000),
+          last_error: error.slice(0, ERROR_TRUNCATION_LENGTH),
           attempts: Number(record.attempts ?? 0) + 1,
           trace_id: record.trace_id ? String(record.trace_id) : null,
         },
@@ -216,14 +218,6 @@ export class PrismaOutboxRepository implements OutboxRepositoryPort {
     const { count } = await this.delegate.updateMany({
       where: { status: 'pending', locked_at: { lt: olderThan } },
       data: { locked_at: null },
-    });
-    return count;
-  }
-
-  async cleanup(retentionHours: number): Promise<number> {
-    const cutoff = new Date(Date.now() - retentionHours * 3_600_000);
-    const { count } = await this.delegate.deleteMany({
-      where: { status: 'published', published_at: { lt: cutoff } },
     });
     return count;
   }

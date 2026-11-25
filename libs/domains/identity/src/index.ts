@@ -4,6 +4,8 @@ export {
   CreateUserCommand,
   toCreateUserCommand,
 } from './application/commands/create-user.command';
+export { AcquireGuestUserCommand } from './application/commands/acquire-guest-user.command';
+export { ReapGuestUsersCommand } from './application/commands/reap-guest-users.command';
 export {
   DeleteUserCommand,
   UpdateUserStatusCommand,
@@ -13,6 +15,9 @@ export {
   VerifyUserEmailHandler,
 } from './application/commands/user-status.commands';
 export { CreateUserHandler } from './application/commands/create-user.handler';
+export { AcquireGuestUserHandler } from './application/commands/acquire-guest-user.handler';
+export { ReapGuestUsersHandler } from './application/commands/reap-guest-users.handler';
+export { GuestReaperService } from './application/guest-reaper.service';
 export {
   GetUserByEmailQuery,
   GetUserByIdQuery,

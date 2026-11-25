@@ -18,6 +18,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PERMISSIONS } from '@auth/contracts';
 import type { CatalogListQuery, ProductList } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -67,7 +68,7 @@ export class CatalogController {
     return this.storefront.getProduct(id);
   }
 
-  @RequirePermissions('catalog:product.create')
+  @RequirePermissions(PERMISSIONS.CATALOG_PRODUCT_CREATE)
   @Post('admin/products')
   @HttpCode(201)
   createProduct(@Body() body: CatalogCreateProductDto) {
@@ -87,7 +88,7 @@ export class CatalogController {
     });
   }
 
-  @RequirePermissions('catalog:product.set-price')
+  @RequirePermissions(PERMISSIONS.CATALOG_PRODUCT_SET_PRICE)
   @Post('admin/price')
   @HttpCode(200)
   setPrice(@Body() body: CatalogSetPriceDto) {

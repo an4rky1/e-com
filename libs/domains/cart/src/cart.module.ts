@@ -35,6 +35,7 @@ import { AddItemHandler } from './application/commands/add-item.handler';
 import { UpdateItemQtyHandler } from './application/commands/update-item-qty.handler';
 import { RemoveItemHandler } from './application/commands/remove-item.handler';
 import { ClearCartHandler } from './application/commands/clear-cart.handler';
+import { MergeGuestCartHandler } from './application/commands/merge-guest-cart.handler';
 import {
   GetCartHandler,
   GetCheckoutLinesHandler,
@@ -107,6 +108,7 @@ export function createCartModule(options: CartModuleOptions): DynamicModule {
       UpdateItemQtyHandler,
       RemoveItemHandler,
       ClearCartHandler,
+      MergeGuestCartHandler,
       GetCartHandler,
       GetCheckoutLinesHandler,
       ValidateForCheckoutHandler,

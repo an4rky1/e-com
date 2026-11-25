@@ -12,7 +12,6 @@ const CONFIG: OutboxConfig = {
   maxRetries: 3,
   baseRetryDelayMs: 1_000,
   maxRetryDelayMs: 60_000,
-  cleanupIntervalMs: 3_600_000,
   retentionHours: 24,
 };
 
@@ -62,10 +61,6 @@ class FakeRepository implements OutboxRepositoryPort {
   }
 
   async reclaimStale(): Promise<number> {
-    return 0;
-  }
-
-  async cleanup(): Promise<number> {
     return 0;
   }
 

@@ -17,6 +17,11 @@ import {
   envString,
   readNamespacedEnv,
 } from '@auth/platform/config';
+import {
+  GRPC_DEADLINE_MAX_MS,
+  GRPC_DEADLINE_MIN_MS,
+  GRPC_DEADLINE_MS,
+} from '@auth/contracts/grpc/deadline';
 
 /** DI token for the resolved configuration. */
 export const CART_CONFIG = Symbol('CART_CONFIG');
@@ -49,10 +54,12 @@ export const Defaults = {
   /**
    * Fold a guest cart into the shopper's cart on an authenticated request.
    *
-   * @remarks `cart.proto` has no merge RPC — the contract cannot ask for one — so the
-   * merge has to be implicit in the calls that already carry both `session_id` and
-   * `user_id`. Turning it off is a migration escape hatch, not a feature: with it off a
-   * signed-in shopper simply does not see what they added before signing in.
+   * @remarks There are two merge paths: the explicit `MergeGuestCart` RPC that the front
+   * calls at sign-in with the guest id it still holds, and this implicit fold for a
+   * request that already carries both a guest session and a user. The explicit RPC is the
+   * primary path because a new auth session id is not the guest id; this flag is kept for
+   * callers that address both identities on one request. Turning it off is a migration
+   * escape hatch, not a feature: with it off such a caller does not see the guest basket.
    */
   AUTO_MERGE: true,
   /**
@@ -62,7 +69,7 @@ export const Defaults = {
    * snapshot a price it has not been told, and the caller needs a refusal rather than a
    * request parked until the edge gives up.
    */
-  GRPC_DEADLINE_MS: 5_000,
+  GRPC_DEADLINE_MS,
   /**
    * Prefix every cart key is written under.
    *
@@ -86,7 +93,10 @@ export const cartSchema = z.object({
     max: 100_000,
   }),
   AUTO_MERGE: envBoolean(Defaults.AUTO_MERGE),
-  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
+  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, {
+    min: GRPC_DEADLINE_MIN_MS,
+    max: GRPC_DEADLINE_MAX_MS,
+  }),
   KEY_PREFIX: envString(Defaults.KEY_PREFIX),
 });
 

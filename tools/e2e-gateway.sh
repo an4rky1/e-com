@@ -10,34 +10,10 @@
 #
 # A gateway is the one component whose bugs are the platform's bugs: a service can be
 # perfectly correct and unreachable if the front door is wrong.
-set -uo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$ROOT"
 
-# The stack has to be up before a service can boot. A stopped Postgres otherwise
-# surfaces as "service never started", which reads as a code failure.
-shell_source="$(dirname "$0")/preflight-stack.sh"
-[ -f "$shell_source" ] && . "$shell_source"
-
-export PRISMA_QUERY_ENGINE_LIBRARY="$ROOT/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node"
-export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
-export KAFKA_BROKERS=localhost:9092
-export KAFKA_ENABLED=true
-export KAFKAJS_NO_PARTITIONER_WARNING=1
-export OUTBOX_POLL_INTERVAL_MS=300
-export KAFKAJS_NO_PARTITIONER_WARNING=1
-
-export VAULT_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
-export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
-export MFA_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
-# Shared by every process this script boots: the token each gRPC peer presents and each gRPC
-# controller checks. One value, because one trust boundary serves all of them.
-export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
-
-LOG=/tmp/opencode
+. "$ROOT/tools/e2e-common.sh"
 
 # A random base, so two runs — or a run alongside the other e2e scripts — cannot collide on
 # a port and fail with EADDRINUSE that has nothing to do with what is being tested.
@@ -61,33 +37,6 @@ declare -A PORT=( [identity]=$(( BASE + 1 )) [access-control]=$(( BASE + 2 )) \
 declare -A GRPC=( [identity]=$(( GRPC_BASE + 1 )) [access-control]=$(( GRPC_BASE + 2 )) \
                  [credential-vault]=$(( GRPC_BASE + 3 )) [session]=$(( GRPC_BASE + 4 )) \
                  [auth-flow]=$(( GRPC_BASE + 5 )) )
-
-PIDS=()
-# `npx` runs the interpreter as its own child, so killing the recorded pid alone leaves a node
-# process holding its ports — and the next run, which is free to pick the same ones, dies on
-# EADDRINUSE against a process that belongs to a test that already reported success.
-cleanup() {
-  for pid in "${PIDS[@]:-}"; do
-    pkill -P "$pid" 2>/dev/null
-    kill "$pid" 2>/dev/null
-  done
-  wait 2>/dev/null
-}
-trap cleanup EXIT
-
-pass=0; fail=0
-check() {
-  if [ "$2" = "$3" ]; then printf "  \033[32mPASS\033[0m %s\n" "$1"; pass=$((pass+1));
-  else printf "  \033[31mFAIL\033[0m %s (expected=%s got=%s)\n" "$1" "$3" "$2"; fail=$((fail+1)); fi
-}
-check_contains() {
-  if echo "$2" | grep -qF -- "$3"; then printf "  \033[32mPASS\033[0m %s\n" "$1"; pass=$((pass+1));
-  else printf "  \033[31mFAIL\033[0m %s (missing=%s)\n" "$1" "$3"; fail=$((fail+1)); fi
-}
-check_true() {
-  if [ "$2" = "true" ]; then printf "  \033[32mPASS\033[0m %s\n" "$1"; pass=$((pass+1));
-  else printf "  \033[31mFAIL\033[0m %s\n" "$1"; fail=$((fail+1)); fi
-}
 
 # port pairs: http, grpc (the gateway fans out over gRPC to every peer)
 boot() { # name http_port grpc_port db
@@ -298,6 +247,20 @@ check_true "an auth failure does not echo the token back" \
 # frame carries a source position, so that is what the assertion looks for.
 check_true "an auth failure carries no stack trace" \
   "$([ "$(echo "$NOTFOUND" | grep -cE '\.ts:[0-9]+:[0-9]+')" = "0" ] && echo true || echo false)"
+
+echo
+echo "==> 12. a guest id reaches /auth/me without a bearer"
+# The route is `@AllowGuest()`: no `Authorization` header at all, only the uuid identity
+# minted for an anonymous browser. Section 2's 401 already proves that *neither* credential
+# is refused — this is the other half: a guest id counts, and its status is what says so.
+GUEST=$(curl -s -m 10 -X POST "$GW/auth/guest" -H 'Content-Type: application/json')
+GUEST_ID=$(echo "$GUEST" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+check "POST /auth/guest mints a guest id" "$([ -n "$GUEST_ID" ] && echo yes || echo no)" "yes"
+if [ -n "$GUEST_ID" ]; then
+  GUEST_ME=$(curl -s -m 10 "$GW/auth/me" -H "x-guest-id: $GUEST_ID")
+  check "GET /auth/me resolves the guest" \
+    "$(echo "$GUEST_ME" | grep -o '"status":"guest"' | head -1)" '"status":"guest"'
+fi
 
 echo
 echo "================================================"

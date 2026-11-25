@@ -8,5 +8,6 @@ export {
   envSecret,
   envString,
   readNamespacedEnv,
+  requireEnv,
   resolveModuleConfig,
 } from './module-env';

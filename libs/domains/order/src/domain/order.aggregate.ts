@@ -37,6 +37,9 @@ export const OrderStatus = {
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
 
+/** Reason a cancelled order reports when its caller did not name one. */
+export const DEFAULT_CANCEL_REASON = OrderStatus.CANCELED;
+
 /**
  * The transition graph. One table, one truth.
  *
@@ -530,7 +533,7 @@ export class Order extends AggregateRoot<string> {
       );
     }
 
-    const cleanReason = reason.trim() || 'canceled';
+    const cleanReason = reason.trim() || DEFAULT_CANCEL_REASON;
     this.transition(OrderStatus.CANCELED, now);
     this.props.cancelReason = cleanReason;
 

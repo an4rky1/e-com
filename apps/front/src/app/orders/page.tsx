@@ -6,6 +6,7 @@ import { StorefrontRoutes } from '@auth/contracts/http';
 import type { ListUserOrdersResponse, OrderView } from '@auth/contracts/http';
 import { formatMoney } from '../../lib/money';
 import { storefrontFetch, useStorefront } from '../../lib/storefront-client';
+import { GRID_LIST_STYLE, pluralSuffix } from '../../lib/ui';
 import styles from '../page.module.scss';
 
 /**
@@ -64,9 +65,9 @@ export default function OrdersPage() {
       {data ? (
         <section>
           <h2>
-            {data.total} order{data.total === 1 ? '' : 's'}
+            {data.total} order{pluralSuffix(data.total)}
           </h2>
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem' }}>
+          <ul style={GRID_LIST_STYLE}>
             {data.orders.map((order) => (
               <li key={order.id} className={styles.card}>
                 <OrderRow order={order} busy={busy} onCancel={() => void cancel(order.id)} />

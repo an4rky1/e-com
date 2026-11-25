@@ -11,32 +11,10 @@
 # Every hop is a real socket to a real process. Unit tests inject ports and therefore cannot
 # catch the failures this is written for: a channel pointed at the wrong host, a proto package
 # loaded but not addressed, or a method path naming a service nobody declared.
-set -uo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$ROOT"
 
-# The stack has to be up before a service can boot. A stopped Postgres otherwise
-# surfaces as "service never started", which reads as a code failure.
-shell_source="$(dirname "$0")/preflight-stack.sh"
-[ -f "$shell_source" ] && . "$shell_source"
-
-export PRISMA_QUERY_ENGINE_LIBRARY="$ROOT/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node"
-export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
-export KAFKA_BROKERS=localhost:9092
-export KAFKA_ENABLED=true
-export KAFKAJS_NO_PARTITIONER_WARNING=1
-export OUTBOX_POLL_INTERVAL_MS=300
-
-# Throwaway secrets. These are throwaway on purpose — nothing durable is created here.
-export VAULT_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export SESSION_ACCESS_TOKEN_SIGNING_KEY="$(head -c 32 /dev/urandom | base64)"
-export SESSION_REFRESH_TOKEN_PEPPER="$(head -c 32 /dev/urandom | base64)"
-export GATEWAY_JWT_SECRET="$(head -c 32 /dev/urandom | base64)"
-export MFA_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
-# Shared by every process this script boots: the token each gRPC peer presents and each gRPC
-# controller checks.
-export GRPC_SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64)"
+. "$ROOT/tools/e2e-common.sh"
 
 # Two randomised blocks, drawn independently: a fixed HTTP block and a fixed gRPC block derived
 # from it meant any other run that happened to share the base collided on every port, and the
@@ -55,7 +33,6 @@ GATEWAY_GRPC=$(( GRPC_BASE + 5 ))
 SECURITY_PORT=$(( HTTP_BASE + 7 ))
 SECURITY_GRPC=$(( GRPC_BASE + 7 ))
 
-LOG=/tmp/opencode
 FLOW="$ROOT/tools/e2e/grpc-flow.ts"
 
 # account-security counts failures in Redis, and its per-address counter is the one the
@@ -64,29 +41,6 @@ FLOW="$ROOT/tools/e2e/grpc-flow.ts"
 # start the next run already part-way to its budget.
 export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 export E2E_CLIENT_IP="203.0.113.$(( RANDOM % 254 + 1 ))"
-
-pass=0; fail=0
-check() {
-  if [ "$2" = "$3" ]; then printf "  \033[32mPASS\033[0m %s\n" "$1"; pass=$((pass+1));
-  else printf "  \033[31mFAIL\033[0m %s (expected=%s got=%s)\n" "$1" "$3" "$2"; fail=$((fail+1)); fi
-}
-check_true() {
-  if [ "$2" = "true" ]; then printf "  \033[32mPASS\033[0m %s\n" "$1"; pass=$((pass+1));
-  else printf "  \033[31mFAIL\033[0m %s\n" "$1"; fail=$((fail+1)); fi
-}
-
-PIDS=()
-# `npx` runs the interpreter as its own child, so killing only the recorded pid leaves a node
-# process bound to its port — and the next run, which is free to pick the same port, then fails
-# with EADDRINUSE against a process from a run that already reported success.
-cleanup() {
-  for pid in "${PIDS[@]:-}"; do
-    pkill -P "$pid" 2>/dev/null
-    kill "$pid" 2>/dev/null
-  done
-  wait 2>/dev/null
-}
-trap cleanup EXIT
 
 boot() { # name port db grpc_port
   local name="$1" port="$2" db="$3" grpc="$4"

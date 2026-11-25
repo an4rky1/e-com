@@ -15,6 +15,7 @@ export {
   pushbackOf,
   statusCodeOf,
 } from './nest-grpc-channel';
+export { translatePeerError } from './dependency-errors';
 export {
   GRPC_CHANNEL,
   GRPC_RETRY_REGISTRY,

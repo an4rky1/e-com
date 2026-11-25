@@ -11,6 +11,7 @@ import {
   CommandHandler,
   type ICommandHandler,
 } from '@nestjs/cqrs';
+import { ROLES } from '@auth/contracts';
 import {
   ResourceNotFoundException,
   ValidationException,
@@ -60,6 +61,15 @@ export class GrantRoleToUserHandler
    * make the retry safe.
    */
   async execute(command: GrantRoleToUserCommand): Promise<string | null> {
+    // Guest is an account status in identity, never an assignment. There is intentionally
+    // no guest row in the catalogue; granting it would create a second, contradictory source
+    // of truth for who is a guest — and access-control could never keep it in step.
+    if (String(command.role).trim().toLowerCase() === ROLES.GUEST) {
+      throw new ValidationException('guest is an account status, not a grantable role', {
+        role: ROLES.GUEST,
+      });
+    }
+
     // The role is resolved first: granting a role that does not exist would write a row
     // pointing at a name no `roles` row matches, and the FK would turn that into a 500
     // instead of a 404.
@@ -128,12 +138,10 @@ export class RevokeRoleFromUserHandler
       roleName.unwrapOrThrow().value,
     );
 
-    if (!assignment) {
-      throw new ResourceNotFoundException('the user does not hold this role', {
-        userId: command.userId,
-        role: command.role,
-      });
-    }
+    // Idempotent on purpose: a retried revoke after a lost response, or a bulk cleanup that
+    // includes an account that never held the role, is work that is already done. A 404 here
+    // would make the caller reconcile an error that carries no action.
+    if (!assignment) return;
 
     assignment.revoke(command.reason ?? null);
     await this.assignments.save(assignment);

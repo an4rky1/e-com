@@ -33,6 +33,9 @@ export interface RedisCounterOptions {
   deviceTtlSec: number;
 }
 
+/** Floor on the lock's TTL: written as already-expired, a lock never locks anything. */
+const MIN_LOCK_TTL_SEC = 1;
+
 @Injectable()
 export class RedisFailureTracker implements FailureTrackerPort, DeviceRegistryPort {
   private readonly logger = new Logger(RedisFailureTracker.name);
@@ -80,7 +83,10 @@ export class RedisFailureTracker implements FailureTrackerPort, DeviceRegistryPo
       return;
     }
 
-    const ttlSec = Math.max(1, Math.ceil((counters.lockedUntil.getTime() - Date.now()) / 1000));
+    const ttlSec = Math.max(
+      MIN_LOCK_TTL_SEC,
+      Math.ceil((counters.lockedUntil.getTime() - Date.now()) / 1000),
+    );
     await this.redis.set(lockKey, counters.lockedUntil.toISOString(), 'EX', String(ttlSec));
   }
 

@@ -16,6 +16,8 @@ import type { OrderView } from '@auth/contracts';
 import { CreateOrderCommand, CancelOrderCommand } from '../commands/order.command';
 import { GetOrderQuery, ListUserOrdersQuery, type OrderListResult } from '../queries/order.queries';
 
+const CANCEL_BY_USER_REASON = 'canceled_by_user';
+
 @Injectable()
 export class OrderService {
   constructor(
@@ -81,7 +83,11 @@ export class OrderService {
     reason?: string;
   }): Promise<OrderView> {
     return this.commandBus.execute(
-      new CancelOrderCommand(input.orderId, input.userId, input.reason ?? 'canceled_by_user'),
+      new CancelOrderCommand(
+        input.orderId,
+        input.userId,
+        input.reason ?? CANCEL_BY_USER_REASON,
+      ),
     );
   }
 }

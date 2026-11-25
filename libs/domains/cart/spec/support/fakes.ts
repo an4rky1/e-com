@@ -108,8 +108,7 @@ export class FakePricing implements ProductPricingPort {
         const hit = this.catalogue.get(sku) as SellableSku;
         return {
           sku,
-          priceMinor: hit.priceMinor,
-          currency: hit.currency,
+          price: hit.price,
           active: !this.inactive.has(sku),
         };
       });

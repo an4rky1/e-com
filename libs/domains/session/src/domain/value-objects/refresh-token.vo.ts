@@ -7,6 +7,7 @@
  * database dump does not hand an attacker a set of live sessions.
  */
 import { Result } from '@auth/core';
+import { REFRESH_TOKEN_MIN_LENGTH } from '@auth/contracts/http';
 import { randomBytes } from 'node:crypto';
 
 /** 32 bytes of entropy — the same order of magnitude as the ids in the table. */
@@ -17,9 +18,11 @@ export const REFRESH_TOKEN_BYTES = 32;
  *
  * @remarks A length floor rejects obviously malformed input before it reaches the database.
  * Anything long enough to have been minted by this service passes, and an attacker guessing
- * one simply misses on the digest lookup.
+ * one simply misses on the digest lookup. The value is re-exported from
+ * `@auth/contracts/http` — the edge's DTO checks the same floor, so a token the edge
+ * forwards is a token this service accepts.
  */
-export const REFRESH_TOKEN_MIN_LENGTH = 20;
+export { REFRESH_TOKEN_MIN_LENGTH };
 
 export class RefreshToken {
   /**

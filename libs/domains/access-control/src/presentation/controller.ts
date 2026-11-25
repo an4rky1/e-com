@@ -15,6 +15,7 @@ import {
 // Value import: constructor-injected. `emitDecoratorMetadata` reads the emitted value
 // binding, so a type-only import erases the DI token and Nest cannot resolve it.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
+import { PERMISSIONS } from '@auth/contracts';
 import { AccessControlService } from '../application/facade/access-control.service';
 import { AccessControlGuard } from './guards/access-control.guard';
 import { RequirePermissions } from './decorators/require-permissions.decorator';
@@ -54,7 +55,7 @@ export class AccessControlController {
   constructor(private readonly accessControl: AccessControlService) {}
 
   @Post('roles')
-  @RequirePermissions('roles:write')
+  @RequirePermissions(PERMISSIONS.ROLES_WRITE)
   async createRole(@Body() body: CreateRoleRequestDto): Promise<RoleResponseDto> {
     const name = await this.accessControl.createRole({
       name: body.name,
@@ -74,7 +75,7 @@ export class AccessControlController {
   }
 
   @Get('roles')
-  @RequirePermissions('roles:read')
+  @RequirePermissions(PERMISSIONS.ROLES_READ)
   async listRoles(@Query() query: ListRolesQueryDto): Promise<PagedRolesResponseDto> {
     return PagedRolesResponseDto.from(
       await this.accessControl.listRoles({
@@ -89,7 +90,7 @@ export class AccessControlController {
   }
 
   @Post('users/:userId/roles')
-  @RequirePermissions('roles:grant')
+  @RequirePermissions(PERMISSIONS.ROLES_GRANT)
   async grantRole(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() body: GrantRoleRequestDto,
@@ -112,7 +113,7 @@ export class AccessControlController {
   }
 
   @Delete('users/:userId/roles')
-  @RequirePermissions('roles:revoke')
+  @RequirePermissions(PERMISSIONS.ROLES_REVOKE)
   @HttpCode(204)
   async revokeRole(
     @Param('userId', ParseUUIDPipe) userId: string,
@@ -126,7 +127,7 @@ export class AccessControlController {
   }
 
   @Post('policies')
-  @RequirePermissions('policies:write')
+  @RequirePermissions(PERMISSIONS.POLICIES_WRITE)
   async createPolicy(@Body() body: CreatePolicyRequestDto) {
     const policyId = await this.accessControl.createPolicy({
       role: body.role,
@@ -142,7 +143,7 @@ export class AccessControlController {
   }
 
   @Delete('policies/:policyId')
-  @RequirePermissions('policies:write')
+  @RequirePermissions(PERMISSIONS.POLICIES_WRITE)
   @HttpCode(204)
   async deletePolicy(
     @Param('policyId', ParseUUIDPipe) policyId: string,
@@ -152,7 +153,7 @@ export class AccessControlController {
   }
 
   @Get('users/:userId/permissions')
-  @RequirePermissions('users:read')
+  @RequirePermissions(PERMISSIONS.USERS_READ)
   async getPermissions(
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<UserPermissionsResponseDto> {
@@ -169,7 +170,7 @@ export class AccessControlController {
    * guard above, and conflating the two turns a diagnostic into an error.
    */
   @Get('users/:userId/permissions/:permission')
-  @RequirePermissions('users:read')
+  @RequirePermissions(PERMISSIONS.USERS_READ)
   async checkPermission(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Param('permission') permission: string,

@@ -10,6 +10,11 @@ service IdentityService {
   // Creates the account record, and nothing else: no credential, no session, no role. The
   // edge in front of this service calls it so registration is reachable from one origin.
   rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+  // The browser's placeholder account: renewed when the caller presents an id that is
+  // still a guest, minted fresh otherwise. Identity owns the decision — a caller that
+  // could *name* the row it wants would be one submitted id away from borrowing a real
+  // account, so the check and the renewal travel together in one call.
+  rpc AcquireGuestUser (AcquireGuestUserRequest) returns (AcquireGuestUserResponse);
   // Resolves an identity-provider account to a local user: the (provider, subject) linkage
   // is looked up, linked to the account behind the address, or a new account is created —
   // one round trip, one decision, made where the linkage lives. The caller has already
@@ -59,6 +64,17 @@ message CreateUserRequest {
 }
 
 message CreateUserResponse {
+  UserResponse user = 1;
+}
+
+message AcquireGuestUserRequest {
+  // The guest account this browser held before, empty on a first visit. Honoured only
+  // when the row behind it still exists and is still a guest; anything else mints a new
+  // placeholder rather than answering with the account that id belongs to.
+  string user_id = 1;
+}
+
+message AcquireGuestUserResponse {
   UserResponse user = 1;
 }
 

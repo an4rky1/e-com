@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -40,8 +41,8 @@ const peerChannel = createStaticGrpcChannel({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('cart'),
-    ObservabilityModule.forRoot('cart'),
+    HealthModule.forRoot(ServiceNames.CART),
+    ObservabilityModule.forRoot(ServiceNames.CART),
     // The shared client the cart's store and its distributed lock ride on. Listed here
     // rather than inside the domain module so the composition root stays the only place that
     // knows which processes of this service have Redis.

@@ -1,5 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { Worker, type Job } from 'bullmq';
+import { Defaults } from './queue.config';
 import { BullQueueService } from './queue.service';
 
 /**
@@ -109,7 +110,7 @@ export abstract class BaseQueueWorker<JobData = unknown> implements OnModuleInit
    * default.
    */
   protected lockDurationMs(): number {
-    return 60_000;
+    return Defaults.DEFAULT_LOCK_DURATION_MS;
   }
 
   /** Latest failure, for a recent-failure health dimension. */

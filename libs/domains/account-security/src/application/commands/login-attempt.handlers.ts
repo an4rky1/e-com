@@ -54,6 +54,7 @@ const DEFENSIVE_SCORE = RiskScore.zero();
 
 /** The fingerprint used for a command that arrived without one — an operator lock, not a device. */
 const MANUAL_FINGERPRINT = DeviceFingerprint.fromValue('manual');
+const FINGERPRINT_SNIPPET_LENGTH = 16;
 
 // ---- RecordLoginAttempt ----------------------------------------------------------
 
@@ -475,7 +476,7 @@ export class RevokeDeviceHandler
     const known = devices.some((device) => device.fingerprint === fingerprint.value);
     if (!known) {
       throw new ResourceNotFoundException('no such device for this user', {
-        deviceId: fingerprint.value.slice(0, 16),
+        deviceId: fingerprint.value.slice(0, FINGERPRINT_SNIPPET_LENGTH),
       });
     }
 
@@ -492,7 +493,9 @@ export class RevokeDeviceHandler
 
     await this.repository.saveSignals([signal]);
 
-    this.logger.log(`device ${fingerprint.value.slice(0, 16)} revoked for ${command.userId}`);
+    this.logger.log(
+      `device ${fingerprint.value.slice(0, FINGERPRINT_SNIPPET_LENGTH)} revoked for ${command.userId}`,
+    );
 
     return { ok: true, signalId: signal.id };
   }

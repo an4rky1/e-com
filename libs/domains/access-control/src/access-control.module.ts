@@ -28,8 +28,10 @@ import { ROLE_REPOSITORY } from './domain/ports/role-repository.port';
 import { PrismaPolicyRepository } from './infrastructure/persistence/prisma-policy.repository';
 import { PrismaRoleAssignmentRepository } from './infrastructure/persistence/prisma-role-assignment.repository';
 import { PrismaRoleRepository } from './infrastructure/persistence/prisma-role.repository';
+import { SystemRoleSeeder } from './infrastructure/seeding/system-role.seeder';
 import { AccessControlHealthIndicator } from './access-control.health';
 import {
+  ACCESS_CONTROL_CONFIG,
   ACCESS_CONTROL_PRISMA,
   resolveAccessControlConfig,
   type AccessControlConfig,
@@ -42,7 +44,7 @@ import { PERMISSION_CHECKER } from './presentation/guards/permission-checker.por
 @Module({})
 export class AccessControlModule {}
 
-export const ACCESS_CONTROL_CONFIG = Symbol('ACCESS_CONTROL_CONFIG');
+export { ACCESS_CONTROL_CONFIG };
 
 /**
  * Assembles the access-control service.
@@ -112,6 +114,9 @@ export function createAccessControlModule(
       GetUserPermissionsHandler,
       ListRolesHandler,
       AccessControlService,
+      // Runs after the container is complete, so every repository and the facade are
+      // resolved by the time it writes. Idempotent: a restart converges, never duplicates.
+      SystemRoleSeeder,
       AccessControlHealthIndicator,
       AccessControlGuard,
     ],

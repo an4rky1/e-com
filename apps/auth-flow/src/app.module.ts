@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { GrpcPackages, resolvePeerAddresses, ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -39,6 +40,8 @@ import path from 'node:path';
  */
 const PROTO_DIR = path.resolve(__dirname, '../../../libs/contracts/proto');
 
+const downstreamAddresses = resolvePeerAddresses();
+
 const downstreamChannel = createStaticGrpcChannel({
   protoPaths: [
     path.join(PROTO_DIR, 'identity.proto'),
@@ -47,17 +50,8 @@ const downstreamChannel = createStaticGrpcChannel({
     path.join(PROTO_DIR, 'mfa.proto'),
     path.join(PROTO_DIR, 'account_security.proto'),
   ],
-  url: process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
-  addresses: {
-    'identity.v1': process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
-    'credential_vault.v1': process.env.CREDENTIAL_VAULT_GRPC_URL ?? 'localhost:31003',
-    'session.v1': process.env.SESSION_GRPC_URL ?? 'localhost:31004',
-    'mfa.v1': process.env.MFA_GRPC_URL ?? 'localhost:31006',
-    // account-security owns the failure counters and the lock. The address is platform-owned,
-    // like every other peer: this service reads it and nothing here decides it.
-    'account_security.v1':
-      process.env.ACCOUNT_SECURITY_GRPC_URL ?? 'localhost:31007',
-  },
+  url: downstreamAddresses[GrpcPackages.IDENTITY],
+  addresses: downstreamAddresses,
   // Every peer's guard rejects a call that presents nothing, so this service refuses to build
   // its channel without the shared secret — at composition time, not on the first call that
   // happens to reach a healthy peer.
@@ -68,8 +62,8 @@ const downstreamChannel = createStaticGrpcChannel({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('auth-flow'),
-    ObservabilityModule.forRoot('auth-flow'),
+    HealthModule.forRoot(ServiceNames.AUTH_FLOW),
+    ObservabilityModule.forRoot(ServiceNames.AUTH_FLOW),
 
     createAuthFlowModule({ publisher: eventPublisher, grpcChannel: downstreamChannel }),
   ],

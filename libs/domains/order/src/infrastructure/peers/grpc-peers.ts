@@ -11,11 +11,7 @@
  * a missing proto address that surfaced as an outage would be retried forever by callers
  * doing exactly the right thing.
  */
-import { GrpcStatus, statusCodeOf, type GrpcChannel } from '@auth/infra/grpc';
-import {
-  DependencyTimeoutException,
-  DependencyUnavailableException,
-} from '@auth/platform/error-handling';
+import { translatePeerError, type GrpcChannel } from '@auth/infra/grpc';
 import type {
   ChargeOrderRequest,
   ChargeOrderResponse,
@@ -67,41 +63,8 @@ abstract class PeerAdapter {
         deadline: Date.now() + this.config.grpcDeadlineMs,
       })
       .catch((error: unknown) => {
-        throw this.translate(error, method);
+        throw translatePeerError(error, method);
       });
-  }
-
-  private translate(error: unknown, method: string): unknown {
-    if (typeof (error as { code?: unknown } | null)?.code !== 'number') {
-      // Not a transport status — a proto that was never loaded, an address that was never
-      // given. Masking it as an outage would send callers into a retry that can never
-      // succeed, and would hide the wiring bug behind a dashboard showing a sick dependency.
-      return error;
-    }
-
-    const status = statusCodeOf(error);
-    const peer = method.split('/')[1]?.split('.')[0] ?? 'peer';
-
-    if (status === GrpcStatus.DEADLINE_EXCEEDED) {
-      return new DependencyTimeoutException(
-        `${peer} did not answer in time`,
-        { method },
-        error,
-      );
-    }
-
-    if (
-      status === GrpcStatus.UNAVAILABLE ||
-      status === GrpcStatus.UNIMPLEMENTED
-    ) {
-      return new DependencyUnavailableException(
-        `${peer} could not be reached`,
-        { method },
-        error,
-      );
-    }
-
-    return error;
   }
 }
 

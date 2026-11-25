@@ -6,10 +6,12 @@ const env = { GATEWAY_URL: 'http://gateway.test:37000' };
 const fetchMock = jest.fn();
 const originalFetch = global.fetch;
 
+const EXPIRES_IN_SEC = 900;
+
 const session = {
   accessToken: 'access.token.value',
   refreshToken: 'refresh.token.value',
-  expiresIn: 900,
+  expiresIn: EXPIRES_IN_SEC,
   sessionId: 'session-1',
   tokenType: 'Bearer',
 };
@@ -108,12 +110,12 @@ describe('handleRegister', () => {
     [
       'a password below the contract minimum',
       { email: 'ada@example.test', password: '1234567' },
-      'password must be at least 8 characters',
+      'password must be at least 12 characters',
     ],
     [
       'a password above the contract maximum',
-      { email: 'ada@example.test', password: 'a'.repeat(513) },
-      'password must be at most 512 characters',
+      { email: 'ada@example.test', password: 'a'.repeat(257) },
+      'password must be at most 256 characters',
     ],
     [
       'a non-string displayName',
@@ -133,9 +135,11 @@ describe('handleRegister', () => {
   });
 
   it('does not duplicate the vault policy the gateway will apply anyway', async () => {
-    // Eight characters is the *edge's* minimum, not the vault's: a password the vault's
-    // composition rules refuse must reach the vault (and be refused there, before any
-    // account exists) rather than being re-guessed here and drifting apart.
+    // Twelve characters is the *edge's* minimum — the same floor the vault enforces — but
+    // the vault's composition rules (uppercase, digit, symbol) are the vault's alone: a
+    // password they refuse must reach the vault (and be refused there, before any account
+    // exists) rather than being re-guessed here and drifting apart. This password clears
+    // every length gate and fails only on composition.
     fetchMock.mockResolvedValue(
       reply(400, {
         statusCode: 400,
@@ -144,7 +148,7 @@ describe('handleRegister', () => {
       }),
     );
 
-    const result = await register({ email: 'ada@example.test', password: 'abcdefgh' });
+    const result = await register({ email: 'ada@example.test', password: 'abcdefghijkm' });
 
     expect(result).toEqual({
       status: 400,

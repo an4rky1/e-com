@@ -23,7 +23,7 @@ import {
   type NotificationListOptions,
   type NotificationStorePort,
 } from '../../domain/ports/notification-store.port';
-import type { Notification } from '../../domain/notification.aggregate';
+import { NotificationEventType, type Notification } from '../../domain/notification.aggregate';
 import type { NotificationId } from '../../domain/value-objects/notification-id.vo';
 import type {
   DeliveryStatus,
@@ -119,7 +119,7 @@ export class InMemoryNotificationStore implements NotificationStorePort {
 
     for (const event of events) {
       const payload =
-        event.eventType === 'notification.dispatched'
+        event.eventType === NotificationEventType.DISPATCHED
           ? announcement
           : readPayload(event);
 

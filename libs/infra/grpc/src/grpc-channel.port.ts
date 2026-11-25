@@ -134,12 +134,19 @@ export type RetryDecision =
  * fast-failing call burn twenty retries inside a 50ms budget and a slow one give up after
  * two at 10s each — neither matches what the caller actually needs.
  */
+/** Deadline applied to peer RPCs when the caller does not set one. */
+export const DEFAULT_DEADLINE_MS = 3_000;
+const DEFAULT_MAX_RETRY_ATTEMPTS = 0;
+const DEFAULT_RETRY_BUDGET_MS = 1_000;
+const DEFAULT_INITIAL_BACKOFF_MS = 50;
+const DEFAULT_MAX_BACKOFF_MS = 1_000;
+
 export class GrpcRetryRegistry {
   constructor(
-    private readonly maxRetryAttempts = 0,
-    private readonly retryBudgetMs = 1_000,
-    private readonly initialBackoffMs = 50,
-    private readonly maxBackoffMs = 1_000,
+    private readonly maxRetryAttempts = DEFAULT_MAX_RETRY_ATTEMPTS,
+    private readonly retryBudgetMs = DEFAULT_RETRY_BUDGET_MS,
+    private readonly initialBackoffMs = DEFAULT_INITIAL_BACKOFF_MS,
+    private readonly maxBackoffMs = DEFAULT_MAX_BACKOFF_MS,
   ) {}
 
   decide(

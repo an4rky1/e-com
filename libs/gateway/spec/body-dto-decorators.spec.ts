@@ -16,7 +16,10 @@ import { CatalogController } from '../src/presentation/catalog.controller';
 import { CartController } from '../src/presentation/cart.controller';
 import { CheckoutController } from '../src/presentation/checkout.controller';
 import { OrdersController } from '../src/presentation/orders.controller';
+import { RoleAdministrationController } from '../src/presentation/role-administration.controller';
 import {
+  AcquireGuestUserRequestDto,
+  ChangeUserRoleRequestDto,
   CreateUserRequestDto,
   LoginRequestDto,
   LogoutRequestDto,
@@ -54,6 +57,12 @@ const BODY_CASES: readonly BodyCase[] = [
     controller: AuthController,
     method: 'register',
     dto: RegisterRequestDto,
+  },
+  {
+    name: 'AuthController.acquireGuestUser',
+    controller: AuthController,
+    method: 'acquireGuestUser',
+    dto: AcquireGuestUserRequestDto,
   },
   {
     name: 'AuthController.refresh',
@@ -127,6 +136,18 @@ const BODY_CASES: readonly BodyCase[] = [
     method: 'cancel',
     dto: CancelOrderDto,
   },
+  {
+    name: 'RoleAdministrationController.grant',
+    controller: RoleAdministrationController,
+    method: 'grant',
+    dto: ChangeUserRoleRequestDto,
+  },
+  {
+    name: 'RoleAdministrationController.revoke',
+    controller: RoleAdministrationController,
+    method: 'revoke',
+    dto: ChangeUserRoleRequestDto,
+  },
 ];
 
 /** How Nest reads it: `ContextUtils.reflectCallbackParamtypes` — metadata keyed by method. */
@@ -142,8 +163,8 @@ describe('@Body() parameters carry their DTO class into the metadata', () => {
     expect(paramtypesOf(bodyCase)).toContain(bodyCase.dto);
   });
 
-  it('has fourteen body-reading handlers to check', () => {
+  it('has seventeen body-reading handlers to check', () => {
     // An empty table would make every assertion above pass for the wrong reason.
-    expect(BODY_CASES.length).toBe(14);
+    expect(BODY_CASES.length).toBe(17);
   });
 });

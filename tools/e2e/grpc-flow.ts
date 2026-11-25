@@ -9,21 +9,14 @@
  * unit tests inject ports, so they cannot catch a channel pointed at the wrong host, a proto
  * package loaded but not addressed, or a method path that names a service nobody declared.
  */
+import { resolvePeerAddresses } from '@auth/contracts';
 import { createStaticGrpcChannel } from '../../libs/infra/grpc/src/static-grpc-channel';
 import { readServiceToken } from '../../libs/infra/grpc/src/service-token';
 import { join } from 'node:path';
 
 const PROTO_DIR = join(__dirname, '..', '..', 'libs', 'contracts', 'proto');
 
-const addresses = {
-  'identity.v1': process.env.IDENTITY_GRPC_URL ?? 'localhost:31001',
-  'credential_vault.v1':
-    process.env.CREDENTIAL_VAULT_GRPC_URL ?? 'localhost:31003',
-  'session.v1': process.env.SESSION_GRPC_URL ?? 'localhost:31004',
-  'mfa.v1': process.env.MFA_GRPC_URL ?? 'localhost:31006',
-  // The test drives auth-flow directly, so its proto has to be loaded too.
-  'auth_flow.v1': process.env.AUTH_FLOW_GRPC_URL ?? 'localhost:31005',
-};
+const addresses = resolvePeerAddresses();
 
 const channel = createStaticGrpcChannel({
   protoPaths: [

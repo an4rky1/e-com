@@ -23,6 +23,8 @@ import type {
   ClearCartRequest,
   GetCartRequest,
   AddItemRequest,
+  MergeGuestCartRequest,
+  MergeGuestCartResponse,
   RemoveItemRequest,
   UpdateItemQtyRequest,
   ValidateForCheckoutResponse,
@@ -88,6 +90,23 @@ export class CartGrpcController extends GrpcControllerBase {
     return toCartView(await this.cart.clearCart(toIdentity(request)));
   }
 
+  /**
+   * The explicit merge: fold the guest basket `guestSessionId` names into the cart the
+   * request's own identity addresses.
+   *
+   * @remarks `merged: false` is an ordinary answer (no guest basket existed), not a
+   * failure — the edge retries nothing and reports nothing for it.
+   */
+  @GrpcMethod(SERVICE, 'MergeGuestCart')
+  async mergeGuestCart(request: MergeGuestCartRequest): Promise<MergeGuestCartResponse> {
+    const merged = await this.cart.mergeGuestCart(
+      toIdentity(request),
+      request.guestSessionId ?? '',
+    );
+
+    return { merged };
+  }
+
   @GrpcMethod(SERVICE, 'GetCheckoutLines')
   async getCheckoutLines(request: GetCartRequest): Promise<CheckoutLines> {
     const snapshot = await this.cart.getCheckoutLines(toIdentity(request));
@@ -98,9 +117,9 @@ export class CartGrpcController extends GrpcControllerBase {
         productId: line.productId,
         name: line.name,
         quantity: line.quantity,
-        unitPrice: toShopMoney(line.unitPriceMinor, line.currency),
+        unitPrice: toShopMoney(line.unitPrice),
       })),
-      subtotal: toShopMoney(snapshot.subtotalMinor, snapshot.currency),
+      subtotal: toShopMoney(snapshot.subtotal),
       currency: snapshot.currency,
       version: snapshot.version,
     };
@@ -117,8 +136,8 @@ export class CartGrpcController extends GrpcControllerBase {
       unavailableSkus: [...result.unavailableSkus],
       priceChanges: result.priceChanges.map((change) => ({
         sku: change.sku,
-        oldPrice: toShopMoney(change.oldPrice.amountMinor, change.oldPrice.currency),
-        newPrice: toShopMoney(change.newPrice.amountMinor, change.newPrice.currency),
+        oldPrice: toShopMoney(change.oldPrice),
+        newPrice: toShopMoney(change.newPrice),
       })),
     };
   }
@@ -140,8 +159,8 @@ function toCartView(model: CartReadModel): CartView {
       productId: item.productId,
       name: item.name,
       quantity: item.quantity,
-      unitPrice: toShopMoney(item.unitPriceMinor, item.currency),
-      totalPrice: toShopMoney(item.totalPriceMinor, item.currency),
+      unitPrice: toShopMoney(item.unitPrice),
+      totalPrice: toShopMoney(item.totalPrice),
       addedAt: item.addedAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
       priceChanged: item.priceChanged,
@@ -150,8 +169,8 @@ function toCartView(model: CartReadModel): CartView {
     itemCount: model.itemCount,
     // An empty cart has no currency, and inventing `USD` here would put a code on the wire
     // that no line in the basket actually uses.
-    subtotal: toShopMoney(model.subtotalMinor, model.currency),
-    total: toShopMoney(model.totalMinor, model.currency),
+    subtotal: toShopMoney(model.subtotal),
+    total: toShopMoney(model.total),
     currency: model.currency,
     expiresAt: model.expiresAt ? model.expiresAt.toISOString() : '',
     version: model.version,

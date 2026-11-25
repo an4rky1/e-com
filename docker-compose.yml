@@ -38,7 +38,7 @@ services:
   # over JSONB. MongoDB takes that shape natively. The rule that keeps this from spreading:
   # this container exists for `catalog` alone, and no other service is ever given a Mongo URL.
   mongo:
-    image: docker.io/library/mongo:7-alpine
+    image: docker.io/library/mongo:7
     container_name: auth-mongo
     ports:
       - '27017:27017'

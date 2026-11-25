@@ -36,6 +36,51 @@ describe('User.create', () => {
   });
 });
 
+describe('User.createGuest', () => {
+  it('is a guest, unverified and non-authenticatable', () => {
+    const user = User.createGuest({ email: email('guest-1@guest.invalid') });
+
+    expect(user.status).toBe(UserStatus.GUEST);
+    expect(user.emailVerified).toBe(false);
+    expect(user.displayName).toBeNull();
+    expect(user.isAuthenticatable).toBe(false);
+    expect(AUTHENTICATABLE.has(user.status)).toBe(false);
+  });
+
+  it('announces nothing — a placeholder is not a registration', () => {
+    // `user.registered` carries a welcome letter with it; a mailbox that by construction
+    // cannot receive one must never reach that stream.
+    const user = User.createGuest({ email: email('guest-1@guest.invalid') });
+
+    expect(user.domainEvents).toHaveLength(0);
+  });
+
+  it('preserves a supplied id so the mailbox names the row it belongs to', () => {
+    const id = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+    expect(User.createGuest({ email: email(), id }).id).toBe(id);
+  });
+});
+
+describe('User.renewGuest', () => {
+  it('refreshes updated_at without a status change or an event', () => {
+    const past = new Date('2026-01-01T00:00:00.000Z');
+    const user = User.createGuest({ email: email(), now: past });
+
+    const now = new Date('2026-11-16T12:00:00.000Z');
+    user.renewGuest(now);
+
+    expect(user.updatedAt).toEqual(now);
+    expect(user.status).toBe(UserStatus.GUEST);
+    expect(user.domainEvents).toHaveLength(0);
+  });
+
+  it('refuses an account that is not a guest', () => {
+    const user = User.create({ email: email() });
+
+    expect(() => user.renewGuest()).toThrow(/not a guest/);
+  });
+});
+
 describe('User.verifyEmail', () => {
   it('activates a pending user and emits user.email_verified', () => {
     const user = User.create({ email: email() });

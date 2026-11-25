@@ -2,6 +2,8 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Register from '../src/app/register/page';
 
+const EXPIRES_IN_SEC = 900;
+
 const push = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
@@ -39,7 +41,7 @@ describe('Register', () => {
       reply(200, {
         accessToken: 'access.token.value',
         refreshToken: 'refresh.token.value',
-        expiresIn: 900,
+        expiresIn: EXPIRES_IN_SEC,
         sessionId: 'session-1',
         tokenType: 'Bearer',
       }),

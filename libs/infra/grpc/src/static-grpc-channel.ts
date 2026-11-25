@@ -4,7 +4,7 @@ import {
   Metadata,
   type ServiceClientConstructor,
 } from '@grpc/grpc-js';
-import { GrpcRetryRegistry, type GrpcCallOptions, type GrpcChannel, type ConnectivityState } from './grpc-channel.port';
+import { DEFAULT_DEADLINE_MS, GrpcRetryRegistry, type GrpcCallOptions, type GrpcChannel, type ConnectivityState } from './grpc-channel.port';
 import { loadPackageDefinitionFor } from './grpc-server';
 import { withServiceToken } from './service-token';
 
@@ -273,7 +273,7 @@ export function createStaticGrpcChannel(options: {
   return new StaticGrpcChannel(
     clientsByPackage,
     registry,
-    options.defaultDeadlineMs ?? 3_000,
+    options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS,
     options.serviceToken,
   );
 }

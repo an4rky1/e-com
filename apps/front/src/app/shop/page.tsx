@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ProductList } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE } from '../../lib/api-constants';
 import { formatMoney } from '../../lib/money';
+import { GRID_LIST_STYLE, pluralSuffix } from '../../lib/ui';
 import styles from '../page.module.scss';
 
 /**
@@ -30,7 +32,7 @@ export default function ShopIndex() {
       setData(body);
     } catch (err) {
       setData(null);
-      setError(err instanceof Error ? err.message : 'The gateway did not answer');
+      setError(err instanceof Error ? err.message : GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -88,10 +90,10 @@ export default function ShopIndex() {
       {data ? (
         <section aria-labelledby="products-heading">
           <h2 id="products-heading">
-            {data.total} product{data.total === 1 ? '' : 's'}
+            {data.total} product{pluralSuffix(data.total)}
             {category ? ` in ${category}` : ''}
           </h2>
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem' }}>
+          <ul style={GRID_LIST_STYLE}>
             {data.products.map((product) => (
               <li key={product.id} className={styles.card}>
                 <strong>{product.name}</strong>

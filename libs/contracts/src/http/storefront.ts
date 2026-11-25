@@ -25,10 +25,18 @@ export type {
 
 export const SKU_MAX_LENGTH = 64;
 export const PRODUCT_NAME_MAX_LENGTH = 200;
+/** An amount in minor units as a digit string — wide enough for any realistic total. */
+export const MONEY_AMOUNT_MAX_LENGTH = 24;
+export const PRODUCT_DESCRIPTION_MAX_LENGTH = 4_000;
 export const CATEGORY_PATH_MAX_LENGTH = 200;
 export const QUANTITY_MAX = 999;
+export const QUANTITY_MIN = 1;
 export const CURRENCY_LENGTH = 3;
-export const PAGE_SIZE_MAX = 100;
+/** ISO 3166-1 alpha-2, e.g. `DE`. */
+export const COUNTRY_CODE_LENGTH = 2;
+export const COUPON_CODE_MAX_LENGTH = 32;
+/** A PSP payment-method token presented once and never stored here. */
+export const PAYMENT_TOKEN_MAX_LENGTH = 512;
 
 // ---- catalog ------------------------------------------------------------------------
 
@@ -71,6 +79,16 @@ export interface UpdateCartItemRequest {
 
 export interface RemoveCartItemRequest {
   sku: string;
+}
+
+/**
+ * The answer to `POST /cart/merge`.
+ *
+ * @remarks `false` is the ordinary answer — no guest basket existed — and the front treats
+ * it exactly like `true`: the call succeeded, there was simply nothing to fold.
+ */
+export interface MergeCartResponse {
+  merged: boolean;
 }
 
 // ---- checkout -----------------------------------------------------------------------

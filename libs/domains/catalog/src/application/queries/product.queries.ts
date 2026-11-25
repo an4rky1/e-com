@@ -24,16 +24,12 @@ import {
   type ProductView,
 } from '../commands/product.command';
 
-/**
- * Ceiling on a requested page size.
- *
- * @remarks Hard-coded rather than configured: this is a guard against a client asking for
- * 10 000 rows in one response, not a business knob an operator tunes per environment.
- */
-export const MAX_PAGE_SIZE = 100;
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from '@auth/contracts/http/api';
 
-/** Default page size when the caller does not say. */
-export const DEFAULT_PAGE_SIZE = 20;
+export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE };
 
 /** One page of a category listing, with the size of the whole match set. */
 export interface ProductListPage {

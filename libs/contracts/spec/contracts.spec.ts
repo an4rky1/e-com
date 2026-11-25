@@ -67,9 +67,11 @@ describe('sibling topic derivation', () => {
 
 describe('service registry', () => {
   it('names every stateful service plus the gateway', () => {
-    // 9 auth-side (gateway + 8 stateful) + 5 shop services.
-    expect(Object.keys(ServiceNames)).toHaveLength(14);
+    // 11 auth-side (gateway + 10 stateful) + 5 shop services.
+    expect(Object.keys(ServiceNames)).toHaveLength(16);
     expect(ServiceNames.API_GATEWAY).toBe('api-gateway');
+    expect(ServiceNames.API_KEY).toBe('api-key');
+    expect(ServiceNames.MFA).toBe('mfa');
     expect(ServiceNames.CATALOG).toBe('catalog');
     expect(ServiceNames.CART).toBe('cart');
     expect(ServiceNames.INVENTORY).toBe('inventory');

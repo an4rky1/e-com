@@ -11,6 +11,8 @@
  * run under jsdom.
  */
 
+import { TOKEN_TYPE_BEARER } from '@auth/contracts/http';
+
 export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
@@ -70,5 +72,5 @@ export function clearSession(): void {
 export function authHeaders(): Record<string, string> | null {
   const session = readSession();
   if (!session) return null;
-  return { Authorization: `Bearer ${session.accessToken}` };
+  return { Authorization: `${TOKEN_TYPE_BEARER} ${session.accessToken}` };
 }

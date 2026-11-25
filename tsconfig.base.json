@@ -71,6 +71,7 @@
         "./libs/infra/incoming-webhooks/src/index.ts"
       ],
       "@auth/infra/encryption": ["./libs/infra/encryption/src/index.ts"],
+      "@auth/infra/shop-money": ["./libs/infra/shop-money/src/index.ts"],
       "@shop/domains/catalog": ["./libs/domains/catalog/src/index.ts"],
       "@shop/domains/cart": ["./libs/domains/cart/src/index.ts"],
       "@shop/domains/order": ["./libs/domains/order/src/index.ts"],

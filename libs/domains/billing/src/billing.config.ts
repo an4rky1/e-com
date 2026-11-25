@@ -11,6 +11,11 @@
  */
 import { z } from 'zod';
 import { envInt, envString, readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import {
+  GRPC_DEADLINE_MAX_MS,
+  GRPC_DEADLINE_MIN_MS,
+  GRPC_DEADLINE_MS,
+} from '@auth/contracts/grpc/deadline';
 
 /** This service's own Prisma client. Never shared with another domain lib. */
 export const BILLING_PRISMA = Symbol('BILLING_PRISMA');
@@ -51,7 +56,7 @@ export const Defaults = {
   /** Which PSP adapter to construct. An unknown name is a boot failure, not a silent fake. */
   PSP_PROVIDER: 'fake' as PspProviderName,
   /** Deadline applied to outbound gRPC calls by callers that honour it. */
-  GRPC_DEADLINE_MS: 5_000,
+  GRPC_DEADLINE_MS,
   /**
    * Clock-skew tolerance for the webhook timestamp, in seconds.
    *
@@ -103,7 +108,10 @@ export const billingSchema = z.object({
   SHIPPING_RATES_BY_COUNTRY: envString(JSON.stringify(Defaults.SHIPPING_RATES_BY_COUNTRY)),
   DEFAULT_TAX_COUNTRY: envString(Defaults.DEFAULT_TAX_COUNTRY),
   PSP_PROVIDER: envString(Defaults.PSP_PROVIDER),
-  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
+  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, {
+    min: GRPC_DEADLINE_MIN_MS,
+    max: GRPC_DEADLINE_MAX_MS,
+  }),
   /**
    * Shared secret the provider signs webhooks with. Empty means "verify nothing succeeds":
    * a missing secret must reject every delivery, never accept one, so an operator who

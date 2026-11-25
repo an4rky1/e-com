@@ -9,6 +9,9 @@ service AccessControlService {
   rpc GrantRole (GrantRoleRequest) returns (GrantRoleResponse);
   rpc RevokeRole (RevokeRoleRequest) returns (RevokeRoleResponse);
   rpc EvaluatePolicy (EvaluatePolicyRequest) returns (EvaluatePolicyResponse);
+  // Administrative read: the role catalogue, for an operator who has to know which role
+  // to grant. The decision RPCs above stay the hot path; this one is not called per request.
+  rpc ListRoles (ListRolesRequest) returns (ListRolesResponse);
 }
 
 message GetPermissionsRequest {
@@ -62,4 +65,26 @@ message EvaluatePolicyRequest {
 message EvaluatePolicyResponse {
   bool allowed = 1;
   string reason = 2;
+}
+
+message ListRolesRequest {
+  // Case-insensitive fragment matched against the name and its permissions; empty lists all.
+  string search = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+message RoleSummary {
+  string name = 1;
+  repeated string permissions = 2;
+  // Empty when the role has no description: proto3 has no null string.
+  string description = 3;
+  bool is_system = 4;
+}
+
+message ListRolesResponse {
+  repeated RoleSummary roles = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 limit = 4;
 }

@@ -5,6 +5,7 @@
  * feature, so the file exists to keep the call out of `main.ts`'s own logic. See
  * `startTracing` for the instrumentation list and the `OTEL_*` surface.
  */
+import { ServiceNames } from '@auth/contracts';
 import { startTracing } from '@auth/platform/observability';
 
-startTracing('audit-log');
+startTracing(ServiceNames.AUDIT_LOG);

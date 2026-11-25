@@ -43,7 +43,10 @@ export interface HttpResponse<T> {
 }
 
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+/** Explicit "not processed" refusals: safe to retry even for a non-idempotent verb. */
+const REFUSED_STATUSES = new Set([429, 503]);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const ERROR_BODY_SNIPPET_LENGTH = 512;
 
 interface Breaker {
   failures: number;
@@ -115,7 +118,7 @@ export class HttpClientService {
     this.breaker = new OriginBreaker(config.breakerThreshold, config.breakerResetMs);
   }
 
-  private async once<T>(method: string, url: string, options: HttpRequestOptions): Promise<HttpResponse<T>> {
+  private async sendOnce<T>(method: string, url: string, options: HttpRequestOptions): Promise<HttpResponse<T>> {
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
@@ -140,7 +143,7 @@ export class HttpClientService {
           `HTTP ${response.status} from ${url}`,
           response.status,
           url,
-          text.slice(0, 512),
+          text.slice(0, ERROR_BODY_SNIPPET_LENGTH),
         );
       }
 
@@ -162,7 +165,7 @@ export class HttpClientService {
       if (idempotent) return RETRYABLE_STATUS.has(error.status);
       // Non-idempotent verbs only on explicit "not processed" refusals. 502/504 mean an
       // upstream may already have acted, and re-acting is exactly the harm to avoid.
-      return error.status === 429 || error.status === 503;
+      return REFUSED_STATUSES.has(error.status);
     }
     // Network error or our own timeout: idempotent calls may re-send, others may not.
     return idempotent;
@@ -180,7 +183,7 @@ export class HttpClientService {
         await this.sleep(this.config.retryBaseMs * 2 ** (attempt - 1));
       }
       try {
-        const response = await this.once<T>(method, url, options);
+        const response = await this.sendOnce<T>(method, url, options);
         this.breaker.success(origin);
         return response;
       } catch (error) {

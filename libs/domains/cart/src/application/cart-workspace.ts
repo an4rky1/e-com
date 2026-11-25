@@ -16,6 +16,7 @@ import { Cart, storedItemToProps, type CartAddress } from '../domain/cart.aggreg
 import {
   lockNamesFor,
   resolveCartOwner,
+  sessionCartKey,
   type CartIdentity,
   type CartOwner,
 } from '../domain/cart-owner';
@@ -39,9 +40,9 @@ export class CartWorkspace {
    * view of an empty cart, not a missing response. The `version: 0` that comes with it is
    * how a caller tells the two apart.
    *
-   * @remarks This *can* write. The first authenticated request after sign-in persists the
-   * merge; that is the merge-on-sign-in, and there is no separate RPC in `cart.proto` to
-   * ask for it.
+   * @remarks This *can* write: it persists the implicit merge when the request carries both
+   * a user and a guest session. Sign-in normally uses the explicit `MergeGuestCart` RPC
+   * instead, because the new auth session id is not the guest id the browser still holds.
    */
   read(identity: CartIdentity): Promise<Cart> {
     return this.run(identity, null);
@@ -56,6 +57,63 @@ export class CartWorkspace {
    */
   mutate(identity: CartIdentity, mutate: (cart: Cart) => void): Promise<Cart> {
     return this.run(identity, mutate);
+  }
+
+  /**
+   * Folds the guest cart under `guestSessionId` into the cart this identity addresses,
+   * dropping the guest document in the same write.
+   *
+   * @remarks The explicit counterpart to merge-on-read: the guest document of a browser
+   * that signed in is addressed *by name* (the id the browser presented at login), not
+   * derived from the principal's own session — the new session was minted at sign-in and
+   * has never seen a guest key. Idempotent by construction: a second merge finds no
+   * guest document and answers `false`, which is what lets the caller retry after a
+   * partial failure without double-counting quantities.
+   *
+   * @remarks `false` means "nothing was folded", not "something failed": an absent guest
+   * cart is the ordinary answer for a shopper who never browsed anonymously.
+   */
+  async mergeFrom(identity: CartIdentity, guestSessionId: string): Promise<boolean> {
+    const owner = resolveCartOwner(identity);
+    const sourceKey = sessionCartKey(guestSessionId);
+
+    // A source that *is* the owner would merge the cart into itself and double every
+    // quantity; it can only be a caller passing its own session id as the guest.
+    if (sourceKey === owner.key) return false;
+
+    // The owner's keys plus the named source: the source is a cart another request may be
+    // writing right now (the tab that still shops anonymously while this one signs in).
+    const names = [...new Set([...lockNamesFor(owner), sourceKey])];
+
+    return this.lock.withLock(names, async () => {
+      const stored = await this.store.load(owner.key);
+      const guest = await this.store.load(sourceKey);
+      if (guest === null) return false;
+
+      const now = new Date();
+      const address: CartAddress = {
+        ownerKey: owner.key,
+        sessionId: identity.sessionId?.trim() ?? '',
+        userId: identity.userId?.trim() ?? '',
+      };
+      const cart = stored ? Cart.fromStored(owner.key, stored) : Cart.empty(address, now);
+
+      const folded = guest.items.length > 0;
+      if (folded) {
+        cart.mergeGuest(guest.items.map(storedItemToProps), now);
+      }
+
+      // The write exists even when nothing folded: `discardKey` rides on the save, and an
+      // empty guest document is still a document that must stop existing.
+      await this.store.save({
+        key: owner.key,
+        cart: cart.toStored(),
+        ttlSeconds: this.config.ttlSeconds,
+        discardKey: sourceKey,
+      });
+
+      return folded;
+    });
   }
 
   private async run(

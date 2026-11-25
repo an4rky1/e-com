@@ -19,25 +19,29 @@ import { OAuthService } from '../src/application/oauth/oauth.service';
 import { signOAuthState } from '../src/application/oauth/oauth-state';
 import {
   EMAIL,
+  FakeAccessControlClient,
   FakeIdentityClient,
   FakeOAuthHttp,
   FakeSessionClient,
   USER_ID,
   openOAuth,
   testGatewayConfig,
+  userOf,
 } from './testing/peer-doubles';
 
 const walkWith = (oauth = openOAuth) => {
   const http = new FakeOAuthHttp();
   const identity = new FakeIdentityClient();
   const sessions = new FakeSessionClient();
+  const accessControl = new FakeAccessControlClient();
   const service = new OAuthService(
     testGatewayConfig({ oauth }),
     http,
     identity,
     sessions,
+    accessControl,
   );
-  return { service, http, identity, sessions };
+  return { service, http, identity, sessions, accessControl };
 };
 
 const stateFor = (provider: 'google' | 'github'): string =>
@@ -219,6 +223,34 @@ describe('OAuthService.callback for telegram', () => {
       { userId: USER_ID, email: EMAIL, ipAddress: '10.0.0.1' },
     ]);
     expect(result).toEqual(sessions.issueResult);
+  });
+
+  it('gives a first-time OAuth account the baseline shopper role', async () => {
+    const { service, identity, accessControl } = walkWith();
+    identity.resolved = { user: userOf(), created: true };
+
+    await service.callback({
+      provider: 'telegram',
+      telegramQuery: telegramQueryFor(FIELDS),
+    });
+
+    // Without this, a provider-created account would enter its first session with no role
+    // at all — signed in, but unable to do what a signed-in shopper is promised.
+    expect(accessControl.roleGrants).toEqual([
+      { userId: USER_ID, role: 'user', grantedBy: 'oauth:telegram' },
+    ]);
+  });
+
+  it('does not re-grant a role to an account that already existed', async () => {
+    const { service, identity, accessControl } = walkWith();
+    identity.resolved = { user: userOf(), created: false };
+
+    await service.callback({
+      provider: 'telegram',
+      telegramQuery: telegramQueryFor(FIELDS),
+    });
+
+    expect(accessControl.roleGrants).toEqual([]);
   });
 
   it('refuses a payload whose fields were touched after signing', async () => {

@@ -21,10 +21,14 @@
  * is what makes it an edge rather than a service with a thin API in front of its tables.
  */
 import 'reflect-metadata';
+import { ServiceNames } from '@auth/contracts';
 import './tracing';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+
+const DEFAULT_PORT = 3000;
+const BIND_HOST = '0.0.0.0';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -37,16 +41,16 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
-  const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port, '0.0.0.0');
+  const port = Number(process.env.PORT ?? DEFAULT_PORT);
+  await app.listen(port, BIND_HOST);
 
-  logger.log(`${process.env.SERVICE_NAME ?? 'api-gateway'} listening on port ${port}`);
+  logger.log(`${process.env.SERVICE_NAME ?? ServiceNames.API_GATEWAY} listening on port ${port}`);
 }
 
 bootstrap().catch((error: unknown) => {
   // Logging and a non-zero exit, never a silent swallow: a service that dies during bootstrap
   // must be visibly dead to its orchestrator.
-   
+
   console.error('Bootstrap failed', error);
   process.exit(1);
 });

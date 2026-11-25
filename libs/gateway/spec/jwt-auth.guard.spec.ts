@@ -74,6 +74,62 @@ describe('JwtAuthGuard', () => {
     });
   });
 
+  describe('a route marked @AllowGuest()', () => {
+    it('lets a request with no token through for the next guard to identify', () => {
+      // `JwtAuthGuard` only decides whether a *presented* credential holds. The guest id,
+      // when there is one, is `GuestIdentityGuard`'s business — running it here would put
+      // two answers to "who is this?" in one place.
+      const { guard } = guardWith();
+
+      expect(guard.canActivate(contextFor(requestWithoutToken(), 'guestOpen'))).toBe(true);
+    });
+
+    it('verifies a presented token rather than downgrading it to anonymous', () => {
+      // A signed-in tab with a stale-looking header must keep its account: a bearer that
+      // arrives is checked, never ignored in favour of a guest id.
+      const { guard } = guardWith();
+      const request = requestWithToken(signTestToken());
+
+      guard.canActivate(contextFor(request, 'guestOpen'));
+
+      expect(request.principal).toEqual({
+        userId: USER_ID,
+        email: EMAIL,
+        sessionId: SESSION_ID,
+      });
+    });
+
+    it('refuses a presented token the signature rejects — 401, not a silent downgrade', () => {
+      const { guard } = guardWith();
+      const forged = signTestToken({ key: TEST_OTHER_KEY });
+
+      return rejection(
+        Promise.resolve().then(() =>
+          guard.canActivate(contextFor(requestWithToken(forged), 'guestOpen')),
+        ),
+      ).then((caught: unknown) => {
+        expect(caught).toBeInstanceOf(TokenInvalidException);
+        expect((caught as TokenInvalidException).getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+      });
+    });
+
+    it('refuses a presented token that has expired', () => {
+      const { guard } = guardWith();
+      const expired = signTestToken({
+        issuedAt: new Date(Date.now() - 20 * 60 * 1_000),
+        expiresAt: new Date(Date.now() - (TEST_CLOCK_SKEW_SEC + 1) * 1_000),
+      });
+
+      return rejection(
+        Promise.resolve().then(() =>
+          guard.canActivate(contextFor(requestWithToken(expired), 'guestOpen')),
+        ),
+      ).then((caught: unknown) => {
+        expect(caught).toBeInstanceOf(TokenExpiredException);
+      });
+    });
+  });
+
   describe('a protected route with a valid token', () => {
     it('admits the request', () => {
       const { guard } = guardWith();
@@ -93,8 +149,6 @@ describe('JwtAuthGuard', () => {
         userId: USER_ID,
         email: EMAIL,
         sessionId: SESSION_ID,
-        roles: ['member'],
-        permissions: ['users:read'],
       });
     });
   });

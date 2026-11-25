@@ -22,6 +22,9 @@ import { API_KEY_CONFIG } from '../../api-key.config';
 import type { ApiKeyConfig } from '../../api-key.config';
 import { CreateApiKeyCommand, type CreatedApiKey } from './api-key.command';
 
+const MIN_NAME_LENGTH = 2;
+const MAX_NAME_LENGTH = 64;
+
 /**
  * The single write path for issuing a key.
  *
@@ -41,11 +44,14 @@ export class CreateApiKeyHandler
 
   async execute(command: CreateApiKeyCommand): Promise<CreatedApiKey> {
     const name = command.name?.trim() ?? '';
-    if (name.length < 2 || name.length > 64) {
+    if (name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
       // A caller's mistake, so a 400 rather than a 500.
-      throw new ValidationException('name must be between 2 and 64 characters', {
-        name: name.slice(0, 64),
-      });
+      throw new ValidationException(
+        `name must be between ${MIN_NAME_LENGTH} and ${MAX_NAME_LENGTH} characters`,
+        {
+          name: name.slice(0, MAX_NAME_LENGTH),
+        },
+      );
     }
 
     const family = command.family ?? this.config.keyFamily;

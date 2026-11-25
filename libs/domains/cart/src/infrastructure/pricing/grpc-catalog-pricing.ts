@@ -18,11 +18,7 @@ import type {
   GetPricingRequest,
   GetPricingResponse,
 } from '@auth/contracts';
-import { GrpcStatus, statusCodeOf, type GrpcChannel } from '@auth/infra/grpc';
-import {
-  DependencyTimeoutException,
-  DependencyUnavailableException,
-} from '@auth/platform/error-handling';
+import { translatePeerError, type GrpcChannel } from '@auth/infra/grpc';
 import { parseShopMoney } from '../../money';
 import type { CartConfig } from '../../cart.config';
 import type {
@@ -65,8 +61,7 @@ export class GrpcCatalogPricing implements ProductPricingPort {
       sku: hit.sku,
       productId: hit.productId,
       name: product.name,
-      priceMinor: parseShopMoney(hit.price, 'price'),
-      currency: hit.price.currency,
+      price: parseShopMoney(hit.price, 'price'),
     };
   }
 
@@ -87,8 +82,7 @@ export class GrpcCatalogPricing implements ProductPricingPort {
 
     return pricing.prices.map((price) => ({
       sku: price.sku,
-      priceMinor: parseShopMoney(price.price, 'price'),
-      currency: price.price.currency,
+      price: parseShopMoney(price.price, 'price'),
       active: price.active,
     }));
   }
@@ -105,41 +99,7 @@ export class GrpcCatalogPricing implements ProductPricingPort {
         deadline: Date.now() + this.config.grpcDeadlineMs,
       })
       .catch((error: unknown) => {
-        throw this.translate(error, method);
+        throw translatePeerError(error, method, 'catalog');
       });
-  }
-
-  private translate(error: unknown, method: string): unknown {
-    if (typeof (error as { code?: unknown } | null)?.code !== 'number') {
-      // Not a transport status — a proto that was never loaded, an address that was never
-      // given. Masking it as an outage would send callers into a retry that can never
-      // succeed, and would hide the wiring bug behind a dashboard showing a sick dependency.
-      return error;
-    }
-
-    const status = statusCodeOf(error);
-
-    if (status === GrpcStatus.DEADLINE_EXCEEDED) {
-      return new DependencyTimeoutException(
-        'catalog did not answer in time',
-        { method },
-        error,
-      );
-    }
-
-    // The three "the peer is not there" answers. All of them are a 503 with one code,
-    // because the caller's remedy is identical: nothing was applied, try again.
-    if (
-      status === GrpcStatus.UNAVAILABLE ||
-      status === GrpcStatus.UNIMPLEMENTED
-    ) {
-      return new DependencyUnavailableException(
-        'catalog could not be reached',
-        { method },
-        error,
-      );
-    }
-
-    return error;
   }
 }

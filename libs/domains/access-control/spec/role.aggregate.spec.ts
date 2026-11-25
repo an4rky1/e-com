@@ -93,6 +93,38 @@ describe('Role.declare / withdraw', () => {
   });
 });
 
+describe('Role.applyDefinition', () => {
+  it('adds, withdraws and updates the description in one pass', () => {
+    const subject = role({ description: 'old' });
+    subject.clearDomainEvents();
+
+    subject.applyDefinition({
+      permissions: ['tickets:read', 'billing:invoice.read'],
+      description: 'new',
+    });
+
+    expect(subject.permissions.map((permission) => permission.value)).toEqual([
+      'tickets:read',
+      'billing:invoice.read',
+    ]);
+    expect(subject.description).toBe('new');
+  });
+
+  it('does nothing when the definition already matches', () => {
+    const subject = role({ description: 'Support' });
+    const revision = subject.revision;
+    subject.clearDomainEvents();
+
+    subject.applyDefinition({
+      permissions: ['tickets:read', 'tickets:write'],
+      description: 'Support',
+    });
+
+    expect(subject.revision).toBe(revision);
+    expect(subject.domainEvents).toHaveLength(0);
+  });
+});
+
 describe('Role.grant', () => {
   it('refuses to grant a permission the role does not declare', () => {
     const subject = role();

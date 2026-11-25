@@ -226,6 +226,36 @@ export class Role extends AggregateRoot<string> {
   }
 
   /**
+   * Makes this role match its declared definition exactly.
+   *
+   * @remarks For seeded roles only: the catalogue in `@auth/contracts` owns them, so a
+   * permission the catalogue no longer names is withdrawn as well as a missing one added.
+   * Leaving withdrawn slugs behind is not harmless — a renamed permission would sit on the
+   * role forever, looking granted to every operator who reads the role but matching nothing
+   * the platform checks. Custom roles are extended through their own definition, not through
+   * a system role, so this never runs against one.
+   *
+   * @remarks Each addition and removal emits its normal event, so the outbox and any token
+   * cache see the same transition a manual edit would produce.
+   */
+  applyDefinition(
+    definition: { permissions: readonly string[]; description: string | null },
+    now: Date = new Date(),
+  ): void {
+    const desired = definition.permissions.map(PermissionSlug.fromTrusted);
+    const desiredValues = new Set(desired.map((permission) => permission.value));
+
+    for (const permission of [...this.props.permissions]) {
+      if (!desiredValues.has(permission.value)) this.withdraw(permission, now);
+    }
+
+    for (const permission of desired) this.declare(permission, now);
+
+    const description = definition.description?.trim() || null;
+    if (this.props.description !== description) this.changeDescription(description, now);
+  }
+
+  /**
    * Deletes the role.
    *
    * @remarks A system role cannot be deleted. `roles.name` is referenced by

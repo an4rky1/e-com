@@ -42,7 +42,7 @@ const serviceWith = () => {
     credentials,
   );
 
-  return { service, identity, sessions, credentials };
+  return { service, identity, accessControl, sessions, credentials };
 };
 
 const registerWith = (service: GatewayService) =>
@@ -63,6 +63,29 @@ describe('GatewayService.register', () => {
     ]);
     expect(sessions.issued).toEqual([{ userId, email: EMAIL, ipAddress: '10.0.0.1' }]);
     expect(result).toEqual(sessions.issueResult);
+  });
+
+  it('grants the baseline shopper role to the account it just created', async () => {
+    const { service, identity, accessControl } = serviceWith();
+
+    await registerWith(service);
+
+    expect(accessControl.roleGrants).toEqual([
+      { userId: identity.created[0]!.id, role: 'user', grantedBy: 'self-registration' },
+    ]);
+  });
+
+  it('still completes the sign-up when access-control cannot grant the role', async () => {
+    const { service, accessControl, sessions } = serviceWith();
+    accessControl.grantError = new DependencyUnavailableException(
+      'access-control did not answer',
+    );
+
+    await registerWith(service);
+
+    // The account and credential are whole; a missing baseline role is recoverable and
+    // must not turn a completed registration into an error the caller cannot act on.
+    expect(sessions.issued).toHaveLength(1);
   });
 
   it('refuses a password the vault rejects before an account exists', async () => {

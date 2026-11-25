@@ -18,8 +18,9 @@
  * first is that this class never copies a secret anywhere. `login` takes the password as a
  * parameter, hands it to one peer, and lets it go out of scope.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { actorKindOf, effectiveRoles } from '@auth/contracts';
 import {
   AccountLockedException,
   InvalidCredentialsException,
@@ -45,6 +46,8 @@ import {
   type IdentityClientPort,
   type SessionClientPort,
 } from '../ports/peer-clients.port';
+import { grantSignupRole } from '../grant-signup-role';
+import { USER_SOURCE_WEB } from '../user-source';
 import type { GatewayPrincipal } from '../ports/gateway-principal';
 
 export interface LoginInput {
@@ -80,11 +83,14 @@ export interface CurrentUser {
   readonly user: GatewayUser;
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
+  readonly actorKind: ReturnType<typeof actorKindOf>;
   readonly sessionId: string;
 }
 
 @Injectable()
 export class GatewayService {
+  private readonly logger = new Logger(GatewayService.name);
+
   constructor(
     @Inject(AUTH_FLOW_CLIENT) private readonly flows: AuthFlowClientPort,
     @Inject(IDENTITY_CLIENT) private readonly identity: IdentityClientPort,
@@ -222,32 +228,122 @@ export class GatewayService {
   /**
    * The caller's own profile, with their live authorisations attached.
    *
-   * @remarks The token was already validated by the guard; this composes what that answer did
-   * not carry. Roles and permissions come from access-control rather than from the token's own
+   * @remarks The guard already produced the principal — from a verified bearer or, on
+   * guest-allowed routes, from a validated `X-Guest-Id` — and this composes what that answer
+   * did not carry. Roles and permissions come from access-control rather than from token
    * claims, because a claim is a snapshot taken at mint time — reading it here would answer
-   * "what could this user do an hour ago", which is the question nobody actually asked.
+   * "what could this caller do an hour ago", which is the question nobody actually asked.
+   *
+   * @remarks The subject is `userId` for an account and `sessionId` for a guest: the guest
+   * id travels in the one field a session-only principal has, and it *is* that guest row's
+   * id in identity. An id identity does not know gets identity's own 404 — the truthful
+   * answer for a row that was reaped, not a profile composed from nothing.
    *
    * @remarks The two lookups run concurrently and the response is all-or-nothing. Half a
    * profile — an identity with no permissions — reads as "this user has none", which is a
    * confident and completely wrong answer to hand a client.
    */
   async me(principal: GatewayPrincipal): Promise<CurrentUser> {
+    const subjectId = principal.userId === '' ? principal.sessionId : principal.userId;
+
     const [user, grants] = await Promise.all([
-      this.identity.getUser(principal.userId),
-      this.accessControl.getPermissions(principal.userId),
+      this.identity.getUser(subjectId),
+      this.accessControl.getPermissions(subjectId),
     ]);
+
+    // `guest` is a status, not a grant: identity owns that fact and access-control cannot
+    // see it, so the edge — the only place holding both answers — adds the role. This is a
+    // display/derivation step; the permissions stay exactly access-control's answer.
+    const roles = effectiveRoles({ status: user.status, roles: grants.roles });
 
     return {
       user,
-      roles: grants.roles,
+      roles,
       permissions: grants.permissions,
+      actorKind: actorKindOf({ status: user.status, roles }),
       sessionId: principal.sessionId,
     };
   }
 
-  /** Registers an account. No credential, no session — see identity's `CreateUser`. */
+  /**
+   * Registers an account. No credential, no session — see identity's `CreateUser`.
+   *
+   * @remarks The default role is granted here rather than left for a later operator: every
+   * account-creation path through this edge goes through this method, and an account with no
+   * role is an account whose owner cannot perform the actions their sign-up promised. The
+   * grant is idempotent, so a retry after a lost response leaves one assignment.
+   */
   async createUser(input: GatewayUserInput): Promise<GatewayUser> {
-    return this.identity.createUser(input);
+    const user = await this.identity.createUser(input);
+    await grantSignupRole(this.accessControl, this.logger, user.id, 'user-provisioning');
+    return user;
+  }
+
+  /**
+   * One account, for a caller access-control has already allowed to read accounts.
+   *
+   * @remarks A pass-through to identity: the gateway holds no user data and cannot answer
+   * from a cache that identity does not know about. The permission check belongs to the
+   * route, not here — a facade that re-checked would be a second authority, and the one the
+   * route decorator states is the one an operator can read.
+   */
+  async getUser(userId: string): Promise<GatewayUser> {
+    return this.identity.getUser(userId);
+  }
+
+  /**
+   * The role catalogue, as access-control holds it.
+   *
+   * @remarks Read-only and paged. The gateway could answer from the static `SYSTEM_ROLES`
+   * catalogue, but that would hide every custom role — the ones an operator actually needs
+   * to grant. The service that owns assignments owns the list.
+   */
+  async listRoles(input: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    return this.accessControl.listRoles(input);
+  }
+
+  /**
+   * Adds a role on behalf of the caller, who the guard has already authorised.
+   *
+   * @remarks `grantedBy` is the authenticated principal, never a body field: an audit trail
+   * that lets the caller name somebody else is not an audit trail. Access-control treats the
+   * grant as idempotent and answers with the whole set, which is what the edge returns.
+   */
+  async grantRole(
+    principal: GatewayPrincipal,
+    input: { userId: string; role: string },
+  ): Promise<{ userId: string; roles: readonly string[] }> {
+    const roles = await this.accessControl.grantRole({
+      userId: input.userId,
+      role: input.role,
+      grantedBy: principal.userId,
+    });
+
+    return { userId: input.userId, roles };
+  }
+
+  /** Removes a role and answers with the roles that remain. */
+  async revokeRole(
+    input: { userId: string; role: string },
+  ): Promise<{ userId: string; roles: readonly string[] }> {
+    const roles = await this.accessControl.revokeRole(input);
+    return { userId: input.userId, roles };
+  }
+
+  /**
+   * The browser's placeholder account, renewed or minted.
+   *
+   * @remarks A pass-through on purpose: whether the presented id still names a live guest row
+   * is identity's check, made where the row lives. An edge that answered that question from
+   * a stale read would be one replication delay away from handing back a reaped id — or, if it
+   * answered wrongly in the other direction, from abandoning a guest the browser still holds.
+   */
+  async acquireGuestUser(userId?: string): Promise<GatewayUser> {
+    return this.identity.acquireGuestUser(userId);
   }
 
   /**
@@ -278,7 +374,7 @@ export class GatewayService {
         email: input.email,
         displayName: input.displayName,
         locale: input.locale,
-        source: 'web',
+        source: USER_SOURCE_WEB,
       });
     } catch (error) {
       await this.credentials
@@ -287,12 +383,17 @@ export class GatewayService {
       throw error;
     }
 
+    // The account exists; it now receives the baseline role before a session is minted, so
+    // "signed in" and "authorised as a user" cannot disagree from the first request on.
+    await grantSignupRole(this.accessControl, this.logger, userId, 'self-registration');
+
     return this.sessions.issueTokens({
       userId,
       email: input.email,
       ipAddress: input.ipAddress,
     });
   }
+
 
   /**
    * Sets the initial password for an account.

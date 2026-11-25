@@ -30,6 +30,7 @@
  * imported for its *types* only. It is an ESM module that cannot be loaded by the CommonJS jest
  * transform, so a value import would make this file untestable.
  */
+import { MAX_PAGE_SIZE } from '@auth/contracts/http';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PrismaService } from '@auth/infra/prisma';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client';
@@ -41,6 +42,7 @@ import {
 import { NOTIFICATION_PRISMA } from '../../notification.config';
 import {
   Notification,
+  NotificationEventType,
   NO_RECIPIENT,
   type ChannelDelivery,
 } from '../../domain/notification.aggregate';
@@ -70,8 +72,8 @@ export const RECORD_STATUS = {
 
 /** Domain event -> the topic its announcement rides on. */
 export const TOPIC_BY_EVENT: Readonly<Record<string, string>> = {
-  'notification.dispatched': 'platform.notification.dispatched.v1',
-  'notification.read': 'platform.notification.read.v1',
+  [NotificationEventType.DISPATCHED]: 'platform.notification.dispatched.v1',
+  [NotificationEventType.READ]: 'platform.notification.read.v1',
 };
 
 /**
@@ -83,12 +85,12 @@ export const TOPIC_BY_EVENT: Readonly<Record<string, string>> = {
  * second service actually needs to subscribe.
  */
 export const NOTIFICATION_TOPICS = {
-  DISPATCHED: TOPIC_BY_EVENT['notification.dispatched'],
-  READ: TOPIC_BY_EVENT['notification.read'],
+  DISPATCHED: TOPIC_BY_EVENT[NotificationEventType.DISPATCHED],
+  READ: TOPIC_BY_EVENT[NotificationEventType.READ],
 } as const;
 
 /** Default page size when the caller names none. */
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = MAX_PAGE_SIZE;
 
 /**
  * The order deliveries come back in.
@@ -173,7 +175,7 @@ export class PrismaNotificationStore implements NotificationStorePort {
           aggregate_type: event.aggregateType,
           aggregate_id: notification.id.value,
           topic: TOPIC_BY_EVENT[event.eventType] ?? NOTIFICATION_TOPICS.DISPATCHED,
-          payload: (event.eventType === 'notification.dispatched'
+          payload: (event.eventType === NotificationEventType.DISPATCHED
             ? announcement
             : readEventPayload(event)) as unknown as Prisma.InputJsonValue,
           // `<type>:<aggregateId>:<version>` — the aggregate version, not a clock or a uuid,

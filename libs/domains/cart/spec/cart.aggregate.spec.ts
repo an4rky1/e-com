@@ -14,6 +14,10 @@
 import { ResourceNotFoundException, ValidationException } from '@auth/platform/error-handling';
 import { Cart, type CartLimits } from '../src/domain/cart.aggregate';
 import type { CartItemProps, NewCartItemInput } from '../src/domain/cart-item';
+import { Money } from '../src/domain/value-objects/money';
+import { ProductId } from '../src/domain/value-objects/product-id.vo';
+import { Quantity } from '../src/domain/value-objects/quantity.vo';
+import { Sku } from '../src/domain/value-objects/sku.vo';
 import { USER_ID, storedCart, storedItem } from './support/fakes';
 
 const NOW = new Date('2026-01-01T00:00:00.000Z');
@@ -23,14 +27,20 @@ const ADDRESS = { ownerKey: `user:${USER_ID}`, sessionId: '', userId: USER_ID };
 
 const LIMITS: CartLimits = { maxItems: 3, maxQuantityPerItem: 10 };
 
-const line = (overrides: Partial<NewCartItemInput> = {}): NewCartItemInput => ({
-  sku: 'SKU-1',
-  productId: 'product-1',
-  name: 'Blue mug',
-  quantity: 2,
-  unitPriceMinor: 1_000,
-  currency: 'USD',
-  ...overrides,
+interface RawLine {
+  sku?: string;
+  productId?: string;
+  name?: string;
+  quantity?: number;
+  unitPrice?: Money;
+}
+
+const line = (overrides: RawLine = {}): NewCartItemInput => ({
+  sku: Sku.of(overrides.sku ?? 'SKU-1'),
+  productId: ProductId.of(overrides.productId ?? 'product-1'),
+  name: overrides.name ?? 'Blue mug',
+  quantity: Quantity.of(overrides.quantity ?? 2),
+  unitPrice: overrides.unitPrice ?? Money.of(1_000, 'USD'),
 });
 
 /** A cart with one line already in it, so a test can start from a non-empty basket. */
@@ -46,7 +56,7 @@ describe('Cart.empty', () => {
 
     expect(cart.version).toBe(0);
     expect(cart.itemCount).toBe(0);
-    expect(cart.subtotalMinor).toBe(0);
+    expect(cart.subtotal).toBeNull();
     expect(cart.isEmpty).toBe(true);
     expect(cart.status).toBe('active');
   });
@@ -74,9 +84,9 @@ describe('Cart.fromStored', () => {
 
     expect(cart.version).toBe(4);
     expect(cart.items).toHaveLength(1);
-    expect(cart.items[0].sku).toBe('SKU-1');
+    expect(cart.items[0].sku.value).toBe('SKU-1');
     expect(cart.itemCount).toBe(2);
-    expect(cart.subtotalMinor).toBe(2_000);
+    expect(cart.subtotal?.amountMinor).toBe(2_000);
     expect(cart.currency).toBe('USD');
   });
 
@@ -110,7 +120,7 @@ describe('Cart.addItem', () => {
 
     expect(cart.items).toHaveLength(1);
     expect(cart.itemCount).toBe(2);
-    expect(cart.subtotalMinor).toBe(2_000);
+    expect(cart.subtotal?.amountMinor).toBe(2_000);
     expect(cart.version).toBe(1);
   });
 
@@ -129,11 +139,11 @@ describe('Cart.addItem', () => {
     // total change `cart.v1.price_changed` exists to prevent.
     const cart = filledCart();
 
-    cart.addItem(line({ quantity: 3, unitPriceMinor: 2_500 }), LIMITS, LATER);
+    cart.addItem(line({ quantity: 3, unitPrice: Money.of(2_500, 'USD') }), LIMITS, LATER);
 
-    expect(cart.items[0].unitPriceMinor).toBe(1_000);
+    expect(cart.items[0].unitPrice.amountMinor).toBe(1_000);
     expect(cart.itemCount).toBe(5);
-    expect(cart.subtotalMinor).toBe(5_000);
+    expect(cart.subtotal?.amountMinor).toBe(5_000);
   });
 
   it('refuses a second currency, whether or not the SKU is already in the cart', () => {
@@ -141,11 +151,11 @@ describe('Cart.addItem', () => {
 
     expect(() => cart.addItem(line({ sku: 'SKU-2' }), LIMITS, NOW)).not.toThrow();
     expect(() =>
-      cart.addItem(line({ sku: 'SKU-3', currency: 'EUR' }), LIMITS, NOW),
+      cart.addItem(line({ sku: 'SKU-3', unitPrice: Money.of(1_000, 'EUR') }), LIMITS, NOW),
     ).toThrow(/a cart holds one currency only/);
-    expect(() => cart.addItem(line({ currency: 'EUR' }), LIMITS, NOW)).toThrow(
-      /a cart holds one currency only/,
-    );
+    expect(() =>
+      cart.addItem(line({ unitPrice: Money.of(1_000, 'EUR') }), LIMITS, NOW),
+    ).toThrow(/a cart holds one currency only/);
   });
 
   it('refuses a new SKU once the cart is full', () => {
@@ -171,14 +181,11 @@ describe('Cart.addItem', () => {
     expect(() => cart.addItem(line({ quantity: 1 }), LIMITS, NOW)).not.toThrow();
   });
 
-  it.each<[string, Partial<NewCartItemInput>]>([
+  it.each<[string, RawLine]>([
     ['an empty sku', { sku: '   ' }],
     ['a missing productId', { productId: '' }],
     ['a zero quantity', { quantity: 0 }],
     ['a fractional quantity', { quantity: 1.5 }],
-    ['a negative price', { unitPriceMinor: -1 }],
-    ['a fractional price', { unitPriceMinor: 9.99 }],
-    ['a malformed currency', { currency: 'usd' }],
   ])('refuses %s at the line, not at the call site', (_label, overrides) => {
     const cart = Cart.empty(ADDRESS, NOW);
 
@@ -196,13 +203,24 @@ describe('Cart.addItem', () => {
       /exceeds the per-item limit/,
     );
   });
+
+  it('applies the ceiling to a top-up, not only to a new line', () => {
+    const cart = Cart.empty(ADDRESS, NOW);
+    cart.addItem(line({ quantity: 10 }), LIMITS, NOW);
+
+    expect(() => cart.addItem(line({ quantity: 1 }), LIMITS, NOW)).toThrow(
+      /exceeds the per-item limit/,
+    );
+    expect(cart.items[0].quantity.value).toBe(10);
+    expect(cart.version).toBe(1);
+  });
 });
 
 describe('Cart.updateQuantity', () => {
   it('sets an absolute quantity and advances the version', () => {
     const cart = filledCart();
 
-    cart.updateQuantity('SKU-1', 7, LIMITS, LATER);
+    cart.updateQuantity(Sku.of('SKU-1'), Quantity.of(7), LIMITS, LATER);
 
     expect(cart.itemCount).toBe(7);
     expect(cart.version).toBe(2);
@@ -212,9 +230,9 @@ describe('Cart.updateQuantity', () => {
   it('refuses a SKU the cart does not hold rather than pretending to change it', () => {
     const cart = filledCart();
 
-    expect(() => cart.updateQuantity('SKU-9', 2, LIMITS, NOW)).toThrow(
-      ResourceNotFoundException,
-    );
+    expect(() =>
+      cart.updateQuantity(Sku.of('SKU-9'), Quantity.of(2), LIMITS, NOW),
+    ).toThrow(ResourceNotFoundException);
     expect(cart.version).toBe(1);
   });
 
@@ -224,17 +242,17 @@ describe('Cart.updateQuantity', () => {
     // something on a decrement that was meant to be a decrement.
     const cart = filledCart();
 
-    expect(() => cart.updateQuantity('SKU-1', 0, LIMITS, NOW)).toThrow(
-      /quantity must be at least 1/,
-    );
+    expect(() =>
+      cart.updateQuantity(Sku.of('SKU-1'), Quantity.of(0), LIMITS, NOW),
+    ).toThrow(/quantity must be a positive integer/);
   });
 
   it('refuses a quantity above the per-item ceiling', () => {
     const cart = filledCart();
 
-    expect(() => cart.updateQuantity('SKU-1', 11, LIMITS, NOW)).toThrow(
-      /exceeds the per-item limit/,
-    );
+    expect(() =>
+      cart.updateQuantity(Sku.of('SKU-1'), Quantity.of(11), LIMITS, NOW),
+    ).toThrow(/exceeds the per-item limit/);
   });
 });
 
@@ -242,7 +260,7 @@ describe('Cart.removeItem', () => {
   it('drops the line and advances the version', () => {
     const cart = filledCart();
 
-    cart.removeItem('SKU-1', LATER);
+    cart.removeItem(Sku.of('SKU-1'), LATER);
 
     expect(cart.isEmpty).toBe(true);
     expect(cart.version).toBe(2);
@@ -253,7 +271,9 @@ describe('Cart.removeItem', () => {
     // Answering "done" would make a stale screen and a correct one indistinguishable.
     const cart = filledCart();
 
-    expect(() => cart.removeItem('SKU-9', NOW)).toThrow(ResourceNotFoundException);
+    expect(() => cart.removeItem(Sku.of('SKU-9'), NOW)).toThrow(
+      ResourceNotFoundException,
+    );
     expect(cart.version).toBe(1);
   });
 });
@@ -283,16 +303,14 @@ describe('Cart.clear', () => {
 });
 
 describe('Cart.mergeGuest', () => {
-  const guestLine = (overrides: Partial<CartItemProps> = {}): CartItemProps => ({
-    sku: 'SKU-G',
-    productId: 'product-g',
-    name: 'Guest item',
-    quantity: 1,
-    unitPriceMinor: 500,
-    currency: 'USD',
+  const guestLine = (overrides: RawLine = {}): CartItemProps => ({
+    sku: Sku.of(overrides.sku ?? 'SKU-G'),
+    productId: ProductId.of(overrides.productId ?? 'product-g'),
+    name: overrides.name ?? 'Guest item',
+    quantity: Quantity.of(overrides.quantity ?? 1),
+    unitPrice: overrides.unitPrice ?? Money.of(500, 'USD'),
     addedAt: NOW,
     updatedAt: NOW,
-    ...overrides,
   });
 
   it('adds lines the user cart does not hold', () => {
@@ -300,8 +318,8 @@ describe('Cart.mergeGuest', () => {
 
     cart.mergeGuest([guestLine()], LATER);
 
-    expect(cart.items.map((item) => item.sku)).toEqual(['SKU-1', 'SKU-G']);
-    expect(cart.subtotalMinor).toBe(2_500);
+    expect(cart.items.map((item) => item.sku.value)).toEqual(['SKU-1', 'SKU-G']);
+    expect(cart.subtotal?.amountMinor).toBe(2_500);
     expect(cart.version).toBe(2);
   });
 
@@ -309,7 +327,7 @@ describe('Cart.mergeGuest', () => {
     const cart = filledCart();
 
     cart.mergeGuest(
-      [guestLine({ sku: 'SKU-1', quantity: 3, unitPriceMinor: 999 })],
+      [guestLine({ sku: 'SKU-1', quantity: 3, unitPrice: Money.of(999, 'USD') })],
       LATER,
     );
 
@@ -323,13 +341,13 @@ describe('Cart.mergeGuest', () => {
     const cart = filledCart();
 
     cart.mergeGuest(
-      [guestLine({ sku: 'SKU-1', quantity: 3, unitPriceMinor: 999 })],
+      [guestLine({ sku: 'SKU-1', quantity: 3, unitPrice: Money.of(999, 'USD') })],
       LATER,
     );
 
-    expect(cart.items[0].unitPriceMinor).toBe(1_000);
+    expect(cart.items[0].unitPrice.amountMinor).toBe(1_000);
     expect(cart.itemCount).toBe(5);
-    expect(cart.subtotalMinor).toBe(5_000);
+    expect(cart.subtotal?.amountMinor).toBe(5_000);
   });
 
   it('spends no version on a guest cart with nothing in it', () => {
@@ -349,11 +367,25 @@ describe('Cart.mergeGuest', () => {
     cart.addItem(line({ quantity: 10 }), LIMITS, NOW);
 
     cart.mergeGuest(
-      [guestLine({ sku: 'SKU-1', quantity: 10, unitPriceMinor: 1_000 })],
+      [guestLine({ sku: 'SKU-1', quantity: 10, unitPrice: Money.of(1_000, 'USD') })],
       LATER,
     );
 
     expect(cart.itemCount).toBe(20);
+  });
+
+  it('refuses a guest cart in another currency before changing anything', () => {
+    // A cart is single-currency. Folding a USD guest line into a EUR cart would produce a
+    // subtotal no downstream service can charge, and half-applying the merge would leave
+    // a cart that is neither the old one nor the guest one.
+    const cart = Cart.empty({ ...ADDRESS, ownerKey: 'user:eur' }, NOW);
+    cart.addItem(line({ unitPrice: Money.of(1_000, 'EUR') }), LIMITS, NOW);
+
+    expect(() =>
+      cart.mergeGuest([guestLine({ unitPrice: Money.of(500, 'USD') })], LATER),
+    ).toThrow(/a cart holds one currency only/);
+    expect(cart.items).toHaveLength(1);
+    expect(cart.version).toBe(1);
   });
 
   it('stamps a guest line with the merge time, not with when the guest added it', () => {
@@ -393,13 +425,13 @@ describe('Cart.toStored', () => {
 
   it('round-trips through fromStored without changing a figure', () => {
     const cart = filledCart();
-    cart.updateQuantity('SKU-1', 5, LIMITS, LATER);
+    cart.updateQuantity(Sku.of('SKU-1'), Quantity.of(5), LIMITS, LATER);
 
     const restored = Cart.fromStored(`user:${USER_ID}`, cart.toStored());
 
     expect(restored.toStored()).toEqual(cart.toStored());
     expect(restored.itemCount).toBe(5);
-    expect(restored.subtotalMinor).toBe(5_000);
+    expect(restored.subtotal?.amountMinor).toBe(5_000);
     expect(restored.version).toBe(2);
   });
 });

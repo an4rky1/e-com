@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH, apiErrorMessage } from '@auth/contracts/http';
 import type { ApiErrorResponse, TokenPair } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE, JSON_CONTENT_TYPE } from '../../lib/api-constants';
 import OAuthButtons from '../oauth-buttons';
 import styles from '../page.module.scss';
 
@@ -40,7 +41,7 @@ export default function Register() {
     try {
       const response = await fetch('/api/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': JSON_CONTENT_TYPE },
         body: JSON.stringify({
           email,
           password,
@@ -64,7 +65,7 @@ export default function Register() {
       });
       router.push(`/#${pair.toString()}`);
     } catch {
-      setMessage('The gateway did not answer');
+      setMessage(GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }

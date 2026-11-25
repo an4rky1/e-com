@@ -15,6 +15,8 @@
 import { Injectable } from '@nestjs/common';
 import { InternalErrorException } from '@auth/platform/error-handling';
 import type {
+  AcquireGuestUserRequest,
+  AcquireGuestUserResponse,
   CheckPermissionRequest,
   CheckPermissionResponse,
   CreateUserRequest,
@@ -22,6 +24,11 @@ import type {
   FlowResponse,
   GetPermissionsRequest,
   GetPermissionsResponse,
+  GrantRoleRequest,
+  GrantRoleResponse,
+  ListRolesRequest,
+  ListRolesResponse,
+  RevokeRoleRequest,
   GetUserRequest,
   IssueTokensRequest,
   IssueTokensResponse,
@@ -43,6 +50,7 @@ import { PeerCaller } from './peer-caller';
 import { METHOD } from './grpc-methods';
 import type {
   AccessControlClientPort,
+  AccessControlRolePage,
   AuthFlowClientPort,
   CredentialVaultClientPort,
   FlowProgress,
@@ -155,6 +163,29 @@ export class GrpcIdentityClient implements IdentityClientPort {
     return toGatewayUser(response.user);
   }
 
+  async acquireGuestUser(userId?: string): Promise<GatewayUser> {
+    const request: AcquireGuestUserRequest = {
+      // The proto field is a plain string, so "no id yet" is its empty default rather than
+      // an absent field: an unvisited browser sends nothing, and identity reads the empty
+      // value exactly the same way.
+      userId: userId ?? '',
+    };
+
+    const response = await this.peers.call<AcquireGuestUserResponse>(
+      METHOD.ACQUIRE_GUEST_USER,
+      request,
+    );
+
+    if (!response.user) {
+      throw new InternalErrorException(undefined, {
+        method: METHOD.ACQUIRE_GUEST_USER,
+        reason: 'the reply carried no user',
+      });
+    }
+
+    return toGatewayUser(response.user);
+  }
+
   async resolveOauthUser(input: {
     provider: string;
     subject: string;
@@ -222,6 +253,91 @@ export class GrpcAccessControlClient implements AccessControlClientPort {
       request,
     );
     return { allowed: response.allowed, reason: response.reason };
+  }
+
+  async grantRole(input: {
+    userId: string;
+    role: string;
+    grantedBy?: string;
+  }): Promise<readonly string[]> {
+    const request: GrantRoleRequest = {
+      userId: input.userId,
+      role: input.role,
+      grantedBy: input.grantedBy ?? '',
+    };
+
+    const response = await this.peers.call<GrantRoleResponse>(
+      METHOD.GRANT_ROLE,
+      request,
+    );
+
+    // The peer answers with the caller's whole role set. A reply that omitted it would make
+    // "granted" and "already held" indistinguishable to the caller, so it is refused at the
+    // adapter rather than passed on as an empty success.
+    if (!Array.isArray(response.roles)) {
+      throw new InternalErrorException(undefined, {
+        method: METHOD.GRANT_ROLE,
+        reason: 'the reply carried no roles',
+      });
+    }
+
+    return response.roles;
+  }
+
+  async revokeRole(input: {
+    userId: string;
+    role: string;
+  }): Promise<readonly string[]> {
+    const request: RevokeRoleRequest = { userId: input.userId, role: input.role };
+    const response = await this.peers.call<GrantRoleResponse>(
+      METHOD.REVOKE_ROLE,
+      request,
+    );
+
+    if (!Array.isArray(response.roles)) {
+      throw new InternalErrorException(undefined, {
+        method: METHOD.REVOKE_ROLE,
+        reason: 'the reply carried no roles',
+      });
+    }
+
+    return response.roles;
+  }
+
+  async listRoles(input: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {}): Promise<AccessControlRolePage> {
+    const request: ListRolesRequest = {
+      search: input.search?.trim() ?? '',
+      page: input.page ?? 0,
+      limit: input.limit ?? 0,
+    };
+    const response = await this.peers.call<ListRolesResponse>(
+      METHOD.LIST_ROLES,
+      request,
+    );
+
+    if (!Array.isArray(response.roles)) {
+      throw new InternalErrorException(undefined, {
+        method: METHOD.LIST_ROLES,
+        reason: 'the reply carried no roles',
+      });
+    }
+
+    return {
+      roles: response.roles.map((role) => ({
+        name: role.name,
+        permissions: role.permissions,
+        // The proto cannot carry null; an empty description is the absent one.
+        description: role.description || null,
+        isSystem: role.isSystem,
+      })),
+      total: response.total,
+      page: response.page,
+      limit: response.limit,
+    };
   }
 }
 

@@ -8,6 +8,7 @@
 
 export const ServiceNames = {
   API_GATEWAY: 'api-gateway',
+  API_KEY: 'api-key',
   IDENTITY: 'identity',
   ACCESS_CONTROL: 'access-control',
   CREDENTIAL_VAULT: 'credential-vault',
@@ -21,6 +22,7 @@ export const ServiceNames = {
   INVENTORY: 'inventory',
   BILLING: 'billing',
   ORDER: 'order',
+  MFA: 'mfa',
 } as const;
 
 export type ServiceName = (typeof ServiceNames)[keyof typeof ServiceNames];
@@ -32,6 +34,7 @@ export const GrpcPackages = {
   CREDENTIAL_VAULT: 'credential_vault.v1',
   SESSION: 'session.v1',
   AUTH_FLOW: 'auth_flow.v1',
+  MFA: 'mfa.v1',
   ACCOUNT_SECURITY: 'account_security.v1',
   CATALOG: 'catalog.v1',
   CART: 'cart.v1',

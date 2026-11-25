@@ -11,7 +11,17 @@
  * be a second, edge-local copy of an authorization rule, and the copy is what drifts: revoke
  * the role in access-control and this shortcut would keep working.
  */
-import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { PERMISSIONS } from '@auth/contracts';
 import type { SetPasswordResponse } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -31,6 +41,7 @@ import type { UserResponseDto } from './dto/gateway.dto';
 // Value import on purpose — see the note in `auth.controller.ts`.
  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { GatewayService } from '../application/facade/gateway.service';
+import { USER_SOURCE_WEB } from '../application/user-source';
 
 @Controller('users')
 @UseGuards(RateLimitGuard, JwtAuthGuard, PermissionsGuard)
@@ -55,22 +66,35 @@ export class UsersController {
         locale: body.locale,
         // Recorded by identity for provenance. Never read back for an authorisation decision,
         // so it is a constant here rather than something a caller may choose.
-        source: 'web',
+        source: USER_SOURCE_WEB,
       }),
     );
   }
 
   /**
+   * Reads one account. Moderators hold `users:read`; a shopper does not.
+   *
+   * @remarks The id is a path parameter rather than a query field because the account is the
+   * resource. `ParseUUIDPipe` refuses a malformed id at the edge, so identity is never asked
+   * a question that cannot name a row.
+   */
+  @Get(':id')
+  @RequirePermissions(PERMISSIONS.USERS_READ)
+  async get(@Param('id', ParseUUIDPipe) id: string): Promise<UserResponseDto> {
+    return toUserResponse(await this.gateway.getUser(id));
+  }
+
+  /**
    * Sets the initial password for an account.
    *
-   * @remarks `users:password:set` is a name, not a rule. Which role carries it, and under
+   * @remarks `users:password.set` is a name, not a rule. Which role carries it, and under
    * what conditions, is access-control's data.
    *
    * @remarks `replay`, because the answer is two identifiers and no secret — a retry of a
    * set that already succeeded can be handed that answer back instead of running the set
    * a second time against a credential the vault has already stored.
    */
-  @RequirePermissions('users:password:set')
+  @RequirePermissions(PERMISSIONS.USERS_PASSWORD_SET)
   @Idempotent({ mode: 'replay' })
   @Post(':id/password')
   @HttpCode(200)

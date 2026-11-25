@@ -6,7 +6,11 @@
  * reaches storage through `globalThis.window`, so this file never needs a DOM lib either.
  */
 
+// A module, not a global script — see the same note in `guest.spec.ts`.
+export {};
+
 const KEY = 'auth.session';
+const EXPIRES_IN_SEC = 900;
 
 type Store = {
   getItem(key: string): string | null;
@@ -36,7 +40,7 @@ describe('session helpers', () => {
       accessToken: 'a.t',
       refreshToken: 'r.t',
       sessionId: 's-1',
-      expiresIn: 900,
+      expiresIn: EXPIRES_IN_SEC,
     });
     expect(store().getItem(KEY)).not.toBeNull();
     expect(readSession()?.accessToken).toBe('a.t');
@@ -63,7 +67,7 @@ describe('session helpers', () => {
       accessToken: 'a.t',
       refreshToken: '',
       sessionId: '',
-      expiresIn: 900,
+      expiresIn: EXPIRES_IN_SEC,
     });
     expect(authHeaders()).toEqual({ Authorization: 'Bearer a.t' });
   });

@@ -59,6 +59,16 @@ export interface UserRepositoryPort {
   find(spec: UserSpecification): Promise<User[]>;
 
   count(spec: UserSpecification): Promise<number>;
+
+  /**
+   * Deletes guest rows whose last renewal is older than `before`. Returns the count.
+   *
+   * @remarks Set-based on purpose: a placeholder with no PII and no history worth auditing
+   * does not need its aggregate rehydrated to be swept, and a per-row save loop would spend
+   * a transaction on rows nobody will ever read again. The `status = guest` predicate *is*
+   * the invariant — the reaper may only ever touch rows identity itself created as guests.
+   */
+  deleteStaleGuests(before: Date): Promise<number>;
 }
 
 /**

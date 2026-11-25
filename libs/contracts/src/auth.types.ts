@@ -1,42 +1,13 @@
 /**
- * @fileoverview The canonical authenticated principal and request context.
+ * @fileoverview The token pair every transport hands a caller, and the strategies that name
+ * how one was minted.
  *
- * Why this file is not to be edited casually: every service, every guard and the API
- * gateway all read `User` from here. A service that redefines the shape locally creates a
- * type that is structurally similar but nominally different, and the guard silently stops
- * recognising it. Extend these types, never redefine them.
+ * @remarks Small on purpose. The shapes that used to sit beside them here (`User`,
+ * `AuthContext`, `JwtPayload`) were read by nothing: each service derives its caller from
+ * the transport that carries it — the gateway from the verified bearer, a gRPC handler from
+ * its own metadata — and a second "canonical" copy of that shape would be one nobody keeps
+ * honest. The composed answer a page actually reads is `Principal`, in `http/api.ts`.
  */
-
-export interface User {
-  id: string;
-  email: string;
-  roles?: string[];
-  permissions?: string[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface AuthContext {
-  user?: User;
-  /** Which credential proved the identity — `jwt`, `session`, `api_key`, `internal`. */
-  strategy: string;
-  authenticated: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  roles?: string[];
-  permissions?: string[];
-  iat: number;
-  exp: number;
-  iss?: string;
-  aud?: string;
-  /** Unique token id — the hook a revocation list checks. */
-  jti?: string;
-  sid?: string;
-  scope?: string[];
-}
 
 export const AuthStrategies = {
   JWT: 'jwt',
@@ -47,11 +18,14 @@ export const AuthStrategies = {
 
 export type AuthStrategy = (typeof AuthStrategies)[keyof typeof AuthStrategies];
 
+/** The only token scheme the platform issues, as spelled on the wire. */
+export const TOKEN_TYPE_BEARER = 'Bearer';
+
 /** Response shape for an authenticated session. */
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
-  tokenType: 'Bearer';
+  tokenType: typeof TOKEN_TYPE_BEARER;
   /** Seconds until the access token expires. */
   expiresIn: number;
   sessionId: string;

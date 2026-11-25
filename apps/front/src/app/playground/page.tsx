@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ApiRoutes, viaProxy } from '@auth/contracts/http';
+import { ApiRoutes, TOKEN_TYPE_BEARER, viaProxy } from '@auth/contracts/http';
 import type { ApiMethod, ApiRoute, TokenPair } from '@auth/contracts/http';
+import { JSON_CONTENT_TYPE } from '../../lib/api-constants';
 import styles from '../page.module.scss';
 
 /**
@@ -37,7 +38,7 @@ type Endpoint = {
  * placeholder a tester replaces — the input below is edited by hand before the request is
  * sent, and `<user-id>` says what to put there in a way `:id` does not.
  */
-const endpoint = (
+const makeEndpoint = (
   id: string,
   route: ApiRoute,
   summary: string,
@@ -52,43 +53,45 @@ const endpoint = (
 });
 
 const ENDPOINTS: Endpoint[] = [
-  endpoint(
+  makeEndpoint(
     'create-user',
     ApiRoutes.createUser,
     'Create an account. Public — this is how registration starts.',
     '{\n  "email": "newcomer@example.test",\n  "displayName": "New Comer"\n}',
   ),
-  endpoint(
+  makeEndpoint(
     'set-password',
     ApiRoutes.setPassword,
-    'Set the initial password. Needs users:password:set — a refusal with 403 here is the privilege boundary working.',
+    'Set the initial password. Needs users:password.set — a refusal with 403 here is the privilege boundary working.',
     '{\n  "password": "Str0ng-Passw0rd!x"\n}',
   ),
-  endpoint(
+  makeEndpoint(
     'login',
     ApiRoutes.login,
     'Exchange email + password for a token pair. Public.',
     '{\n  "email": "demo@example.test",\n  "password": "Str0ng-Passw0rd!x"\n}',
   ),
-  endpoint(
+  makeEndpoint(
     'refresh',
     ApiRoutes.refresh,
     'Rotate a refresh token into a new pair. Public — the refresh token is the credential.',
     '{\n  "refreshToken": ""\n}',
   ),
-  endpoint(
+  makeEndpoint(
     'logout',
     ApiRoutes.logout,
     'End the caller’s session; every session with everywhere: true.',
     '{\n  "reason": "playground",\n  "everywhere": false\n}',
   ),
-  endpoint(
+  makeEndpoint(
     'me',
     ApiRoutes.me,
     'The caller with their live roles and permissions, composed from two services.',
     '',
   ),
 ];
+
+const DEFAULT_ENDPOINT = ENDPOINTS[2];
 
 type Result = {
   status: number;
@@ -97,9 +100,9 @@ type Result = {
 };
 
 export default function Playground() {
-  const [selected, setSelected] = useState<Endpoint>(ENDPOINTS[2]);
-  const [path, setPath] = useState(ENDPOINTS[2].path);
-  const [body, setBody] = useState(ENDPOINTS[2].body);
+  const [selected, setSelected] = useState<Endpoint>(DEFAULT_ENDPOINT);
+  const [path, setPath] = useState(DEFAULT_ENDPOINT.path);
+  const [body, setBody] = useState(DEFAULT_ENDPOINT.body);
   const [token, setToken] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -121,8 +124,8 @@ export default function Playground() {
 
     try {
       const headers: Record<string, string> = {};
-      if (selected.method === 'POST') headers['Content-Type'] = 'application/json';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (selected.method === 'POST') headers['Content-Type'] = JSON_CONTENT_TYPE;
+      if (token) headers['Authorization'] = `${TOKEN_TYPE_BEARER} ${token}`;
 
       const response = await fetch(path, {
         method: selected.method,

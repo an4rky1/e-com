@@ -52,7 +52,7 @@ describe('PermissionsGuard', () => {
       ).resolves.toBe(true);
 
       expect(accessControl.granted).toEqual([
-        { userId: USER_ID, permission: 'users:password:set' },
+        { userId: USER_ID, permission: 'users:password.set' },
       ]);
     });
 
@@ -79,7 +79,7 @@ describe('PermissionsGuard', () => {
       )) as PermissionDeniedException;
 
       expect(error.context).toEqual({
-        permission: 'users:password:set',
+        permission: 'users:password.set',
         reason: 'no role grants this permission',
       });
     });

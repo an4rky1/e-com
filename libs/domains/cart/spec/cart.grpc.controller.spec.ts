@@ -26,7 +26,6 @@ import type {
   CheckoutLines,
   GetCartRequest,
   RemoveItemRequest,
-  UpdateItemQtyRequest,
   ValidateForCheckoutResponse,
 } from '@auth/contracts';
 import {
@@ -37,6 +36,7 @@ import { CartService } from '../src/application/facade/cart.service';
 import {
   AddItemCommand,
   ClearCartCommand,
+  MergeGuestCartCommand,
   RemoveItemCommand,
   UpdateItemQtyCommand,
 } from '../src/application/commands/cart.commands';
@@ -44,6 +44,7 @@ import { AddItemHandler } from '../src/application/commands/add-item.handler';
 import { UpdateItemQtyHandler } from '../src/application/commands/update-item-qty.handler';
 import { RemoveItemHandler } from '../src/application/commands/remove-item.handler';
 import { ClearCartHandler } from '../src/application/commands/clear-cart.handler';
+import { MergeGuestCartHandler } from '../src/application/commands/merge-guest-cart.handler';
 import {
   GetCartHandler,
   GetCartQuery,
@@ -53,6 +54,7 @@ import {
   ValidateForCheckoutQuery,
 } from '../src/application/queries/cart.queries';
 import { CartWorkspace } from '../src/application/cart-workspace';
+import { Money } from '../src/domain/value-objects/money';
 import { CartGrpcController } from '../src/presentation/grpc/cart.grpc.controller';
 import {
   FakePricing,
@@ -100,8 +102,7 @@ function build() {
     sku: 'SKU-1',
     productId: 'product-1',
     name: 'Blue mug',
-    priceMinor: 1_000,
-    currency: 'USD',
+    price: Money.of(1_000, 'USD'),
   });
   const workspace = new CartWorkspace(store, lock, config);
 
@@ -111,6 +112,7 @@ function build() {
       [UpdateItemQtyCommand, new UpdateItemQtyHandler(workspace, pricing, config)],
       [RemoveItemCommand, new RemoveItemHandler(workspace, pricing, config)],
       [ClearCartCommand, new ClearCartHandler(workspace, pricing, config)],
+      [MergeGuestCartCommand, new MergeGuestCartHandler(workspace)],
     ].map(([command, handler]) => [
       command,
       (input: object) =>
@@ -174,20 +176,6 @@ const addItem = (
     ...overrides,
   });
 
-const updateQty = (
-  controller: CartGrpcController,
-  sku: string,
-  quantity: number,
-  overrides: Partial<UpdateItemQtyRequest> = {},
-): Promise<CartView> =>
-  controller.updateItemQty({
-    sessionId: SESSION_ID,
-    userId: '',
-    sku,
-    quantity,
-    ...overrides,
-  });
-
 const removeItem = (
   controller: CartGrpcController,
   sku: string,
@@ -221,6 +209,7 @@ describe('CartGrpcController dispatch', () => {
       [UpdateItemQtyHandler, UpdateItemQtyCommand],
       [RemoveItemHandler, RemoveItemCommand],
       [ClearCartHandler, ClearCartCommand],
+      [MergeGuestCartHandler, MergeGuestCartCommand],
     ] as const) {
       expect(Reflect.getMetadata(COMMAND_HANDLER_METADATA, handler)).toBe(command);
     }
@@ -297,8 +286,7 @@ describe('CartGrpcController.GetCart', () => {
       sku: 'SKU-1',
       productId: 'product-1',
       name: 'Blue mug',
-      priceMinor: 1_500,
-      currency: 'USD',
+      price: Money.of(1_500, 'USD'),
     });
 
     const view = await controller.getCart(guest());
@@ -495,6 +483,90 @@ describe('CartGrpcController.ClearCart', () => {
   });
 });
 
+describe('CartGrpcController.MergeGuestCart', () => {
+  it('folds the guest basket the caller names and answers that it merged', async () => {
+    // The source is the id the browser presented while anonymous, not the caller's own
+    // session: the session minted at sign-in has never held a guest key.
+    const { controller, store } = build();
+    await addItem(controller);
+
+    const result = await controller.mergeGuestCart({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      guestSessionId: SESSION_ID,
+    });
+
+    expect(result).toEqual({ merged: true });
+    expect(store.documents.has(`session:${SESSION_ID}`)).toBe(false);
+    expect(store.documents.get(`user:${USER_ID}`)?.items.map((item) => item.sku)).toEqual([
+      'SKU-1',
+    ]);
+  });
+
+  it('answers false the second time, without folding the same basket again', async () => {
+    // `merged: false` is the ordinary answer, not a failure: the edge retries nothing
+    // and reports nothing for it.
+    const { controller, store } = build();
+    await addItem(controller);
+    const request = {
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      guestSessionId: SESSION_ID,
+    };
+
+    await controller.mergeGuestCart(request);
+    store.saves.length = 0;
+    const second = await controller.mergeGuestCart(request);
+
+    expect(second).toEqual({ merged: false });
+    expect(store.saves).toHaveLength(0);
+  });
+
+  it('answers false when the caller never had a guest basket', async () => {
+    const { controller, store } = build();
+
+    const result = await controller.mergeGuestCart({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      guestSessionId: SESSION_ID,
+    });
+
+    expect(result).toEqual({ merged: false });
+    expect(store.saves).toHaveLength(0);
+  });
+
+  it('refuses a merge with no guest basket named', async () => {
+    // Two refusals live in the handler, both before the store is touched: a merge
+    // without a source is meaningless.
+    const { controller, store } = build();
+
+    await expect(
+      controller.mergeGuestCart({
+        sessionId: SESSION_ID,
+        userId: USER_ID,
+        guestSessionId: '',
+      }),
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.saves).toHaveLength(0);
+  });
+
+  it('refuses a caller with no account to fold into', async () => {
+    // A session-only caller may hold a cart, but there is no account on the other side
+    // of the fold — only another browser key.
+    const { controller, store } = build();
+    await addItem(controller);
+
+    await expect(
+      controller.mergeGuestCart({
+        sessionId: SESSION_ID,
+        userId: '',
+        guestSessionId: SESSION_ID,
+      }),
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.documents.has(`session:${SESSION_ID}`)).toBe(true);
+  });
+});
+
 describe('CartGrpcController.GetCheckoutLines', () => {
   it('answers with the lines order copies, as wire money', async () => {
     const { controller } = build();
@@ -566,8 +638,7 @@ describe('CartGrpcController.ValidateForCheckout', () => {
       sku: 'SKU-1',
       productId: 'product-1',
       name: 'Blue mug',
-      priceMinor: 1_500,
-      currency: 'USD',
+      price: Money.of(1_500, 'USD'),
     });
 
     const result = await controller.validateForCheckout(guest());

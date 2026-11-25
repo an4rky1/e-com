@@ -15,11 +15,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PERMISSIONS } from '@auth/contracts';
 import type { OrderListQuery, OrderView } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { CurrentPrincipal } from './decorators/current-principal.decorator';
+import { RequirePermissions } from './decorators/route-metadata';
 import type { GatewayPrincipal } from '../application/ports/gateway-principal';
 // Values on purpose — see the note in `auth.controller.ts`.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -33,6 +35,7 @@ export class OrdersController {
   constructor(private readonly storefront: StorefrontService) {}
 
   @Get()
+  @RequirePermissions(PERMISSIONS.ORDERS_READ)
   list(
     @CurrentPrincipal() principal: GatewayPrincipal,
     @Query() query: OrderListQuery,
@@ -46,6 +49,7 @@ export class OrdersController {
   }
 
   @Get(':id')
+  @RequirePermissions(PERMISSIONS.ORDERS_READ)
   get(
     @CurrentPrincipal() principal: GatewayPrincipal,
     @Param('id') id: string,
@@ -54,6 +58,7 @@ export class OrdersController {
   }
 
   @Post(':id/cancel')
+  @RequirePermissions(PERMISSIONS.ORDERS_CANCEL)
   @HttpCode(200)
   cancel(
     @CurrentPrincipal() principal: GatewayPrincipal,

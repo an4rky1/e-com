@@ -10,12 +10,16 @@
  */
 
 import { Result, ValueObject } from '@auth/core';
+import {
+  ROLE_NAME_MAX_LENGTH,
+  ROLE_NAME_MIN_LENGTH,
+  ROLE_NAME_PATTERN,
+} from '@auth/contracts';
 
-/** Lower snake case, 2-64 characters. Starts with a letter so it can never be a keyword. */
-export const ROLE_NAME_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
-
-export const MIN_ROLE_NAME_LENGTH = 2;
-export const MAX_ROLE_NAME_LENGTH = 64;
+/** Re-exported from the shared catalogue: the gateway validates the same shape. */
+export { ROLE_NAME_PATTERN };
+export const MIN_ROLE_NAME_LENGTH = ROLE_NAME_MIN_LENGTH;
+export const MAX_ROLE_NAME_LENGTH = ROLE_NAME_MAX_LENGTH;
 
 export class RoleName extends ValueObject<{ value: string }> {
   private constructor(props: { value: string }) {

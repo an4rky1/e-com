@@ -9,6 +9,29 @@ import { z, type ZodTypeAny } from 'zod';
  * invalid value fails at boot rather than on the first request that happens to hit it.
  */
 
+/**
+ * Reads a variable a module cannot boot without.
+ *
+ * Why a helper instead of reading `process.env` at each use site: one place to see what a
+ * module needs, an injectable env so tests never touch `process.env`, and a failure at boot
+ * rather than on the first request that happens to touch the variable.
+ *
+ * @param name - variable to read, e.g. `DATABASE_URL`.
+ * @param consumer - the module that needs it, used in the error message.
+ * @param env - source map. Injectable so tests never touch `process.env`.
+ */
+export function requireEnv(
+  name: string,
+  consumer: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const value = env[name];
+  if (!value) {
+    throw new Error(`${name} is required by the ${consumer} module`);
+  }
+  return value;
+}
+
 /** `IDENTITY_CACHE_TTL_SEC` -> the `IDENTITY_` namespace owns it. */
 export const ENV_PREFIXES = {
   identity: 'IDENTITY',

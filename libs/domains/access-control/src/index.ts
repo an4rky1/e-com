@@ -134,6 +134,7 @@ export {
 export { PrismaRoleRepository } from './infrastructure/persistence/prisma-role.repository';
 export { PrismaRoleAssignmentRepository } from './infrastructure/persistence/prisma-role-assignment.repository';
 export { PrismaPolicyRepository } from './infrastructure/persistence/prisma-policy.repository';
+export { SystemRoleSeeder } from './infrastructure/seeding/system-role.seeder';
 export {
   enqueueEvents,
   type EnqueueOptions,

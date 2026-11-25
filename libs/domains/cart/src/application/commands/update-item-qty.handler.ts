@@ -11,7 +11,6 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { ValidationException } from '@auth/platform/error-handling';
 import { CartWorkspace } from '../cart-workspace';
 import { buildCartReadModel, type CartReadModel } from '../cart-read-model';
 import {
@@ -20,6 +19,8 @@ import {
 } from '../../domain/ports/product-pricing.port';
 import { CART_CONFIG, type CartConfig } from '../../cart.config';
 import type { CartLimits } from '../../domain/cart.aggregate';
+import { Quantity } from '../../domain/value-objects/quantity.vo';
+import { Sku } from '../../domain/value-objects/sku.vo';
 import { UpdateItemQtyCommand } from './cart.commands';
 
 @Injectable()
@@ -41,26 +42,15 @@ export class UpdateItemQtyHandler
   }
 
   async execute(command: UpdateItemQtyCommand): Promise<CartReadModel> {
-    const sku = command.sku?.trim() ?? '';
-    if (sku.length === 0) {
-      throw new ValidationException('sku is required', { sku: command.sku });
-    }
-    if (!Number.isSafeInteger(command.quantity) || command.quantity < 1) {
-      throw new ValidationException(
-        'quantity must be a positive integer; use RemoveItem to drop a line',
-        { sku, quantity: command.quantity },
-      );
-    }
-    if (command.quantity > this.config.maxQuantityPerItem) {
-      throw new ValidationException('quantity exceeds the per-item limit', {
-        sku,
-        quantity: command.quantity,
-        maxQuantityPerItem: this.config.maxQuantityPerItem,
-      });
-    }
+    const sku = Sku.of(command.sku);
+    const quantity = Quantity.of(
+      command.quantity,
+      'quantity must be a positive integer; use RemoveItem to drop a line',
+    );
+    quantity.assertAtMost(this.config.maxQuantityPerItem, { sku: sku.value });
 
     const cart = await this.workspace.mutate(command.identity, (target) => {
-      target.updateQuantity(sku, command.quantity, this.limits, new Date());
+      target.updateQuantity(sku, quantity, this.limits, new Date());
     });
 
     return buildCartReadModel(cart, {

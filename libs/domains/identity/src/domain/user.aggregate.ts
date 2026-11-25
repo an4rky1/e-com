@@ -136,6 +136,39 @@ export class User extends AggregateRoot<string> {
     return user;
   }
 
+  /**
+   * The browser's placeholder account.
+   *
+   * @remarks Emits no event. `user.registered` announces an account someone signed up for,
+   * and its consumers — a welcome letter above all — would write to an address that by
+   * construction cannot receive one. A guest row is plumbing for an anonymous basket, not
+   * a registration, and announcing it would pollute every stream keyed on real signups.
+   */
+  static createGuest(input: {
+    email: Email;
+    id?: string;
+    now?: Date;
+  }): User {
+    const now = input.now ?? new Date();
+    const id = input.id ?? crypto.randomUUID();
+
+    return new User(
+      id,
+      {
+        email: input.email,
+        displayName: null,
+        locale: 'en',
+        status: 'guest',
+        emailVerified: false,
+        version: 1,
+        deletedReason: null,
+      },
+      now,
+      now,
+      null,
+    );
+  }
+
   /** Rehydration from persistence. Does not emit events — the write already happened. */
   static fromRow(row: {
     id: string;
@@ -256,6 +289,20 @@ export class User extends AggregateRoot<string> {
     Ensure.notEmpty(locale, 'locale');
     this.props.locale = locale;
     this.bump(now);
+  }
+
+  /**
+   * The same browser came back for its placeholder account.
+   *
+   * @remarks A timestamp, not a lifecycle transition: nothing about *who* this user is has
+   * changed, so there is no event and no version bump — the write exists only so the reaper
+   * can tell an active guest from an abandoned one.
+   */
+  renewGuest(now: Date = new Date()): void {
+    if (this.props.status !== 'guest') {
+      throw new Error('Cannot renew a user that is not a guest');
+    }
+    this.touch(now);
   }
 
   /** Soft delete. The row is retained so historical events still resolve the user. */

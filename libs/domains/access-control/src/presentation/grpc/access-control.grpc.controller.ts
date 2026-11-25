@@ -9,6 +9,8 @@ import type {
   GetPermissionsResponse,
   GrantRoleRequest,
   GrantRoleResponse,
+  ListRolesRequest,
+  ListRolesResponse,
   RevokeRoleRequest,
 } from '@auth/contracts';
 // Value import: constructor-injected; a type-only import erases the DI token.
@@ -111,6 +113,35 @@ export class AccessControlGrpcController extends GrpcControllerBase {
       reason: policy
         ? decision.reason
         : `no policy "${request.policy}" is attached to a held role; evaluated "${request.policy}" as a permission`,
+    };
+  }
+
+  /**
+   * The catalogue an administrator browses before granting.
+   *
+   * @remarks System roles are included: a caller managing access has to see the baseline
+   * roles as well as the custom ones. `ListRolesQuery` hides them only when explicitly asked
+   * to, which is a different question ("what can I edit?") than this one.
+   */
+  @GrpcMethod(SERVICE, 'ListRoles')
+  async listRoles(request: ListRolesRequest): Promise<ListRolesResponse> {
+    const result = await this.accessControl.listRoles({
+      search: request.search?.trim() || undefined,
+      includeSystem: true,
+      page: request.page || undefined,
+      limit: request.limit || undefined,
+    });
+
+    return {
+      roles: result.data.map((role) => ({
+        name: role.name,
+        permissions: [...role.permissions],
+        description: role.description ?? '',
+        isSystem: role.isSystem,
+      })),
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
     };
   }
 

@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -23,13 +24,12 @@ import { createKafkaPublisher } from '@auth/infra/kafka';
  */
 const eventPublisher = createKafkaPublisher();
 
-
 @Module({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('access-control'),
-    ObservabilityModule.forRoot('access-control'),
+    HealthModule.forRoot(ServiceNames.ACCESS_CONTROL),
+    ObservabilityModule.forRoot(ServiceNames.ACCESS_CONTROL),
 
     createAccessControlModule({ publisher: eventPublisher }),
   ],

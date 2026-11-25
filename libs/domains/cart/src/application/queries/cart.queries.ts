@@ -5,9 +5,9 @@
  * @remarks Like every query in this workspace they are classes: `QueryBus.execute` resolves
  * a handler from `query.constructor`, and a plain object cannot dispatch.
  *
- * @remarks Money stays an integer on the way out. The gRPC layer converts to `ShopMoney`
- * strings at the edge; a query that had already stringified a price would make the
- * presentation layer the place where the domain's number format is decided.
+ * @remarks Money stays a `Money` on the way out. The gRPC layer converts to
+ * `ShopMoney` strings at the edge; a query that had already stringified a price would
+ * make the presentation layer the place where the domain's number format is decided.
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';

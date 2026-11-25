@@ -31,6 +31,16 @@ export interface CreateUserRequest {
 export interface CreateUserResponse {
   user?: UserResponse;
 }
+export interface AcquireGuestUserRequest {
+  /**
+   * The guest account this browser held before; absent on a first visit. Honoured only
+   * when the row behind it is still a guest — anything else mints a new placeholder.
+   */
+  userId?: string;
+}
+export interface AcquireGuestUserResponse {
+  user?: UserResponse;
+}
 export interface ResolveOauthUserRequest {
   provider: string;
   subject: string;
@@ -73,6 +83,7 @@ export interface IdentityGrpcClient {
   GetUser(request: GetUserRequest): Promise<UserResponse>;
   GetUserByEmail(request: GetUserByEmailRequest): Promise<UserResponse>;
   CreateUser(request: CreateUserRequest): Promise<CreateUserResponse>;
+  AcquireGuestUser(request: AcquireGuestUserRequest): Promise<AcquireGuestUserResponse>;
   ResolveOauthUser(request: ResolveOauthUserRequest): Promise<ResolveOauthUserResponse>;
   Authenticate(request: AuthenticateRequest): Promise<AuthenticateResponse>;
   UpdateUserStatus(request: UpdateUserStatusRequest): Promise<UserResponse>;
@@ -118,6 +129,25 @@ export interface EvaluatePolicyResponse {
   allowed: boolean;
   reason: string;
 }
+export interface ListRolesRequest {
+  /** Case-insensitive fragment matched against the name and its permissions; empty lists all. */
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+export interface RoleSummary {
+  name: string;
+  permissions: string[];
+  /** Empty when the role has no description: proto3 has no null string. */
+  description: string;
+  isSystem: boolean;
+}
+export interface ListRolesResponse {
+  roles: RoleSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 export interface AccessControlGrpcClient {
   GetPermissions(request: GetPermissionsRequest): Promise<GetPermissionsResponse>;
@@ -125,6 +155,7 @@ export interface AccessControlGrpcClient {
   GrantRole(request: GrantRoleRequest): Promise<GrantRoleResponse>;
   RevokeRole(request: RevokeRoleRequest): Promise<GrantRoleResponse>;
   EvaluatePolicy(request: EvaluatePolicyRequest): Promise<EvaluatePolicyResponse>;
+  ListRoles(request: ListRolesRequest): Promise<ListRolesResponse>;
 }
 
 // ---- credential_vault.v1 ------------------------------------------------------
@@ -412,6 +443,21 @@ export interface ClearCartRequest {
   userId: string;
 }
 
+/**
+ * The explicit guest-cart merge: fold `guestSessionId`'s basket into the cart this
+ * identity addresses, then drop the guest document.
+ */
+export interface MergeGuestCartRequest {
+  sessionId: string;
+  userId: string;
+  guestSessionId: string;
+}
+
+export interface MergeGuestCartResponse {
+  /** True only when at least one line was folded in. */
+  merged: boolean;
+}
+
 export interface CheckoutLine {
   sku: string;
   productId: string;
@@ -439,6 +485,7 @@ export interface CartGrpcClient {
   UpdateItemQty(request: UpdateItemQtyRequest): Promise<CartView>;
   RemoveItem(request: RemoveItemRequest): Promise<CartView>;
   ClearCart(request: ClearCartRequest): Promise<CartView>;
+  MergeGuestCart(request: MergeGuestCartRequest): Promise<MergeGuestCartResponse>;
   GetCheckoutLines(request: GetCartRequest): Promise<CheckoutLines>;
   ValidateForCheckout(request: GetCartRequest): Promise<ValidateForCheckoutResponse>;
 }

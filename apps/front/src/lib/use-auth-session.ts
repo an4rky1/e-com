@@ -20,19 +20,28 @@
  * behaviour this page already had, and deliberately keeps.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ApiRoutes, apiErrorMessage, viaProxy } from '@auth/contracts/http';
+import {
+  ApiRoutes,
+  GUEST_ID_HEADER,
+  StorefrontRoutes,
+  TOKEN_TYPE_BEARER,
+  apiErrorMessage,
+  viaProxy,
+} from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE, JSON_CONTENT_TYPE } from './api-constants';
 import type {
   ApiErrorResponse,
-  CurrentUserResponse,
+  Principal,
   LoginRequest,
   LogoutRequest,
   RefreshRequest,
   TokenPair,
 } from '@auth/contracts/http';
 import { clearSession, writeSession } from './session';
+import { clearGuestId, readGuestId } from './guest';
 
 export interface UseAuthSessionResult {
-  signedIn: CurrentUserResponse | null;
+  signedIn: Principal | null;
   busy: boolean;
   message: string | null;
   info: string | null;
@@ -44,7 +53,7 @@ export interface UseAuthSessionResult {
 
 export function useAuthSession(): UseAuthSessionResult {
   const [busy, setBusy] = useState(false);
-  const [signedIn, setSignedIn] = useState<CurrentUserResponse | null>(null);
+  const [signedIn, setSignedIn] = useState<Principal | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -54,12 +63,12 @@ export function useAuthSession(): UseAuthSessionResult {
   const tokens = useRef<TokenPair | null>(null);
 
   /** `GET /auth/me`, the one question the login answer deliberately does not include. */
-  const loadCaller = async (accessToken: string): Promise<CurrentUserResponse | null> => {
+  const loadCaller = async (accessToken: string): Promise<Principal | null> => {
     const me = await fetch(viaProxy(ApiRoutes.me), {
       method: ApiRoutes.me.method,
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `${TOKEN_TYPE_BEARER} ${accessToken}` },
     });
-    const caller = (await me.json()) as CurrentUserResponse | ApiErrorResponse;
+    const caller = (await me.json()) as Principal | ApiErrorResponse;
 
     if (!me.ok || !('user' in caller)) {
       setMessage(apiErrorMessage(caller, `Could not load the caller (${me.status})`));
@@ -67,6 +76,35 @@ export function useAuthSession(): UseAuthSessionResult {
     }
 
     return caller;
+  };
+
+  /**
+   * Folds this tab's guest basket into the account that just signed in.
+   *
+   * @remarks Best-effort and never rejecting: a merge that fails leaves the guest id in
+   * place, so the *next* sign-in folds it — and the cart service answers idempotently
+   * either way, so retrying can never double a quantity. Runs in parallel with
+   * `loadCaller`: it is a write against the cart, and the sign-in screen has no reason
+   * to wait for it.
+   *
+   * @remarks The id is spent only on success. Clearing it on a failure would strand the
+   * basket the shopper filled while anonymous, with no retry left to move it.
+   */
+  const mergeGuestBasket = (accessToken: string): Promise<void> => {
+    const guestId = readGuestId();
+    if (!guestId) return Promise.resolve();
+
+    return fetch(viaProxy(StorefrontRoutes.cartMerge), {
+      method: StorefrontRoutes.cartMerge.method,
+      headers: {
+        Authorization: `${TOKEN_TYPE_BEARER} ${accessToken}`,
+        [GUEST_ID_HEADER]: guestId,
+      },
+    })
+      .then((response) => {
+        if (response.ok) clearGuestId();
+      })
+      .catch(() => undefined);
   };
 
   const signIn = async (input: { email: string; password: string }): Promise<void> => {
@@ -77,7 +115,7 @@ export function useAuthSession(): UseAuthSessionResult {
     try {
       const response = await fetch(viaProxy(ApiRoutes.login), {
         method: ApiRoutes.login.method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': JSON_CONTENT_TYPE },
         body: JSON.stringify({ email: input.email, password: input.password } satisfies LoginRequest),
       });
 
@@ -106,12 +144,18 @@ export function useAuthSession(): UseAuthSessionResult {
         expiresIn: payload.expiresIn,
       });
 
-      const caller = await loadCaller(payload.accessToken);
+      // The basket this tab filled while anonymous folds into the account in parallel
+      // with loading the caller — a write against the cart, not a question about who
+      // signed in, so neither waits for the other.
+      const [caller] = await Promise.all([
+        loadCaller(payload.accessToken),
+        mergeGuestBasket(payload.accessToken),
+      ]);
       if (caller === null) return;
 
       setSignedIn(caller);
     } catch {
-      setMessage('The gateway did not answer');
+      setMessage(GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -144,7 +188,7 @@ export function useAuthSession(): UseAuthSessionResult {
       refreshToken: params.get('refresh_token') ?? '',
       // The platform issues exactly one scheme, and neither the OAuth landing nor the
       // register hand-off puts it in the fragment — so it is stated here, once.
-      tokenType: 'Bearer',
+      tokenType: TOKEN_TYPE_BEARER,
       expiresIn: Number(params.get('expires_in') ?? 0),
       sessionId: params.get('session_id') ?? '',
     };
@@ -158,7 +202,10 @@ export function useAuthSession(): UseAuthSessionResult {
     });
 
     void (async () => {
-      const caller = await loadCaller(pair.accessToken);
+      const [caller] = await Promise.all([
+        loadCaller(pair.accessToken),
+        mergeGuestBasket(pair.accessToken),
+      ]);
       if (caller !== null) setSignedIn(caller);
     })();
     // Mount-only by nature: the fragment exists on arrival and not again.
@@ -184,7 +231,7 @@ export function useAuthSession(): UseAuthSessionResult {
     try {
       const response = await fetch(viaProxy(ApiRoutes.refresh), {
         method: ApiRoutes.refresh.method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': JSON_CONTENT_TYPE },
         body: JSON.stringify({ refreshToken } satisfies RefreshRequest),
       });
       const payload = (await response.json()) as TokenPair | ApiErrorResponse;
@@ -203,7 +250,7 @@ export function useAuthSession(): UseAuthSessionResult {
       });
       setInfo(`Session refreshed; the new access token lives ${payload.expiresIn}s`);
     } catch {
-      setMessage('The gateway did not answer');
+      setMessage(GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -220,7 +267,7 @@ export function useAuthSession(): UseAuthSessionResult {
       const caller = await loadCaller(accessToken);
       if (caller !== null) setSignedIn(caller);
     } catch {
-      setMessage('The gateway did not answer');
+      setMessage(GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -243,8 +290,8 @@ export function useAuthSession(): UseAuthSessionResult {
       void fetch(viaProxy(ApiRoutes.logout), {
         method: ApiRoutes.logout.method,
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': JSON_CONTENT_TYPE,
+          Authorization: `${TOKEN_TYPE_BEARER} ${accessToken}`,
         },
         body: JSON.stringify({ reason: 'front' } satisfies LogoutRequest),
       }).catch(() => undefined);

@@ -51,11 +51,11 @@ export const TOTP_PERIOD_SEC = 30;
 export const TOTP_WINDOW = 1;
 
 /** The only shape a submitted TOTP code may have. Six digits, leading zeroes kept. */
-export const TOTP_CODE_PATTERN = /^[0-9]{6}$/;
+export const TOTP_CODE_PATTERN = new RegExp(`^[0-9]{${TOTP_DIGITS}}$`);
 
 /** Recovery codes are `XXXXX-XXXXX` over an alphabet with no ambiguous glyphs. */
 export const RECOVERY_CODE_PATTERN = /^[A-Z2-7]{5}-[A-Z2-7]{5}$/;
 
 /** The user-facing secret bundle is only meaningful for a TOTP factor. */
-export const TOTP_OTP_LABEL = 'totp';
+export const TOTP_OTP_LABEL = MfaMethod.TOTP;
 export const TOTP_ALGORITHM = 'SHA1';

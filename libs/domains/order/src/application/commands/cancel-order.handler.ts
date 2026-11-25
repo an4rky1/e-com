@@ -21,6 +21,7 @@ import {
   ORDER_REPOSITORY,
   type OrderRepositoryPort,
 } from '../../domain/ports/order-repository.port';
+import { OrderStatus } from '../../domain/order.aggregate';
 import { ORDER_CONFIG, type OrderConfig } from '../../order.config';
 import { toOrderView } from '../order-read-model';
 import { CancelOrderCommand, type CanceledOrder } from './order.command';
@@ -60,7 +61,7 @@ export class CancelOrderHandler
     // Idempotent: a second cancel of an already-canceled order returns it unchanged
     // without re-running refund/release (the aggregate's `cancel` is a no-op, but we
     // skip the saga entirely so a retried cancel cannot re-enter billing).
-    if (order.status === 'canceled') {
+    if (order.status === OrderStatus.CANCELED) {
       return toOrderView(order);
     }
 

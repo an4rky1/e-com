@@ -1,18 +1,82 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StorefrontRoutes } from '@auth/contracts/http';
+import { QUANTITY_MAX, QUANTITY_MIN, StorefrontRoutes } from '@auth/contracts/http';
 import type { CartView, RemoveCartItemRequest, UpdateCartItemRequest } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE } from '../../lib/api-constants';
 import { formatMoney } from '../../lib/money';
 import { storefrontFetch, useStorefront } from '../../lib/storefront-client';
+import { GRID_LIST_STYLE, pluralSuffix } from '../../lib/ui';
 import styles from '../page.module.scss';
+
+const QUANTITY_INPUT_WIDTH = '4.5rem';
+
+/**
+ * A quantity editor that commits when the shopper is done, not on every keystroke.
+ *
+ * @remarks Sending an update per character both spams the cart and disables the input
+ * mid-number, so "12" is hard to type at all. The draft is local until blur or Enter; an
+ * invalid or unchanged value falls back to the quantity the server currently has.
+ */
+function QuantityInput({
+  sku,
+  quantity,
+  disabled,
+  onCommit,
+}: {
+  sku: string;
+  quantity: number;
+  disabled: boolean;
+  onCommit: (quantity: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(quantity));
+
+  useEffect(() => {
+    setDraft(String(quantity));
+  }, [quantity]);
+
+  const commit = () => {
+    const next = Number(draft);
+    if (
+      Number.isSafeInteger(next) &&
+      next >= QUANTITY_MIN &&
+      next <= QUANTITY_MAX &&
+      next !== quantity
+    ) {
+      onCommit(next);
+      return;
+    }
+    setDraft(String(quantity));
+  };
+
+  return (
+    <input
+      id={`qty-${sku}`}
+      type="number"
+      min={QUANTITY_MIN}
+      max={QUANTITY_MAX}
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+      style={{ width: QUANTITY_INPUT_WIDTH }}
+    />
+  );
+}
 
 /**
  * The shopper's basket. Mutations are the contract's POST verbs — update, remove, clear.
  *
- * @remarks Identity is the bearer, never a form field: every call goes through
- * `storefrontFetch`, which attaches the session token and refuses when there is none.
+ * @remarks Identity is the bearer or this tab's guest id, never a form field: every call
+ * goes through `storefrontFetch`, which attaches the session token when there is one and
+ * the `X-Guest-Id` when there is not. Signing in later folds the basket into the account.
  */
 export default function CartPage() {
   const { data, error, loading, reload } = useStorefront<CartView>(StorefrontRoutes.cartGet);
@@ -29,7 +93,7 @@ export default function CartPage() {
       setNotice(done);
       reload();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'The gateway did not answer');
+      setMessage(err instanceof Error ? err.message : GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -79,14 +143,14 @@ export default function CartPage() {
         <section className={styles.card}>
           <div className={styles.row}>
             <strong>
-              {data.itemCount} item{data.itemCount === 1 ? '' : 's'}
+              {data.itemCount} item{pluralSuffix(data.itemCount)}
             </strong>
             <span>Subtotal {formatMoney(data.subtotal)}</span>
             <span>Total {formatMoney(data.total)}</span>
             <span className={styles.muted}>v{data.version}</span>
           </div>
 
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem' }}>
+          <ul style={GRID_LIST_STYLE}>
             {data.items.map((item) => (
               <li key={item.sku} className={styles.row}>
                 <div style={{ flex: 1 }}>
@@ -99,15 +163,11 @@ export default function CartPage() {
                   ) : null}
                 </div>
                 <label htmlFor={`qty-${item.sku}`}>Qty</label>
-                <input
-                  id={`qty-${item.sku}`}
-                  type="number"
-                  min={1}
-                  max={999}
-                  value={item.quantity}
+                <QuantityInput
+                  sku={item.sku}
+                  quantity={item.quantity}
                   disabled={busy}
-                  onChange={(event) => void updateQty(item.sku, Number(event.target.value))}
-                  style={{ width: '4.5rem' }}
+                  onCommit={(quantity) => void updateQty(item.sku, quantity)}
                 />
                 <span>{formatMoney(item.totalPrice)}</span>
                 <button type="button" onClick={() => void remove(item.sku)} disabled={busy}>

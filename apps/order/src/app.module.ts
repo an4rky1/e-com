@@ -5,6 +5,7 @@
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -45,13 +46,12 @@ const peerChannel = createStaticGrpcChannel({
   },
 });
 
-
 @Module({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('order'),
-    ObservabilityModule.forRoot('order'),
+    HealthModule.forRoot(ServiceNames.ORDER),
+    ObservabilityModule.forRoot(ServiceNames.ORDER),
 
     createOrderModule({publisher: eventPublisher, grpcChannel: peerChannel}),
   ],

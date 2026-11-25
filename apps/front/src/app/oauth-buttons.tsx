@@ -5,6 +5,8 @@ import { ApiRoutes, viaOAuth, viaProxy } from '@auth/contracts/http';
 import type { OAuthProvidersResponse } from '@auth/contracts/http';
 import styles from './page.module.scss';
 
+const TELEGRAM_WIDGET_SCRIPT_SRC = 'https://telegram.org/js/telegram-widget.js?22';
+
 /**
  * The provider buttons, on whichever page offers a way in.
  *
@@ -58,7 +60,7 @@ export default function OAuthButtons() {
     host.replaceChildren();
     const script = document.createElement('script');
     script.async = true;
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.src = TELEGRAM_WIDGET_SCRIPT_SRC;
     script.setAttribute('data-telegram-login', telegramBot);
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-userpic', 'false');
@@ -76,7 +78,7 @@ export default function OAuthButtons() {
   }
 
   return (
-    <section className={styles.providers} aria-label="or continue with">
+    <section className={styles.providers}>
       <p className={styles.muted}>or continue with</p>
       <div className={styles.row}>
         {available.google ? (

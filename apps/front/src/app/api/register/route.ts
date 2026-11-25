@@ -25,6 +25,9 @@ import {
   apiErrorMessage,
 } from '@auth/contracts/http';
 import type { RegisterRequest } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE, JSON_CONTENT_TYPE } from '../../../lib/api-constants';
+
+const GATEWAY_ADDRESS_NOT_CONFIGURED = 'The gateway address is not configured';
 
 /** The slice of the environment this handler needs; injectable so tests never touch `process.env`. */
 type Env = { GATEWAY_URL?: string | undefined };
@@ -94,13 +97,13 @@ export async function handleRegister(
 
   const gatewayUrl = env.GATEWAY_URL;
   if (!gatewayUrl) {
-    return failure(500, 'The gateway address is not configured');
+    return failure(500, GATEWAY_ADDRESS_NOT_CONFIGURED);
   }
   let registerUrl: string;
   try {
     registerUrl = new URL(ApiRoutes.register.path, gatewayUrl).toString();
   } catch {
-    return failure(500, 'The gateway address is not configured');
+    return failure(500, GATEWAY_ADDRESS_NOT_CONFIGURED);
   }
 
   // Only the three validated fields cross the wire. Anything else in the request is dropped:
@@ -112,19 +115,19 @@ export async function handleRegister(
   try {
     response = await fetch(registerUrl, {
       method: ApiRoutes.register.method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': JSON_CONTENT_TYPE },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
   } catch {
-    return failure(502, 'The gateway did not answer');
+    return failure(502, GATEWAY_UNAVAILABLE_MESSAGE);
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return failure(502, 'The gateway did not answer');
+    return failure(502, GATEWAY_UNAVAILABLE_MESSAGE);
   }
 
   if (!response.ok) {

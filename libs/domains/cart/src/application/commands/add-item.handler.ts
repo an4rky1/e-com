@@ -12,10 +12,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import {
-  ResourceNotFoundException,
-  ValidationException,
-} from '@auth/platform/error-handling';
+import { ResourceNotFoundException } from '@auth/platform/error-handling';
 import { CartWorkspace } from '../cart-workspace';
 import {
   buildCartReadModel,
@@ -28,6 +25,9 @@ import {
 import { resolveCartOwner } from '../../domain/cart-owner';
 import { CART_CONFIG, type CartConfig } from '../../cart.config';
 import type { CartLimits } from '../../domain/cart.aggregate';
+import { ProductId } from '../../domain/value-objects/product-id.vo';
+import { Quantity } from '../../domain/value-objects/quantity.vo';
+import { Sku } from '../../domain/value-objects/sku.vo';
 import { AddItemCommand } from './cart.commands';
 
 @Injectable()
@@ -47,42 +47,34 @@ export class AddItemHandler implements ICommandHandler<AddItemCommand, CartReadM
   }
 
   async execute(command: AddItemCommand): Promise<CartReadModel> {
-    const sku = command.sku?.trim() ?? '';
-    if (sku.length === 0) {
-      throw new ValidationException('sku is required', { sku: command.sku });
-    }
-    if (!Number.isSafeInteger(command.quantity) || command.quantity < 1) {
-      throw new ValidationException('quantity must be a positive integer', {
-        sku,
-        quantity: command.quantity,
-      });
-    }
-    if (command.quantity > this.config.maxQuantityPerItem) {
-      throw new ValidationException('quantity exceeds the per-item limit', {
-        sku,
-        quantity: command.quantity,
-        maxQuantityPerItem: this.config.maxQuantityPerItem,
-      });
-    }
+    const sku = Sku.of(command.sku);
+    const quantity = Quantity.of(command.quantity);
+    quantity.assertAtMost(this.config.maxQuantityPerItem, { sku: sku.value });
 
     // Refused before the catalogue is touched: a request that cannot say which cart it
     // means should not cost a round trip to find that out.
     resolveCartOwner(command.identity);
 
-    const sellable = await this.pricing.findSellable(sku);
+    const sellable = await this.pricing.findSellable(sku.value);
     if (!sellable) {
-      throw new ResourceNotFoundException('the SKU is not sellable', { sku });
+      throw new ResourceNotFoundException('the SKU is not sellable', {
+        sku: sku.value,
+      });
     }
+
+    // The catalogue's spelling of the SKU becomes the line's identity. It answered for the
+    // SKU that was asked about, and keeping its canonical form avoids a line that only
+    // differs from the catalogue by casing.
+    const lineSku = Sku.of(sellable.sku);
 
     const cart = await this.workspace.mutate(command.identity, (target) => {
       target.addItem(
         {
-          sku: sellable.sku,
-          productId: sellable.productId,
+          sku: lineSku,
+          productId: ProductId.of(sellable.productId),
           name: sellable.name,
-          unitPriceMinor: sellable.priceMinor,
-          currency: sellable.currency,
-          quantity: command.quantity,
+          unitPrice: sellable.price,
+          quantity,
         },
         this.limits,
         new Date(),

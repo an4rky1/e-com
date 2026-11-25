@@ -19,7 +19,6 @@ export const Defaults = {
   MAX_RETRIES: 5,
   BASE_RETRY_DELAY_MS: 1_000,
   MAX_RETRY_DELAY_MS: 60_000,
-  CLEANUP_INTERVAL_MS: 3_600_000,
   RETENTION_HOURS: 24,
   ENABLED: true,
 } as const;
@@ -41,9 +40,6 @@ export const outboxSchema = z.object({
   MAX_RETRY_DELAY_MS: envInt(Defaults.MAX_RETRY_DELAY_MS, { min: 1_000 }).describe(
     'Backoff ceiling',
   ),
-  CLEANUP_INTERVAL_MS: envInt(Defaults.CLEANUP_INTERVAL_MS, {
-    min: 60_000,
-  }).describe('How often published rows are pruned'),
   RETENTION_HOURS: envInt(Defaults.RETENTION_HOURS, { min: 1 }).describe(
     'How long published rows are kept for inspection',
   ),

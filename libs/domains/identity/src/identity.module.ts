@@ -1,6 +1,5 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
-import { readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
 import { PrismaService } from '@auth/infra/prisma';
 import {
   createOutboxModule,
@@ -11,6 +10,8 @@ import {
 import { domainEventProviders } from '@auth/infra/events';
 import { PrismaClient } from './generated/prisma/client';
 import { CreateUserHandler } from './application/commands/create-user.handler';
+import { AcquireGuestUserHandler } from './application/commands/acquire-guest-user.handler';
+import { ReapGuestUsersHandler } from './application/commands/reap-guest-users.handler';
 import { ResolveOauthUserHandler } from './application/commands/resolve-oauth-user.handler';
 import {
   DeleteUserHandler,
@@ -23,22 +24,17 @@ import {
   ListUsersHandler,
 } from './application/queries/user.queries';
 import { IdentityService } from './application/facade/identity.service';
+import { GuestReaperService } from './application/guest-reaper.service';
 import { USER_REPOSITORY } from './domain/ports/user-repository.port';
 import { PrismaUserRepository } from './infrastructure/persistence/prisma-user.repository';
 import { IDENTITY_EVENTS } from './infrastructure/events/identity.events';
 import { IdentityHealthIndicator } from './identity.health';
-import {
-  IDENTITY_PRISMA,
-  identitySchema,
-  type IdentityConfig,
-} from './identity.config';
+import { IDENTITY_PRISMA, IDENTITY_CONFIG, resolveIdentityConfig } from './identity.config';
 import { UserController } from './presentation/user.controller';
 import { IdentityGrpcController } from './presentation/grpc/identity.grpc.controller';
 
 @Module({})
 export class IdentityModule {}
-
-export const IDENTITY_CONFIG = Symbol('IDENTITY_CONFIG');
 
 export interface IdentityModuleOptions {
   /**
@@ -85,6 +81,8 @@ export function createIdentityModule(options: IdentityModuleOptions): DynamicMod
       ...domainEventProviders(IDENTITY_EVENTS),
 
       CreateUserHandler,
+      AcquireGuestUserHandler,
+      ReapGuestUsersHandler,
       ResolveOauthUserHandler,
       UpdateUserStatusHandler,
       VerifyUserEmailHandler,
@@ -94,22 +92,10 @@ export function createIdentityModule(options: IdentityModuleOptions): DynamicMod
       ListUsersHandler,
       IdentityService,
       IdentityHealthIndicator,
+      GuestReaperService,
     ],
     // The gRPC controller is deliberately not exported: it is attached to the microservice by
     // the app's bootstrap, not injected by a consumer.
     exports: [IdentityService, IdentityHealthIndicator, USER_REPOSITORY],
   };
-}
-
-function resolveIdentityConfig(): IdentityConfig {
-  const env = readNamespacedEnv('IDENTITY', identitySchema, process.env);
-  return resolveModuleConfig(
-    {
-      cacheEnabled: env.CACHE_ENABLED,
-      cacheTtlSec: env.CACHE_TTL_SEC,
-      defaultLocale: env.DEFAULT_LOCALE,
-      maxPageSize: env.MAX_PAGE_SIZE,
-    },
-    {},
-  );
 }

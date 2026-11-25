@@ -58,6 +58,8 @@ describe('GatewayService.me', () => {
       user: identity.user,
       roles: ['member', 'support'],
       permissions: ['users:read', 'users:write'],
+      // A signed-in account with no recognised role is still a user, not an unknown kind.
+      actorKind: 'user',
       sessionId: SESSION_ID,
     });
   });
@@ -68,6 +70,60 @@ describe('GatewayService.me', () => {
     await service.me(principalOf({ userId: 'someone-else' }));
 
     expect(identity.fetchedById).toEqual(['someone-else']);
+  });
+
+  it('resolves a guest caller by the id that travels as sessionId', async () => {
+    const { service, identity, accessControl } = serviceWith();
+    const GUEST_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+    identity.user = userOf({
+      id: GUEST_ID,
+      email: `guest-${GUEST_ID}@guest.invalid`,
+      status: 'guest',
+    });
+    accessControl.roles = [];
+    accessControl.permissions = [];
+
+    const current = await service.me({ userId: '', email: '', sessionId: GUEST_ID });
+
+    // Both peers are asked about the guest id: for a session-only principal it *is* the
+    // subject — the row identity minted, the key access-control reads grants by.
+    expect(identity.fetchedById).toEqual([GUEST_ID]);
+    expect(accessControl.permissionLookups).toEqual([GUEST_ID]);
+    expect(current).toEqual({
+      user: identity.user,
+      // `guest` is derived from the account status: it is not an assignment, so
+      // access-control is still asked and still answers with no grants.
+      roles: ['guest'],
+      permissions: [],
+      actorKind: 'guest',
+      sessionId: GUEST_ID,
+    });
+  });
+
+  it('reports the strongest role the caller holds as their actor kind', async () => {
+    const { service, identity, accessControl } = serviceWith();
+    identity.user = userOf({ status: 'active' });
+    accessControl.roles = ['user', 'moderator'];
+    accessControl.permissions = ['catalog:product.create'];
+
+    const current = await service.me(principalOf());
+
+    expect(current.actorKind).toBe('moderator');
+  });
+
+  it('asks identity about a guest id instead of composing an answer from nothing', async () => {
+    // A well-formed uuid no row answers to — never minted, or reaped — gets identity's own
+    // 404. A profile invented at the edge would be a caller with a status nobody ever gave.
+    const { service, identity } = serviceWith();
+    const GUEST_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+    identity.getError = new ResourceNotFoundException('user not found');
+
+    const error = await service
+      .me({ userId: '', email: '', sessionId: GUEST_ID })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ResourceNotFoundException);
+    expect(identity.fetchedById).toEqual([GUEST_ID]);
   });
 
   it('fails when the identity lookup fails', async () => {
@@ -94,18 +150,6 @@ describe('GatewayService.me', () => {
     expect((error as DependencyUnavailableException).getStatus()).toBe(
       HttpStatus.SERVICE_UNAVAILABLE,
     );
-  });
-
-  it('does not report permissions minted into the token instead of asking', async () => {
-    const { service, accessControl } = serviceWith();
-    // The principal claims `users:admin`; access-control no longer grants it.
-    accessControl.permissions = ['users:read'];
-
-    const current = await service.me(
-      principalOf({ permissions: ['users:admin'] }),
-    );
-
-    expect(current.permissions).toEqual(['users:read']);
   });
 
   it('reports the email identity has, not the one the token carries', async () => {

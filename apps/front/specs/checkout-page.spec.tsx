@@ -11,6 +11,8 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import CheckoutPage from '../src/app/checkout/page';
 
+const EXPIRES_IN_SEC = 900;
+
 const originalFetch = global.fetch;
 
 const reply = (status: number, body: unknown) => ({
@@ -75,7 +77,12 @@ const callsOf = (fetchMock: jest.Mock): [string, { body?: string }][] =>
 beforeEach(() => {
   sessionStorage.setItem(
     'auth.session',
-    JSON.stringify({ accessToken: 'token', refreshToken: '', sessionId: 's', expiresIn: 900 }),
+    JSON.stringify({
+      accessToken: 'token',
+      refreshToken: '',
+      sessionId: 's',
+      expiresIn: EXPIRES_IN_SEC,
+    }),
   );
 });
 

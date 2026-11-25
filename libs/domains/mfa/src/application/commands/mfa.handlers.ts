@@ -58,6 +58,7 @@ import {
   MfaMethod,
   TOTP_ALGORITHM,
 } from '../../domain/value-objects/mfa-method.vo';
+import { MfaStatus } from '../../domain/value-objects/mfa-status.vo';
 import { MFA_CONFIG, enrollmentTtlMs, toPolicy, type MfaConfig } from '../../mfa.config';
 import { toAppException, toMissingFactorException } from '../errors/mfa-error-translation';
 import {
@@ -74,6 +75,8 @@ import {
 } from './mfa.commands';
 
 // ---- shared helpers -------------------------------------------------------------
+
+const MIN_RECOVERY_CODES = 1;
 
 interface FailureRecorderDeps {
   readonly factors: MfaFactorRepositoryPort;
@@ -154,7 +157,7 @@ export class BeginEnrollmentHandler
       (await this.factors.findActiveByUserAndMethod(command.userId, command.method)) ??
       (await this.factors.findByUser(command.userId)).find(
         (candidate) =>
-          candidate.method === command.method && candidate.status === 'pending',
+          candidate.method === command.method && candidate.status === MfaStatus.PENDING,
       );
     if (live) {
       throw new ValidationException(
@@ -517,7 +520,7 @@ export class RegenerateRecoveryCodesHandler
   async execute(command: RegenerateRecoveryCodesCommand): Promise<RecoveryCodeBundle> {
     const now = this.clock.now();
     const count = Math.min(
-      Math.max(command.count ?? this.config.recoveryCodeCount, 1),
+      Math.max(command.count ?? this.config.recoveryCodeCount, MIN_RECOVERY_CODES),
       this.config.recoveryCodeCount,
     );
 

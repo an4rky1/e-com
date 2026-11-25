@@ -11,6 +11,11 @@ service CartService {
   rpc UpdateItemQty (UpdateItemQtyRequest) returns (Cart);
   rpc RemoveItem (RemoveItemRequest) returns (Cart);
   rpc ClearCart (ClearCartRequest) returns (Cart);
+  // Folds the guest basket `guest_session_id` names into the cart this request's
+  // identity addresses, then drops the guest document. Called by the edge right after
+  // sign-in; answers `merged: false` when there was no guest basket to fold, which is
+  // the ordinary case and never an error.
+  rpc MergeGuestCart (MergeGuestCartRequest) returns (MergeGuestCartResponse);
   // Snapshot of the lines the order service copies when it creates an order.
   rpc GetCheckoutLines (GetCheckoutLinesRequest) returns (CheckoutLines);
   // Pre-checkout validation: which lines changed price or vanished since add-time.
@@ -78,6 +83,20 @@ message RemoveItemRequest {
 message ClearCartRequest {
   string session_id = 1;
   string user_id = 2;
+}
+
+message MergeGuestCartRequest {
+  // The signed-in cart's identity — where the guest basket is folded to.
+  string session_id = 1;
+  string user_id = 2;
+  // The guest basket's address: the guest id the browser presented as its session
+  // identity while it was anonymous.
+  string guest_session_id = 3;
+}
+
+message MergeGuestCartResponse {
+  // True only when at least one line was folded in.
+  bool merged = 1;
 }
 
 message GetCheckoutLinesRequest {

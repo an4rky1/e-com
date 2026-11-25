@@ -1,0 +1,17 @@
+{
+  "name": "@auth/infra/shop-money",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/infra/shop-money/src",
+  "projectType": "library",
+  "tags": [
+    "type:infra"
+  ],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p libs/infra/shop-money/tsconfig.lib.json --noEmit"
+      }
+    }
+  }
+}

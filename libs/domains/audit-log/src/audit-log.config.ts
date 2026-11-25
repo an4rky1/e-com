@@ -16,6 +16,7 @@ import {
   resolveModuleConfig,
 } from '@auth/platform/config';
 import { z } from 'zod';
+import { MAX_PAGE_SIZE } from '@auth/contracts/http/api';
 
 /** DI token for this service's own Prisma client, separate from any platform-wide binding. */
 export const AUDIT_LOG_PRISMA = Symbol('AUDIT_LOG_PRISMA');
@@ -31,7 +32,7 @@ export const Defaults = {
    * the most of it, so an unbounded `limit` here is a denial of service that only surfaces
    * once the table is big — which is exactly when somebody is relying on it.
    */
-  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE,
   /**
    * Default page size when a caller does not pass one.
    *

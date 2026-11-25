@@ -10,6 +10,10 @@
  * acceptable; where the thresholds come from is the caller's business.
  */
 import { Result, type DomainError } from '@auth/core';
+import {
+  PASSWORD_MAX_LENGTH as CONTRACT_PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '@auth/contracts/http';
 
 /**
  * The reasons a candidate password can be refused.
@@ -36,19 +40,21 @@ export type PasswordPolicyViolation =
  * The smallest length this service will ever accept.
  *
  * @remarks A floor, not a default: `minLength` may be raised by configuration, but a caller
- * that lowers it below twelve characters is not making a different decision, they are making
- * a worse one.
+ * that lowers it below the contract's {@link PASSWORD_MIN_LENGTH} is not making a different
+ * decision, they are making a worse one. The value itself lives in `@auth/contracts/http`
+ * so the edge's DTO, this policy and the register form all read the same number.
  */
-export const PASSWORD_MIN_LENGTH_FLOOR = 12;
+export const PASSWORD_MIN_LENGTH_FLOOR = PASSWORD_MIN_LENGTH;
 
 /**
  * Upper bound on a stored password.
  *
  * @remarks Argon2 hashes a password of any length, so this is not about the hash — it is
  * about the 32 KiB `UNLOGGED` value nobody will ever look at. A megabyte-long "password" is
- * a denial-of-service request with extra steps.
+ * a denial-of-service request with extra steps. Same source as the edge's maximum: a
+ * password the edge forwards is a password this policy can store.
  */
-export const PASSWORD_MAX_LENGTH = 256;
+export const PASSWORD_MAX_LENGTH = CONTRACT_PASSWORD_MAX_LENGTH;
 
 /**
  * The passwords an attacker tries first.

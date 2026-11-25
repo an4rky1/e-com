@@ -72,8 +72,10 @@ import { CartController } from './presentation/cart.controller';
 import { CheckoutController } from './presentation/checkout.controller';
 import { OrdersController } from './presentation/orders.controller';
 import { WebhooksController } from './presentation/webhooks.controller';
+import { RoleAdministrationController } from './presentation/role-administration.controller';
 import { IdempotencyInterceptor } from './presentation/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
+import { GuestIdentityGuard } from './presentation/guards/guest-identity.guard';
 import { PermissionsGuard } from './presentation/guards/permissions.guard';
 import { RateLimitGuard } from './presentation/guards/rate-limit.guard';
 import { FeatureFlagGuard } from './presentation/guards/feature-flag.guard';
@@ -195,6 +197,7 @@ export function createGatewayModule(
       CheckoutController,
       OrdersController,
       WebhooksController,
+      RoleAdministrationController,
     ],
     providers: [
       { provide: GATEWAY_CONFIG, useValue: config },
@@ -225,6 +228,7 @@ export function createGatewayModule(
       FeatureFlagGuard,
       RateLimitGuard,
       JwtAuthGuard,
+      GuestIdentityGuard,
       PermissionsGuard,
       GatewayHealthIndicator,
       {

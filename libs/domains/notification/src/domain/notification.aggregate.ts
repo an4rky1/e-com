@@ -25,6 +25,15 @@ import { NotificationId } from './value-objects/notification-id.vo';
 /** Re-exported so a caller of the aggregate needs one import for both halves. */
 export { NotificationId };
 
+/** Aggregate type scoping the events this aggregate publishes. */
+export const AGGREGATE_TYPE = 'notification';
+
+/** Event types this aggregate publishes; the stores match on these strings. */
+export const NotificationEventType = {
+  DISPATCHED: 'notification.dispatched',
+  READ: 'notification.read',
+} as const;
+
 /**
  * Where a notification is delivered.
  *
@@ -129,7 +138,7 @@ export class NotificationDispatched extends DomainEvent {
     channels: readonly NotificationChannel[],
     correlationId?: string,
   ) {
-    super(aggregateId.value, 'notification', 'notification.dispatched', 1, correlationId);
+    super(aggregateId.value, AGGREGATE_TYPE, NotificationEventType.DISPATCHED, 1, correlationId);
     this.payload = Object.freeze({
       userId,
       template,
@@ -149,7 +158,7 @@ export class NotificationRead extends DomainEvent {
     readAt: Date,
     correlationId?: string,
   ) {
-    super(aggregateId.value, 'notification', 'notification.read', 1, correlationId);
+    super(aggregateId.value, AGGREGATE_TYPE, NotificationEventType.READ, 1, correlationId);
     this.payload = Object.freeze({ userId, readAt: readAt.toISOString() });
   }
 }

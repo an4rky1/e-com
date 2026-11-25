@@ -5,8 +5,11 @@ import { envBoolean, envInt, envString } from '@auth/platform/config';
 
 export const ENV_PREFIX = 'KAFKA';
 
+/** Local development default; overridden with `KAFKA_BROKERS` in real deployments. */
+const DEFAULT_BROKERS = 'localhost:9092';
+
 export const Defaults = {
-  BROKERS: 'localhost:9092',
+  BROKERS: DEFAULT_BROKERS,
   CLIENT_ID: 'auth-service',
   GROUP_ID: 'auth-consumer',
   ACKS: -1 as const,

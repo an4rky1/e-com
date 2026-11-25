@@ -6,6 +6,7 @@
  * graceful shutdown order.
  */
 import 'reflect-metadata';
+import { ServiceNames } from '@auth/contracts';
 import './tracing';
 import path from 'node:path';
 import { Logger } from '@nestjs/common';
@@ -13,12 +14,14 @@ import { NestFactory } from '@nestjs/core';
 import { Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 
+const DEFAULT_PORT = 3013;
+const BIND_HOST = '0.0.0.0';
+
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
   app.enableShutdownHooks();
-
 
   // gRPC joins the existing HTTP server rather than opening a second one: one process, one
   // port, two transports.
@@ -26,7 +29,7 @@ async function bootstrap(): Promise<void> {
     {
       transport: Transport.GRPC,
       options: {
-        url: process.env.GRPC_URL ?? '0.0.0.0:13013',
+        url: process.env.GRPC_URL ?? `${BIND_HOST}:13013`,
         package: 'inventory.v1',
         protoPath: path.resolve(__dirname, '../../../libs/contracts/proto/inventory.proto'),
       },
@@ -35,9 +38,10 @@ async function bootstrap(): Promise<void> {
   );
 
   await app.startAllMicroservices();
-  await app.listen(Number(process.env.PORT ?? 3013), '0.0.0.0');
+  const port = Number(process.env.PORT ?? DEFAULT_PORT);
+  await app.listen(port, BIND_HOST);
 
-  logger.log(`${process.env.SERVICE_NAME ?? 'inventory'} listening on port ${process.env.PORT ?? 3013}`);
+  logger.log(`${process.env.SERVICE_NAME ?? ServiceNames.INVENTORY} listening on port ${port}`);
 }
 
 bootstrap().catch((error: unknown) => {

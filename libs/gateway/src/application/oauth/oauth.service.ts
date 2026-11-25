@@ -28,7 +28,7 @@
  * it, so it does not sit in history either. The alternative, a cookie set through the proxy,
  * would put session semantics in the rewrite layer, which is a worse place for them.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { isOAuthProvider, type OAuthProvidersResponse } from '@auth/contracts/http';
 import {
   AppException,
@@ -38,11 +38,14 @@ import {
 import { GATEWAY_CONFIG, type GatewayConfig } from '../../gateway.config';
 import type { LoginResult } from '../facade/gateway.service';
 import {
+  ACCESS_CONTROL_CLIENT,
   IDENTITY_CLIENT,
   SESSION_CLIENT,
+  type AccessControlClientPort,
   type IdentityClientPort,
   type SessionClientPort,
 } from '../ports/peer-clients.port';
+import { grantSignupRole } from '../grant-signup-role';
 import { OAUTH_HTTP, type OAuthHttpPort } from './oauth.port';
 import {
   OAUTH_PROVIDER_SPECS,
@@ -53,11 +56,15 @@ import {
 
 @Injectable()
 export class OAuthService {
+  private readonly logger = new Logger(OAuthService.name);
+
   constructor(
     @Inject(GATEWAY_CONFIG) private readonly config: GatewayConfig,
     @Inject(OAUTH_HTTP) private readonly http: OAuthHttpPort,
     @Inject(IDENTITY_CLIENT) private readonly identity: IdentityClientPort,
     @Inject(SESSION_CLIENT) private readonly sessions: SessionClientPort,
+    @Inject(ACCESS_CONTROL_CLIENT)
+    private readonly accessControl: AccessControlClientPort,
   ) {}
 
   /**
@@ -122,7 +129,7 @@ export class OAuthService {
 
     const profile = await spec.callback(input, { config: this.config, http: this.http });
 
-    const { user } = await this.identity.resolveOauthUser({
+    const { user, created } = await this.identity.resolveOauthUser({
       provider: spec.name,
       subject: profile.subject,
       email: profile.email,
@@ -130,12 +137,21 @@ export class OAuthService {
       displayName: profile.displayName,
     });
 
+    // A provider can be the first thing that ever creates this account, in which case it
+    // needs the same baseline role a password sign-up gets. The grant is idempotent, so an
+    // existing account that already holds a role is unaffected — and a first sign-in that
+    // created the row must not land in a session with no grants at all.
+    if (created) {
+      await grantSignupRole(this.accessControl, this.logger, user.id, `oauth:${spec.name}`);
+    }
+
     return this.sessions.issueTokens({
       userId: user.id,
       email: user.email,
       ipAddress: input.ipAddress,
     });
   }
+
 
   /**
    * Where a finished walk lands: the front's own origin, tokens in the fragment.

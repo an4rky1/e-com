@@ -133,6 +133,10 @@ class LinesCart implements CartClientPort {
   async clearCart(): Promise<never> {
     throw new Error('not under test');
   }
+
+  async mergeGuestCart(): Promise<never> {
+    throw new Error('not under test');
+  }
 }
 
 const CATALOG_STUB = {

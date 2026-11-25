@@ -16,6 +16,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   AddItemCommand,
   ClearCartCommand,
+  MergeGuestCartCommand,
   RemoveItemCommand,
   UpdateItemQtyCommand,
 } from '../commands/cart.commands';
@@ -78,6 +79,17 @@ export class CartService {
   /** Empties the basket. Safe to repeat: a second call answers exactly as the first. */
   clearCart(identity: CartIdentity): Promise<CartReadModel> {
     return this.commandBus.execute(new ClearCartCommand(identity));
+  }
+
+  /**
+   * Folds the guest basket this browser presented at sign-in into the signed-in cart.
+   *
+   * @remarks Answers `false` when there was no guest basket to fold — the ordinary answer
+   * for a shopper who signed in without browsing anonymously first, and the one that makes
+   * the call safe to repeat after a partial failure.
+   */
+  mergeGuestCart(identity: CartIdentity, guestSessionId: string): Promise<boolean> {
+    return this.commandBus.execute(new MergeGuestCartCommand(identity, guestSessionId));
   }
 
   /**

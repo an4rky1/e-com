@@ -11,6 +11,11 @@
  */
 import { z } from 'zod';
 import { envInt, envString, readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import {
+  GRPC_DEADLINE_MAX_MS,
+  GRPC_DEADLINE_MIN_MS,
+  GRPC_DEADLINE_MS,
+} from '@auth/contracts/grpc/deadline';
 
 /** This service's own Prisma client. Never shared with another domain lib. */
 export const INVENTORY_PRISMA = Symbol('INVENTORY_PRISMA');
@@ -41,7 +46,7 @@ export const Defaults = {
    * @remarks A reserve that hangs is worse than a reserve that fails: the order side
    * cannot tell "still deciding" from "decided no", and a retry is the only safe answer.
    */
-  GRPC_DEADLINE_MS: 5_000,
+  GRPC_DEADLINE_MS,
 } as const;
 
 /**
@@ -53,7 +58,10 @@ export const Defaults = {
 export const inventorySchema = z.object({
   DEFAULT_WAREHOUSE: envString(Defaults.DEFAULT_WAREHOUSE),
   SAFETY_DEFAULT: envInt(Defaults.SAFETY_DEFAULT, { min: 0, max: 1_000_000 }),
-  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
+  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, {
+    min: GRPC_DEADLINE_MIN_MS,
+    max: GRPC_DEADLINE_MAX_MS,
+  }),
 });
 
 export type InventoryEnvConfig = z.infer<typeof inventorySchema>;

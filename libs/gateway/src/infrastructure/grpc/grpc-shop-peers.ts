@@ -26,6 +26,7 @@ import type {
   OrderClientPort,
   ShopMoney,
 } from '../../application/ports/peer-clients.port';
+import { cartIdentityFrom } from '../../application/cart-identity';
 
 /**
  * Shop money arrives as proto strings; the edge keeps them that way.
@@ -211,10 +212,6 @@ const toInvoice = (wire: WireInvoice) => ({
 });
 
 /** Cart identity fields every cart RPC carries, taken from the JWT at the edge. */
-const identityOf = (identity: { userId: string; sessionId: string }) => ({
-  userId: identity.userId,
-  sessionId: identity.sessionId,
-});
 
 @Injectable()
 export class GrpcCatalogClient implements CatalogClientPort {
@@ -290,7 +287,7 @@ export class GrpcCartClient implements CartClientPort {
 
   async getCart(identity: { userId: string; sessionId: string }) {
     return toCartView(
-      await this.peers.call<WireCart>(METHOD.CART_GET, identityOf(identity)),
+      await this.peers.call<WireCart>(METHOD.CART_GET, cartIdentityFrom(identity)),
     );
   }
 
@@ -300,7 +297,7 @@ export class GrpcCartClient implements CartClientPort {
   ) {
     return toCartView(
       await this.peers.call<WireCart>(METHOD.CART_ADD_ITEM, {
-        ...identityOf(identity),
+        ...cartIdentityFrom(identity),
         sku: input.sku,
         quantity: input.quantity,
       }),
@@ -313,7 +310,7 @@ export class GrpcCartClient implements CartClientPort {
   ) {
     return toCartView(
       await this.peers.call<WireCart>(METHOD.CART_UPDATE_QTY, {
-        ...identityOf(identity),
+        ...cartIdentityFrom(identity),
         sku: input.sku,
         quantity: input.quantity,
       }),
@@ -326,7 +323,7 @@ export class GrpcCartClient implements CartClientPort {
   ) {
     return toCartView(
       await this.peers.call<WireCart>(METHOD.CART_REMOVE_ITEM, {
-        ...identityOf(identity),
+        ...cartIdentityFrom(identity),
         sku: input.sku,
       }),
     );
@@ -334,8 +331,17 @@ export class GrpcCartClient implements CartClientPort {
 
   async clearCart(identity: { userId: string; sessionId: string }) {
     return toCartView(
-      await this.peers.call<WireCart>(METHOD.CART_CLEAR, identityOf(identity)),
+      await this.peers.call<WireCart>(METHOD.CART_CLEAR, cartIdentityFrom(identity)),
     );
+  }
+
+  async mergeGuestCart(identity: { userId: string; sessionId: string }, guestSessionId: string) {
+    const response = await this.peers.call<{ merged?: boolean }>(METHOD.CART_MERGE_GUEST, {
+      ...cartIdentityFrom(identity),
+      guestSessionId,
+    });
+
+    return { merged: response.merged ?? false };
   }
 
   async getCheckoutLines(identity: { userId: string; sessionId: string }) {
@@ -350,7 +356,7 @@ export class GrpcCartClient implements CartClientPort {
       subtotal?: WireMoney;
       currency?: string;
       version?: number;
-    }>(METHOD.CART_CHECKOUT_LINES, identityOf(identity));
+    }>(METHOD.CART_CHECKOUT_LINES, cartIdentityFrom(identity));
 
     return {
       lines: (response.lines ?? []).map((line) => ({
@@ -375,7 +381,7 @@ export class GrpcCartClient implements CartClientPort {
         oldPrice?: WireMoney;
         newPrice?: WireMoney;
       }[];
-    }>(METHOD.CART_VALIDATE, identityOf(identity));
+    }>(METHOD.CART_VALIDATE, cartIdentityFrom(identity));
 
     return {
       valid: response.valid ?? false,

@@ -49,7 +49,6 @@ export function createOutboxModule(options: OutboxModuleOptions): DynamicModule 
             maxRetries: Defaults.MAX_RETRIES,
             baseRetryDelayMs: Defaults.BASE_RETRY_DELAY_MS,
             maxRetryDelayMs: Defaults.MAX_RETRY_DELAY_MS,
-            cleanupIntervalMs: Defaults.CLEANUP_INTERVAL_MS,
             retentionHours: Defaults.RETENTION_HOURS,
           };
 
@@ -83,7 +82,6 @@ function mapEnv(env: OutboxEnvConfig): Partial<OutboxConfig> {
     maxRetries: env.MAX_RETRIES,
     baseRetryDelayMs: env.BASE_RETRY_DELAY_MS,
     maxRetryDelayMs: env.MAX_RETRY_DELAY_MS,
-    cleanupIntervalMs: env.CLEANUP_INTERVAL_MS,
     retentionHours: env.RETENTION_HOURS,
   };
 }

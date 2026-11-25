@@ -68,6 +68,13 @@ const SERVICES = [
 ];
 
 /**
+ * The `ServiceNames` key for a service directory, matching the registry in
+ * `@auth/contracts/grpc/endpoints.ts`: `access-control` → `ACCESS_CONTROL`.
+ */
+const serviceNamesKey = (service) =>
+  service.dir.split('-').map((part) => part.toUpperCase()).join('_');
+
+/**
  * Proto files are named after their gRPC package (`auth_flow.v1`), which is underscored,
  * not after the service directory (`auth-flow`). Deriving one from the other is how a
  * service ends up pointing at a file that does not exist — at boot, not at compile time.
@@ -101,7 +108,7 @@ for (const service of SERVICES) {
     {
       transport: Transport.GRPC,
       options: {
-        url: process.env.GRPC_URL ?? '0.0.0.0:${service.port + 10000}',
+        url: process.env.GRPC_URL ?? \`\${BIND_HOST}:${service.port + 10000}\`,
         package: '${service.grpc}',
         protoPath: ${protoRelative(service.dir)},
       },
@@ -120,9 +127,10 @@ for (const service of SERVICES) {
  * feature, so the file exists to keep the call out of \`main.ts\`'s own logic. See
  * \`startTracing\` for the instrumentation list and the \`OTEL_*\` surface.
  */
+import { ServiceNames } from '@auth/contracts';
 import { startTracing } from '@auth/platform/observability';
 
-startTracing('${service.serviceName}');
+startTracing(ServiceNames.${serviceNamesKey(service)});
 `,
   );
 
@@ -136,11 +144,15 @@ startTracing('${service.serviceName}');
  * graceful shutdown order.
  */
 import 'reflect-metadata';
+import { ServiceNames } from '@auth/contracts';
 import './tracing';
 import path from 'node:path';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 ${service.grpc ? "import { Transport } from '@nestjs/microservices';\n" : ''}import { AppModule } from './app.module';
+
+const DEFAULT_PORT = ${service.port};
+const BIND_HOST = '0.0.0.0';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -150,9 +162,10 @@ async function bootstrap(): Promise<void> {
 
 ${grpcMerge}
   await app.startAllMicroservices();
-  await app.listen(Number(process.env.PORT ?? ${service.port}), '0.0.0.0');
+  const port = Number(process.env.PORT ?? DEFAULT_PORT);
+  await app.listen(port, BIND_HOST);
 
-  logger.log(\`\${process.env.SERVICE_NAME ?? '${service.serviceName}'} listening on port \${process.env.PORT ?? ${service.port}}\`);
+  logger.log(\`\${process.env.SERVICE_NAME ?? ServiceNames.${serviceNamesKey(service)}} listening on port \${port}\`);
 }
 
 bootstrap().catch((error: unknown) => {
@@ -173,6 +186,7 @@ bootstrap().catch((error: unknown) => {
  * Everything this service does is testable without booting Nest, because the composition root
  * contains no behaviour to test.
  */
+import { ServiceNames } from '@auth/contracts';
 import { Module } from '@nestjs/common';
 import { PlatformConfigModule } from '@auth/platform/config';
 import { ErrorHandlingModule } from '@auth/platform/error-handling';
@@ -247,8 +261,8 @@ const downstreamChannel = createStaticGrpcChannel({
   imports: [
     PlatformConfigModule,
     ErrorHandlingModule.forRoot(),
-    HealthModule.forRoot('${service.serviceName}'),
-    ObservabilityModule.forRoot('${service.serviceName}'),
+    HealthModule.forRoot(ServiceNames.${serviceNamesKey(service)}),
+    ObservabilityModule.forRoot(ServiceNames.${serviceNamesKey(service)}),
 ${service.kafka ? `    // Supplies the Kafka consumer the notification module exports but does not
     // provide: the module is consumer-only and takes its transport from here.
     createKafkaModule(),` : ''}

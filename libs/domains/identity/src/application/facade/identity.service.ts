@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DI resolves the parameter from this value binding (emitDecoratorMetadata)
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { toCreateUserCommand, CreateUserCommand } from '../commands/create-user.command';
+import { AcquireGuestUserCommand } from '../commands/acquire-guest-user.command';
 import { ResolveOauthUserCommand } from '../commands/resolve-oauth-user.command';
 import {
   DeleteUserCommand,
@@ -39,6 +40,17 @@ export class IdentityService {
     id?: string;
   }): Promise<string> {
     return this.commandBus.execute<string>(toCreateUserCommand(input));
+  }
+
+  /**
+   * The browser's placeholder account — renewed when the caller still holds a live guest
+   * id, minted fresh otherwise.
+   *
+   * @remarks The id is a hint, not a claim: anything that is not (or is no longer) a guest
+   * row buys the caller a brand-new placeholder rather than the account behind the id.
+   */
+  acquireGuestUser(userId?: string): Promise<string> {
+    return this.commandBus.execute<string>(new AcquireGuestUserCommand(userId));
   }
 
   /**

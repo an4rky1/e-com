@@ -1,10 +1,13 @@
 /**
  * @fileoverview HTTP transport for authentication.
  *
- * @remarks Both guards are mounted on the controller, in order, and `@Public()` opts a route
- * out of them. That arrangement is what makes the whole surface auditable from one file: a
- * reader can see which routes are reachable without a token and which are not, without
- * opening the guards.
+ * @remarks The guards are mounted on the controller, in order, and two decorators say what
+ * a route needs. `@Public()` means no *bearer* is required to reach it; `@AllowGuest()` means
+ * a validated `X-Guest-Id` counts as the identity when there is no bearer, and
+ * `GuestIdentityGuard` — mounted here too, and acting only on routes so marked — is what
+ * turns that header into a principal. That arrangement is what makes the whole surface
+ * auditable from one file: a reader can see which routes are reachable without a bearer,
+ * which accept a guest id, and which demand a session, without opening the guards.
  *
  * @remarks Nothing here holds state and nothing here decides anything. Each handler names a
  * use case and hands back what it returned.
@@ -24,8 +27,9 @@ import {
 import type { Response } from 'express';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GuestIdentityGuard } from './guards/guest-identity.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
-import { Public } from './decorators/route-metadata';
+import { AllowGuest, Public } from './decorators/route-metadata';
 import { Idempotent } from './decorators/idempotent';
 import {
   ClientIp,
@@ -39,6 +43,7 @@ import {
 // stay type-only below: nothing reads those at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
+  AcquireGuestUserRequestDto,
   LoginRequestDto,
   LogoutRequestDto,
   RegisterRequestDto,
@@ -47,9 +52,10 @@ import {
   toUserResponse,
 } from './dto/gateway.dto';
 import type {
-  CurrentUserResponseDto,
+  AcquireGuestUserResponseDto,
   LogoutResponseDto,
   OAuthProvidersResponseDto,
+  PrincipalDto,
   TokenPairResponseDto,
 } from './dto/gateway.dto';
 import type { GatewayPrincipal } from '../application/ports/gateway-principal';
@@ -64,7 +70,7 @@ import { GatewayService } from '../application/facade/gateway.service';
 import { OAuthService } from '../application/oauth/oauth.service';
 
 @Controller('auth')
-@UseGuards(RateLimitGuard, JwtAuthGuard, PermissionsGuard)
+@UseGuards(RateLimitGuard, JwtAuthGuard, GuestIdentityGuard, PermissionsGuard)
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
@@ -136,6 +142,33 @@ export class AuthController {
   }
 
   /**
+   * The browser's placeholder account: renewed when it presents an id that still names a
+   * live guest row, minted fresh otherwise.
+   *
+   * @remarks `@Public()` because the caller by definition has no token — an anonymous shopper
+   * asking for an identity to hold between visits. What keeps this from being an account
+   * minting hole aimed at anyone is not the guard but identity: the presented id is a hint
+   * honoured only while it still names a live guest row, so no body here can be pointed at a
+   * real account, and the answer to every refusal is a fresh placeholder rather than a 4xx.
+   *
+   * @remarks `replay` for the same reason createUser takes it: a double-tap that carries one
+   * idempotency key gets the first placeholder back instead of stranding a second — the
+   * reaper would collect the orphan eventually either way, but a browser that can only keep
+   * one id should never have to learn which of two it was handed.
+   */
+  @Public()
+  @Idempotent({ mode: 'replay' })
+  @Post('guest')
+  @HttpCode(200)
+  async acquireGuestUser(
+    @Body() body: AcquireGuestUserRequestDto,
+  ): Promise<AcquireGuestUserResponseDto> {
+    const guest = await this.gateway.acquireGuestUser(body.userId);
+
+    return { user: toUserResponse(guest) };
+  }
+
+  /**
    * Exchanges a refresh token for a new pair.
    *
    * @remarks Also `@Public()`: the refresh token *is* the credential here, and the caller
@@ -181,20 +214,29 @@ export class AuthController {
   /**
    * The caller's profile and their live authorisations, composed from two services.
    *
-   * @remarks The access token has already been validated by `JwtAuthGuard` — that is what
-   * produced the principal this handler is handed — so this route composes what validation
-   * did not carry rather than validating a second time.
+   * @remarks Both kinds of caller reach this. A bearer, whose principal `JwtAuthGuard`
+   * produced by verifying the token — and, because the route is `@AllowGuest()`, an
+   * anonymous browser whose validated `X-Guest-Id` `GuestIdentityGuard` turned into a
+   * session-only principal. Either way the handler composes what producing that principal
+   * did not carry, rather than validating a second time.
+   *
+   * @remarks `@Public()` here says only that a bearer is *optional*, not that the route is
+   * anonymous: with neither credential present, `GuestIdentityGuard` refuses the request
+   * before this handler runs.
    */
+  @Public()
+  @AllowGuest()
   @Get('me')
   async me(
     @CurrentPrincipal() principal: GatewayPrincipal,
-  ): Promise<CurrentUserResponseDto> {
+  ): Promise<PrincipalDto> {
     const current = await this.gateway.me(principal);
 
     return {
       user: toUserResponse(current.user),
       roles: [...current.roles],
       permissions: [...current.permissions],
+      actorKind: current.actorKind,
       sessionId: current.sessionId,
     };
   }

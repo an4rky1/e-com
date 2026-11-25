@@ -165,6 +165,14 @@ export interface AuthFlowClientPort {
 
 export interface IdentityClientPort {
   createUser(input: GatewayUserInput): Promise<GatewayUser>;
+  /**
+   * The browser's placeholder account: renewed when `userId` still names a live guest row,
+   * minted fresh otherwise.
+   *
+   * @remarks Passing the previous id is a hint, not a claim — identity is where the "is this
+   * still a guest?" check happens, so this edge never decides who the id belongs to.
+   */
+  acquireGuestUser(userId?: string): Promise<GatewayUser>;
   getUser(userId: string): Promise<GatewayUser>;
   /**
    * Resolves a provider account to the local user behind it — link, link-by-address, or
@@ -182,6 +190,21 @@ export interface IdentityClientPort {
   }): Promise<{ user: GatewayUser; created: boolean }>;
 }
 
+/** A role as access-control reports it, independent of any HTTP shape. */
+export interface AccessControlRole {
+  readonly name: string;
+  readonly permissions: readonly string[];
+  readonly description: string | null;
+  readonly isSystem: boolean;
+}
+
+export interface AccessControlRolePage {
+  readonly roles: readonly AccessControlRole[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+}
+
 export interface AccessControlClientPort {
   getPermissions(userId: string): Promise<{
     roles: readonly string[];
@@ -191,6 +214,41 @@ export interface AccessControlClientPort {
     userId: string;
     permission: string;
   }): Promise<AuthorizationDecision>;
+  /**
+   * Adds a role to a user, idempotently, and answers with the whole role set.
+   *
+   * @remarks The whole set rather than the delta: a caller that applied a partial list would
+   * have to reconcile two answers, and would get it wrong exactly when a grant matters. A
+   * role the user already holds is not an error — access-control returns the unchanged set.
+   *
+   * @remarks Used at the three places an account comes into existence (registration, plain
+   * user creation and an OAuth first sign-in), and by the administrative grant route. A
+   * retry must not create a second assignment in any of them.
+   */
+  grantRole(input: {
+    userId: string;
+    role: string;
+    grantedBy?: string;
+  }): Promise<readonly string[]>;
+  /**
+   * Removes a role from a user, idempotently, and answers with the whole remaining set.
+   *
+   * @remarks Revoking a role the user does not hold is not an error: an operator retrying a
+   * revoke after a lost response must not get a 404 for work that is already done.
+   */
+  revokeRole(input: { userId: string; role: string }): Promise<readonly string[]>;
+  /**
+   * The role catalogue, for the administrative read that precedes a grant.
+   *
+   * @remarks Separate from `getPermissions`, which answers for one user and is on the hot
+   * path. This one is paged and searched, and includes the seeded roles so an operator can
+   * see what the baseline actually confers.
+   */
+  listRoles(input?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<AccessControlRolePage>;
 }
 
 export interface SessionClientPort {
@@ -358,6 +416,16 @@ export interface CartClientPort {
     input: { sku: string },
   ): Promise<GatewayCartView>;
   clearCart(identity: CartIdentityInput): Promise<GatewayCartView>;
+  /**
+   * Folds the guest basket `guestSessionId` names into the cart this identity addresses.
+   *
+   * @remarks `merged: false` means there was no guest basket — an ordinary answer, never a
+   * failure — so the caller retries nothing and reports nothing for it.
+   */
+  mergeGuestCart(
+    identity: CartIdentityInput,
+    guestSessionId: string,
+  ): Promise<{ merged: boolean }>;
   getCheckoutLines(identity: CartIdentityInput): Promise<GatewayCheckoutLines>;
   validateForCheckout(identity: CartIdentityInput): Promise<GatewayCheckoutValidation>;
 }

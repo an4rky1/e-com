@@ -142,7 +142,7 @@ export {
   SetPasswordRequestDto,
   toTokenPairResponse,
   toUserResponse,
-  type CurrentUserResponseDto,
+  type PrincipalDto,
   type LogoutResponseDto,
   type OAuthProvidersResponseDto,
   type TokenPairResponseDto,

@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 import { envBoolean, envInt, envString, readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import { MAX_PAGE_SIZE } from '@auth/contracts/http/api';
 
 /** DI token for this service's own Prisma client, separate from any platform-wide binding. */
 export const NOTIFICATION_PRISMA = Symbol('NOTIFICATION_PRISMA');
@@ -35,7 +36,7 @@ export const Defaults = {
    * render, and an unbounded `limit` on a table that grows without limit is a denial of
    * service that only shows up once the table is big.
    */
-  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE,
   /**
    * Whether the console channel logs rendered message bodies.
    *

@@ -2,26 +2,28 @@
 
 import { useCallback, useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { QUANTITY_MAX, StorefrontRoutes } from '@auth/contracts/http';
+import { QUANTITY_MAX, QUANTITY_MIN, StorefrontRoutes } from '@auth/contracts/http';
 import type { AddCartItemRequest, CartView, CatalogProduct } from '@auth/contracts/http';
 import { formatMoney } from '../../../lib/money';
 import { storefrontFetch } from '../../../lib/storefront-client';
-import { authHeaders } from '../../../lib/session';
+import { GRID_LIST_STYLE_DENSE } from '../../../lib/ui';
 import styles from '../../page.module.scss';
+
+const QTY_INPUT_WIDTH = '5rem';
 
 /**
  * One product, and the only place a quantity is chosen.
  *
- * @remarks Add-to-cart is authenticated: cart identity is the JWT, so a guest who presses
- * the button is told to sign in rather than given a basket that evaporates. The catalog
- * read itself stays public — browsing does not require an account.
+ * @remarks Add-to-cart needs no account: with no session, the basket goes under this
+ * tab's guest id, and signing in later folds it into the account. The catalog read is
+ * public as it always was — browsing requires neither.
  */
 export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [product, setProduct] = useState<CatalogProduct | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(QUANTITY_MIN);
   const [message, setMessage] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,10 +50,6 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   }, [load]);
 
   const addToCart = async () => {
-    if (!authHeaders()) {
-      setMessage('Sign in to add items to your cart');
-      return;
-    }
     const sku =
       product?.variants.find((variant) => variant.active)?.sku ?? product?.variants[0]?.sku;
     if (!sku) {
@@ -97,7 +95,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           </p>
 
           <h2>Variants</h2>
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.5rem' }}>
+          <ul style={GRID_LIST_STYLE_DENSE}>
             {product.variants.map((variant) => (
               <li key={variant.sku} className={styles.row}>
                 <code>{variant.sku}</code>
@@ -119,7 +117,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
               max={QUANTITY_MAX}
               value={quantity}
               onChange={(event) => setQuantity(Number(event.target.value))}
-              style={{ width: '5rem' }}
+              style={{ width: QTY_INPUT_WIDTH }}
             />
             <button type="button" onClick={() => void addToCart()} disabled={busy}>
               {busy ? 'Adding…' : 'Add to cart'}

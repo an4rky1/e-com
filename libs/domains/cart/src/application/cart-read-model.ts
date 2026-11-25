@@ -6,13 +6,19 @@
  * in integer minor units, so a second transport does not inherit gRPC's string money by
  * accident.
  *
- * @remarks `totalMinor` equals `subtotalMinor` and that is deliberate. The cart never
- * computes tax, discounts or shipping — `cart.proto` says so in as many words, and order
- * (with billing behind it) is where a checkout total is decided. A cart that guessed at a
- * total would show a shopper a number nobody intends to charge them.
+ * @remarks `total` equals `subtotal` and that is deliberate. The cart never computes tax,
+ * discounts or shipping — `cart.proto` says so in as many words, and order (with billing
+ * behind it) is where a checkout total is decided. A cart that guessed at a total would
+ * show a shopper a number nobody intends to charge them.
+ *
+ * @remarks Money stays a {@link Money} here rather than becoming a bare number plus a
+ * currency code. The read model is still internal to the service; the gRPC controller is
+ * the one boundary that flattens it for the wire.
  */
 import { Logger } from '@nestjs/common';
-import type { Cart, CartStatus } from '../domain/cart.aggregate';
+import type { Cart } from '../domain/cart.aggregate';
+import type { CartStatus } from '../domain/value-objects/cart-status.vo';
+import type { Money } from '../domain/value-objects/money';
 import type {
   CurrentPrice,
   ProductPricingPort,
@@ -25,9 +31,8 @@ export interface CartItemReadModel {
   readonly productId: string;
   readonly name: string;
   readonly quantity: number;
-  readonly unitPriceMinor: number;
-  readonly totalPriceMinor: number;
-  readonly currency: string;
+  readonly unitPrice: Money;
+  readonly totalPrice: Money;
   readonly addedAt: Date;
   readonly updatedAt: Date;
   /**
@@ -46,8 +51,9 @@ export interface CartReadModel {
   readonly status: CartStatus;
   readonly version: number;
   readonly itemCount: number;
-  readonly subtotalMinor: number;
-  readonly totalMinor: number;
+  /** `null` for an empty cart, which has no currency. */
+  readonly subtotal: Money | null;
+  readonly total: Money | null;
   readonly currency: string;
   /** When the stored document expires, or `null` when nothing is stored yet. */
   readonly expiresAt: Date | null;
@@ -59,21 +65,20 @@ export interface CheckoutLineReadModel {
   readonly productId: string;
   readonly name: string;
   readonly quantity: number;
-  readonly unitPriceMinor: number;
-  readonly currency: string;
+  readonly unitPrice: Money;
 }
 
 export interface CheckoutLinesReadModel {
   readonly lines: readonly CheckoutLineReadModel[];
-  readonly subtotalMinor: number;
+  readonly subtotal: Money | null;
   readonly currency: string;
   readonly version: number;
 }
 
 export interface PriceChangeReadModel {
   readonly sku: string;
-  readonly oldPrice: { readonly amountMinor: number; readonly currency: string };
-  readonly newPrice: { readonly amountMinor: number; readonly currency: string };
+  readonly oldPrice: Money;
+  readonly newPrice: Money;
 }
 
 export interface CheckoutValidationReadModel {
@@ -102,7 +107,7 @@ export async function buildCartReadModel(
   deps: CartViewDeps,
 ): Promise<CartReadModel> {
   const current = await lookupPrices(
-    cart.items.map((item) => item.sku),
+    cart.items.map((item) => item.sku.value),
     deps.pricing,
   );
 
@@ -112,28 +117,26 @@ export async function buildCartReadModel(
     status: cart.status,
     version: cart.version,
     itemCount: cart.itemCount,
-    subtotalMinor: cart.subtotalMinor,
-    totalMinor: cart.subtotalMinor,
+    subtotal: cart.subtotal,
+    total: cart.subtotal,
     currency: cart.currency,
     expiresAt:
       cart.version === 0 ? null : new Date(cart.updatedAt.getTime() + deps.ttlSeconds * 1_000),
     items: cart.items.map((item) => {
-      const latest = current.get(item.sku);
+      const latest = current.get(item.sku.value);
       return {
-        sku: item.sku,
-        productId: item.productId,
+        sku: item.sku.value,
+        productId: item.productId.value,
         name: item.name,
-        quantity: item.quantity,
-        unitPriceMinor: item.unitPriceMinor,
-        totalPriceMinor: item.totalMinor,
-        currency: item.currency,
+        quantity: item.quantity.value,
+        unitPrice: item.unitPrice,
+        totalPrice: item.total,
         addedAt: item.addedAt,
         updatedAt: item.updatedAt,
         priceChanged:
           latest !== undefined &&
           latest.active &&
-          (latest.priceMinor !== item.unitPriceMinor ||
-            latest.currency !== item.currency),
+          !latest.price.equals(item.unitPrice),
       };
     }),
   };
@@ -143,14 +146,13 @@ export async function buildCartReadModel(
 export function buildCheckoutLines(cart: Cart): CheckoutLinesReadModel {
   return {
     lines: cart.items.map((item) => ({
-      sku: item.sku,
-      productId: item.productId,
+      sku: item.sku.value,
+      productId: item.productId.value,
       name: item.name,
-      quantity: item.quantity,
-      unitPriceMinor: item.unitPriceMinor,
-      currency: item.currency,
+      quantity: item.quantity.value,
+      unitPrice: item.unitPrice,
     })),
-    subtotalMinor: cart.subtotalMinor,
+    subtotal: cart.subtotal,
     currency: cart.currency,
     version: cart.version,
   };
@@ -168,7 +170,7 @@ export async function buildCheckoutValidation(
   cart: Cart,
   pricing: ProductPricingPort,
 ): Promise<CheckoutValidationReadModel> {
-  const skus = cart.items.map((item) => item.sku);
+  const skus = cart.items.map((item) => item.sku.value);
   if (skus.length === 0) {
     return { valid: true, unavailableSkus: [], priceChanges: [] };
   }
@@ -181,19 +183,19 @@ export async function buildCheckoutValidation(
   const priceChanges: PriceChangeReadModel[] = [];
 
   for (const item of cart.items) {
-    const latest = current.get(item.sku);
+    const latest = current.get(item.sku.value);
 
     // Absent from the reply, or listed but withdrawn: either way it cannot be bought.
     if (!latest || !latest.active) {
-      unavailableSkus.push(item.sku);
+      unavailableSkus.push(item.sku.value);
       continue;
     }
 
-    if (latest.priceMinor !== item.unitPriceMinor || latest.currency !== item.currency) {
+    if (!latest.price.equals(item.unitPrice)) {
       priceChanges.push({
-        sku: item.sku,
-        oldPrice: { amountMinor: item.unitPriceMinor, currency: item.currency },
-        newPrice: { amountMinor: latest.priceMinor, currency: latest.currency },
+        sku: item.sku.value,
+        oldPrice: item.unitPrice,
+        newPrice: latest.price,
       });
     }
   }

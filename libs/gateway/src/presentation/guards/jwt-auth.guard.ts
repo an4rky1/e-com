@@ -31,7 +31,7 @@ import { TokenExpiredException, TokenInvalidException } from '@auth/platform/err
 import { AccessTokenCodec, type AccessTokenClaims } from '@auth/contracts';
 import { GATEWAY_CONFIG, type GatewayTokenTrust } from '../../gateway.config';
 import type { GatewayPrincipal } from '../../application/ports/gateway-principal';
-import { IS_PUBLIC_ROUTE } from '../decorators/route-metadata';
+import { IS_PUBLIC_ROUTE, IS_GUEST_ALLOWED } from '../decorators/route-metadata';
 import { type GatewayRequest, bearerTokenOf } from '../gateway-request';
 
 @Injectable()
@@ -45,17 +45,28 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    if (this.isPublic(context)) return true;
+    const isPublic = this.isPublic(context);
+    const allowsGuest = this.isGuestAllowed(context);
+
+    // A plain public route: no identity required, none parsed — login must not start
+    // failing because a caller happened to send a stale bearer along with it.
+    if (isPublic && !allowsGuest) return true;
 
     const request = context.switchToHttp().getRequest<GatewayRequest>();
     const accessToken = bearerTokenOf(request);
     if (!accessToken) {
+      // A guest-allowed route has no token *yet*: `GuestIdentityGuard`, which runs next,
+      // either supplies the guest id from `X-Guest-Id` or refuses the request.
+      if (allowsGuest) return true;
+
       throw new TokenInvalidException('a bearer access token is required', {
         scheme: 'Authorization: Bearer <accessToken>',
       });
     }
 
     // Signature first: a token that is not ours never gets to argue about its clock.
+    // This runs on guest-allowed routes too: a presented credential is verified or
+    // refused — never quietly downgraded to "anonymous".
     const verified = AccessTokenCodec.verify(accessToken, this.config.accessTokenSigningKey);
     if (verified.isFailure) {
       throw new TokenInvalidException('the access token is not valid', {
@@ -81,10 +92,19 @@ export class JwtAuthGuard implements CanActivate {
     return true;
   }
 
-  /** Class first, then handler: the narrower declaration wins. */
+  /** Handler first, then class: the narrower declaration wins. */
   private isPublic(context: ExecutionContext): boolean {
     return (
       this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_ROUTE, [
+        context.getHandler(),
+        context.getClass(),
+      ]) === true
+    );
+  }
+
+  private isGuestAllowed(context: ExecutionContext): boolean {
+    return (
+      this.reflector.getAllAndOverride<boolean>(IS_GUEST_ALLOWED, [
         context.getHandler(),
         context.getClass(),
       ]) === true
@@ -97,7 +117,5 @@ function toPrincipal(claims: AccessTokenClaims): GatewayPrincipal {
     userId: claims.sub,
     email: claims.email,
     sessionId: claims.sid,
-    roles: [...claims.roles],
-    permissions: [...claims.perms],
   };
 }

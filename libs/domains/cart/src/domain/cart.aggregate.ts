@@ -20,20 +20,11 @@ import { AggregateRoot } from '@auth/core';
 import { ResourceNotFoundException, ValidationException } from '@auth/platform/error-handling';
 import { CartItem, type CartItemProps, type NewCartItemInput } from './cart-item';
 import type { CartIdentity } from './cart-owner';
-
-export const CART_STATUSES = [
-  'active',
-  'converting',
-  'converted',
-  'expired',
-  'abandoned',
-] as const;
-
-export type CartStatus = (typeof CART_STATUSES)[number];
-
-export function isCartStatus(value: unknown): value is CartStatus {
-  return typeof value === 'string' && (CART_STATUSES as readonly string[]).includes(value);
-}
+import { isCartStatus, type CartStatus } from './value-objects/cart-status.vo';
+import { Money } from './value-objects/money';
+import { ProductId } from './value-objects/product-id.vo';
+import { Quantity } from './value-objects/quantity.vo';
+import { Sku } from './value-objects/sku.vo';
 
 /** The limits one cart is allowed to grow to; read from `CART_*` by the handlers. */
 export interface CartLimits {
@@ -171,12 +162,22 @@ export class Cart extends AggregateRoot<string> {
 
   /** Units in the cart, not distinct lines: three of one SKU counts as three. */
   get itemCount(): number {
-    return this.props.items.reduce((sum, item) => sum + item.quantity, 0);
+    return this.props.items.reduce((sum, item) => sum + item.quantity.value, 0);
   }
 
-  /** Sum of the lines at the prices they were added at. */
-  get subtotalMinor(): number {
-    return this.props.items.reduce((sum, item) => sum + item.totalMinor, 0);
+  /**
+   * Sum of the lines at the prices they were added at, or `null` for an empty cart.
+   *
+   * @remarks `null`, not `Money.of(0, '')`: an empty cart has no currency, and inventing
+   * `USD` (or an empty code) would put a currency on the wire that no line in the cart
+   * actually uses. `Money.add` is what enforces that every line in the sum shares one
+   * currency, so this getter cannot produce a mixed total even if a bad line got in.
+   */
+  get subtotal(): Money | null {
+    const [first, ...rest] = this.props.items;
+    if (!first) return null;
+
+    return rest.reduce((sum, item) => sum.add(item.total), first.total);
   }
 
   /**
@@ -186,7 +187,7 @@ export class Cart extends AggregateRoot<string> {
    * lines it summarises is a field that eventually will.
    */
   get currency(): string {
-    return this.props.items[0]?.currency ?? '';
+    return this.props.items[0]?.unitPrice.currency ?? '';
   }
 
   get isEmpty(): boolean {
@@ -207,22 +208,22 @@ export class Cart extends AggregateRoot<string> {
    * service could interpret.
    */
   addItem(input: NewCartItemInput, limits: CartLimits, now: Date): void {
-    const existing = this.props.items.find((item) => item.sku === input.sku.trim());
+    const existing = this.props.items.find((item) => item.sku.equals(input.sku));
 
     // Checked for a *new* line as well as a top-up. Testing only the existing-SKU case
     // would let a second SKU in another currency in through the front door, and a subtotal
     // that adds dollars to euros is not a number any downstream service can interpret.
-    if (!this.isEmpty && this.currency !== input.currency) {
+    if (!this.isEmpty && this.currency !== input.unitPrice.currency) {
       throw new ValidationException('a cart holds one currency only', {
-        sku: input.sku,
+        sku: input.sku.value,
         cartCurrency: this.currency,
-        itemCurrency: input.currency,
+        itemCurrency: input.unitPrice.currency,
       });
     }
 
     if (!existing && this.props.items.length >= limits.maxItems) {
       throw new ValidationException('the cart is full', {
-        sku: input.sku,
+        sku: input.sku.value,
         maxItems: limits.maxItems,
       });
     }
@@ -230,7 +231,11 @@ export class Cart extends AggregateRoot<string> {
     if (existing) {
       const index = this.props.items.indexOf(existing);
       const items = [...this.props.items];
-      items[index] = existing.plusQuantity(input.quantity, now);
+      items[index] = existing.plusQuantity(
+        input.quantity,
+        now,
+        limits.maxQuantityPerItem,
+      );
       this.props.items = items;
       this.bump(now);
       return;
@@ -243,7 +248,7 @@ export class Cart extends AggregateRoot<string> {
   }
 
   /** Sets a line to an absolute quantity. */
-  updateQuantity(sku: string, quantity: number, limits: CartLimits, now: Date): void {
+  updateQuantity(sku: Sku, quantity: Quantity, limits: CartLimits, now: Date): void {
     const index = this.indexOf(sku);
     const items = [...this.props.items];
     items[index] = items[index].withQuantity(quantity, limits, now);
@@ -252,7 +257,7 @@ export class Cart extends AggregateRoot<string> {
   }
 
   /** Drops a line. Refuses a SKU that is not there rather than pretending to remove it. */
-  removeItem(sku: string, now: Date): void {
+  removeItem(sku: Sku, now: Date): void {
     const index = this.indexOf(sku);
     this.props.items = this.props.items.filter((_, position) => position !== index);
     this.bump(now);
@@ -281,14 +286,35 @@ export class Cart extends AggregateRoot<string> {
    *
    * @remarks A no-op for an empty guest cart, so a read that found nothing to merge does
    * not spend a version number on it.
+   *
+   * @remarks A guest cart in another currency is refused before any line is folded. The cart
+   * is single-currency, and the alternative — combining the two and letting a later total
+   * fail — would corrupt the document that is supposed to enforce that rule.
    */
   mergeGuest(guestItems: readonly CartItemProps[], now: Date): void {
     if (guestItems.length === 0) return;
 
+    // Validate the whole guest cart before touching this one. A merge that folded half the
+    // lines and then failed on a currency would leave a cart that is neither the old one nor
+    // the guest one, and the caller could not simply retry to repair it.
+    const cartCurrency = this.currency;
+    const guestCurrency = guestItems[0].unitPrice.currency;
+    const currency = cartCurrency || guestCurrency;
+
+    for (const guest of guestItems) {
+      if (guest.unitPrice.currency !== currency) {
+        throw new ValidationException('a cart holds one currency only', {
+          sku: guest.sku.value,
+          cartCurrency: currency,
+          guestCurrency: guest.unitPrice.currency,
+        });
+      }
+    }
+
     const items = [...this.props.items];
 
     for (const guest of guestItems) {
-      const index = items.findIndex((item) => item.sku === guest.sku);
+      const index = items.findIndex((item) => item.sku.equals(guest.sku));
 
       if (index >= 0) {
         items[index] = items[index].plusQuantity(guest.quantity, now);
@@ -318,12 +344,12 @@ export class Cart extends AggregateRoot<string> {
       items: this.props.items.map((item) => {
         const props = item.toProps();
         return {
-          sku: props.sku,
-          productId: props.productId,
+          sku: props.sku.value,
+          productId: props.productId.value,
           name: props.name,
-          quantity: props.quantity,
-          unitPriceMinor: props.unitPriceMinor,
-          currency: props.currency,
+          quantity: props.quantity.value,
+          unitPriceMinor: props.unitPrice.amountMinor,
+          currency: props.unitPrice.currency,
           addedAt: props.addedAt.toISOString(),
           updatedAt: props.updatedAt.toISOString(),
         };
@@ -331,13 +357,12 @@ export class Cart extends AggregateRoot<string> {
     };
   }
 
-  private indexOf(sku: string): number {
-    const trimmed = sku?.trim() ?? '';
-    const index = this.props.items.findIndex((item) => item.sku === trimmed);
+  private indexOf(sku: Sku): number {
+    const index = this.props.items.findIndex((item) => item.sku.equals(sku));
 
     if (index < 0) {
       throw new ResourceNotFoundException('the cart has no such item', {
-        sku: trimmed,
+        sku: sku.value,
         sessionId: this.props.sessionId,
       });
     }
@@ -362,12 +387,11 @@ export class Cart extends AggregateRoot<string> {
  */
 export function storedItemToProps(item: StoredCartItem): CartItemProps {
   return {
-    sku: item.sku,
-    productId: item.productId,
+    sku: Sku.of(item.sku),
+    productId: ProductId.of(item.productId),
     name: item.name,
-    quantity: item.quantity,
-    unitPriceMinor: item.unitPriceMinor,
-    currency: item.currency,
+    quantity: Quantity.of(item.quantity),
+    unitPrice: Money.of(item.unitPriceMinor, item.currency),
     addedAt: new Date(item.addedAt),
     updatedAt: new Date(item.updatedAt),
   };

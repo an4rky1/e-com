@@ -34,6 +34,7 @@ export { CartHealthIndicator } from './cart.health';
 export {
   AddItemCommand,
   ClearCartCommand,
+  MergeGuestCartCommand,
   RemoveItemCommand,
   UpdateItemQtyCommand,
 } from './application/commands/cart.commands';
@@ -41,6 +42,7 @@ export { AddItemHandler } from './application/commands/add-item.handler';
 export { UpdateItemQtyHandler } from './application/commands/update-item-qty.handler';
 export { RemoveItemHandler } from './application/commands/remove-item.handler';
 export { ClearCartHandler } from './application/commands/clear-cart.handler';
+export { MergeGuestCartHandler } from './application/commands/merge-guest-cart.handler';
 
 // ---- queries -------------------------------------------------------------------
 export {
@@ -70,12 +72,9 @@ export {
 
 // ---- domain --------------------------------------------------------------------
 export {
-  CART_STATUSES,
   Cart,
-  isCartStatus,
   type CartAddress,
   type CartLimits,
-  type CartStatus,
   type StoredCart,
   type StoredCartItem,
 } from './domain/cart.aggregate';
@@ -85,6 +84,15 @@ export {
   type CartItemProps,
   type NewCartItemInput,
 } from './domain/cart-item';
+export {
+  CART_STATUSES,
+  isCartStatus,
+  type CartStatus,
+} from './domain/value-objects/cart-status.vo';
+export { Money } from './domain/value-objects/money';
+export { ProductId } from './domain/value-objects/product-id.vo';
+export { Quantity } from './domain/value-objects/quantity.vo';
+export { Sku } from './domain/value-objects/sku.vo';
 export {
   lockNamesFor,
   resolveCartOwner,

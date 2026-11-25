@@ -15,6 +15,7 @@ import { Reflector } from '@nestjs/core';
 import { AccessTokenCodec } from '@auth/contracts';
 import { JwtAuthGuard } from '../../src/presentation/guards/jwt-auth.guard';
 import {
+  AllowGuest,
   Public,
   RequirePermissions,
 } from '../../src/presentation/decorators/route-metadata';
@@ -79,7 +80,14 @@ class TestRoutes {
     return 'open';
   }
 
-  @RequirePermissions('users:password:set')
+  /** The cart shape: no bearer required, but a `X-Guest-Id` has to name somebody. */
+  @Public()
+  @AllowGuest()
+  guestOpen(): string {
+    return 'guestOpen';
+  }
+
+  @RequirePermissions('users:password.set')
   protected(): string {
     return 'protected';
   }

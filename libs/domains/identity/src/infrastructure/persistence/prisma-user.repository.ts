@@ -117,6 +117,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const rows = await this.prisma.tx.users.findMany();
     return rows.map(User.fromRow).filter((user) => spec.isSatisfiedBy(user)).length;
   }
+
+  async deleteStaleGuests(before: Date): Promise<number> {
+    // Hard delete, not soft: a guest row carries a synthetic address and nothing else, and
+    // retaining it would keep an id in the table that no token, order or audit entry points
+    // at any more. `updated_at` is the freshness marker renewGuest refreshes.
+    const { count } = await this.prisma.tx.users.deleteMany({
+      where: { status: 'guest', updated_at: { lt: before } },
+    });
+    return count;
+  }
 }
 
 export { USER_REPOSITORY };

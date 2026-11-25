@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiErrorMessage, viaProxy } from '@auth/contracts/http';
 import type { ApiErrorResponse, ApiMethod } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE, JSON_CONTENT_TYPE } from './api-constants';
 import { authHeaders } from './session';
+import { ensureGuestId, guestHeaders } from './guest';
 
 /**
  * A contract route as the client needs it: method, browser path, guard.
@@ -24,6 +26,11 @@ export interface StorefrontRouteLike {
  * @remarks Returns the parsed body on `response.ok`, otherwise throws the gateway's
  * refusal message. The token comes from the session helper — never from props — so a
  * page cannot accidentally render a bearer it was handed.
+ *
+ * @remarks Identity for a cart call is the bearer *or* this tab's guest id: with no
+ * session, a `/cart` path mints (or reuses) the guest id first, because the basket is the
+ * one surface an anonymous browser reaches. A signed-in call only carries an id when the
+ * tab already has one — the merge that spends it runs at sign-in, not here.
  */
 export async function storefrontFetch<T>(
   route: StorefrontRouteLike,
@@ -34,12 +41,21 @@ export async function storefrontFetch<T>(
     throw new Error('Sign in to continue');
   }
 
+  let guest: Record<string, string> | null = null;
+  if (headers) {
+    guest = guestHeaders();
+  } else if (route.path.startsWith('/cart')) {
+    await ensureGuestId();
+    guest = guestHeaders();
+  }
+
   const response = await fetch(viaProxy(route as Parameters<typeof viaProxy>[0]), {
     ...init,
     method: route.method,
     headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.body ? { 'Content-Type': JSON_CONTENT_TYPE } : {}),
       ...(headers ?? {}),
+      ...(guest ?? {}),
       ...init.headers,
     },
   });
@@ -79,7 +95,7 @@ export function useStorefront<T>(route: StorefrontRouteLike): {
       .catch((err: unknown) => {
         if (!cancelled) {
           setData(null);
-          setError(err instanceof Error ? err.message : 'The gateway did not answer');
+          setError(err instanceof Error ? err.message : GATEWAY_UNAVAILABLE_MESSAGE);
         }
       })
       .finally(() => {

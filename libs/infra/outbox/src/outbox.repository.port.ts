@@ -38,8 +38,6 @@ export interface OutboxRepositoryPort {
   /** Reclaims rows stuck in `processing` after a relay crashed mid-batch. */
   reclaimStale(olderThan: Date): Promise<number>;
 
-  cleanup(retentionHours: number): Promise<number>;
-
   countByStatus(status: OutboxStatus): Promise<number>;
 }
 

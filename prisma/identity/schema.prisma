@@ -101,6 +101,10 @@ enum UserStatus {
   suspended
   locked
   deleted
+  // A browser's placeholder account: issued to an anonymous shopper so the basket, the
+  // orders and the fingerprint all have a user id to hang on, and never authenticatable —
+  // it has no credential and no mailbox that could receive one.
+  guest
 }
 
 enum OutboxStatus {

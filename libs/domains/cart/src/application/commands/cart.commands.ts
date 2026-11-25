@@ -59,3 +59,21 @@ export class ClearCartCommand extends Command<CartReadModel> {
     super();
   }
 }
+
+/**
+ * Folds a named guest cart into the addressed cart — the explicit merge a login triggers.
+ *
+ * @remarks Answers with whether anything was folded rather than with a cart: the caller
+ * (the edge, right after sign-in) needs to know the guest basket arrived, and rebuilding
+ * a read model it is about to discard anyway would be work with no reader.
+ */
+export class MergeGuestCartCommand extends Command<boolean> {
+  readonly commandId: string = crypto.randomUUID();
+
+  constructor(
+    readonly identity: CartIdentity,
+    readonly guestSessionId: string,
+  ) {
+    super();
+  }
+}

@@ -11,6 +11,15 @@
  */
 import { z } from 'zod';
 import { envInt, envString, readNamespacedEnv, resolveModuleConfig } from '@auth/platform/config';
+import {
+  GRPC_DEADLINE_MAX_MS,
+  GRPC_DEADLINE_MIN_MS,
+  GRPC_DEADLINE_MS,
+} from '@auth/contracts/grpc/deadline';
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from '@auth/contracts/http/api';
 
 /** This service's own Prisma client. Never shared with another domain lib. */
 export const ORDER_PRISMA = Symbol('ORDER_PRISMA');
@@ -33,11 +42,11 @@ export const Defaults = {
    * @remarks A pager that can be asked for 10 000 rows is a denial-of-service surface
    * dressed as a convenience.
    */
-  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE,
   /** Default page size when the caller omits it. */
-  DEFAULT_PAGE_SIZE: 20,
+  DEFAULT_PAGE_SIZE,
   /** Deadline for each peer RPC during the checkout saga. */
-  GRPC_DEADLINE_MS: 5_000,
+  GRPC_DEADLINE_MS,
 } as const;
 
 /**
@@ -50,7 +59,10 @@ export const orderSchema = z.object({
   DEFAULT_WAREHOUSE: envString(Defaults.DEFAULT_WAREHOUSE),
   MAX_PAGE_SIZE: envInt(Defaults.MAX_PAGE_SIZE, { min: 1, max: 1_000 }),
   DEFAULT_PAGE_SIZE: envInt(Defaults.DEFAULT_PAGE_SIZE, { min: 1, max: 1_000 }),
-  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, { min: 100, max: 60_000 }),
+  GRPC_DEADLINE_MS: envInt(Defaults.GRPC_DEADLINE_MS, {
+    min: GRPC_DEADLINE_MIN_MS,
+    max: GRPC_DEADLINE_MAX_MS,
+  }),
 });
 
 export type OrderEnvConfig = z.infer<typeof orderSchema>;

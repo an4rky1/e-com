@@ -2,6 +2,8 @@ import { Controller } from '@nestjs/common';
 import { ResourceNotFoundException } from '@auth/platform/error-handling';
 import { GrpcControllerBase, GrpcMethod } from '@auth/infra/grpc';
 import type {
+  AcquireGuestUserRequest,
+  AcquireGuestUserResponse,
   AuthenticateRequest,
   AuthenticateResponse,
   CreateUserRequest,
@@ -70,6 +72,19 @@ export class IdentityGrpcController extends GrpcControllerBase {
       id: request.id || undefined,
     });
 
+    return { user: this.toGrpc(await this.identity.getUserById(id)) };
+  }
+
+  /**
+   * The browser's placeholder account, renewed or minted.
+   *
+   * @remarks One round trip that both *checks* the presented id and renews the row behind
+   * it — the freshness the reaper sweeps on is refreshed by the very call that proves the
+   * browser is still alive, so an active guest can never be swept between two requests.
+   */
+  @GrpcMethod(SERVICE, 'AcquireGuestUser')
+  async acquireGuestUser(request: AcquireGuestUserRequest): Promise<AcquireGuestUserResponse> {
+    const id = await this.identity.acquireGuestUser(request.userId || undefined);
     return { user: this.toGrpc(await this.identity.getUserById(id)) };
   }
 

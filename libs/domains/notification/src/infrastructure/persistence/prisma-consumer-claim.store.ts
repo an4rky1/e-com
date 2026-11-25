@@ -32,6 +32,7 @@ import {
   NOTIFICATION_PRISMA,
   type NotificationConfig,
 } from '../../notification.config';
+import { AGGREGATE_TYPE } from '../../domain/notification.aggregate';
 
 /**
  * `type` discriminator for a claim row.
@@ -79,7 +80,7 @@ export class PrismaConsumerClaimStore implements ConsumerClaimStorePort {
         {
           id: crypto.randomUUID(),
           type: CLAIM_EVENT_TYPE,
-          aggregate_type: 'notification',
+          aggregate_type: AGGREGATE_TYPE,
           aggregate_id: key,
           topic: CLAIM_TOPIC,
           // No `payload` value worth carrying. The key *is* the state, and duplicating it into

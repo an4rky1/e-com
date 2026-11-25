@@ -2,15 +2,23 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { StorefrontRoutes } from '@auth/contracts/http';
+import {
+  COUNTRY_CODE_LENGTH,
+  COUPON_CODE_MAX_LENGTH,
+  StorefrontRoutes,
+} from '@auth/contracts/http';
 import type {
   CheckoutCreateRequest,
   CheckoutPreviewResponse,
   OrderView,
 } from '@auth/contracts/http';
+import { GATEWAY_UNAVAILABLE_MESSAGE } from '../../lib/api-constants';
 import { formatMoney } from '../../lib/money';
 import { storefrontFetch } from '../../lib/storefront-client';
+import { GRID_LIST_STYLE_TIGHT } from '../../lib/ui';
 import styles from '../page.module.scss';
+
+const COUNTRY_INPUT_WIDTH = '4rem';
 
 /**
  * Checkout: preview the basket's totals, then place the order.
@@ -58,7 +66,7 @@ export default function CheckoutPage() {
       setPreview(result);
     } catch (err) {
       setPreview(null);
-      setMessage(err instanceof Error ? err.message : 'The gateway did not answer');
+      setMessage(err instanceof Error ? err.message : GATEWAY_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -102,16 +110,16 @@ export default function CheckoutPage() {
           <input
             id="country"
             value={country}
-            maxLength={2}
+            maxLength={COUNTRY_CODE_LENGTH}
             placeholder="US"
             onChange={(event) => changePricingInput(setCountry)(event.target.value)}
-            style={{ width: '4rem' }}
+            style={{ width: COUNTRY_INPUT_WIDTH }}
           />
           <label htmlFor="coupon">Coupon</label>
           <input
             id="coupon"
             value={coupon}
-            maxLength={32}
+            maxLength={COUPON_CODE_MAX_LENGTH}
             onChange={(event) => changePricingInput(setCoupon)(event.target.value)}
           />
           <button type="button" onClick={() => void loadPreview()} disabled={busy}>
@@ -128,7 +136,7 @@ export default function CheckoutPage() {
         {preview ? (
           <div data-testid="checkout-preview">
             <h2>Preview</h2>
-            <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.35rem' }}>
+            <ul style={GRID_LIST_STYLE_TIGHT}>
               {preview.lines.lines.map((line) => (
                 <li key={line.sku} className={styles.row}>
                   <span>

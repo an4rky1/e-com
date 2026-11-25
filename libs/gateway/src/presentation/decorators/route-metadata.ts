@@ -19,6 +19,21 @@ export const IS_PUBLIC_ROUTE = Symbol('IS_PUBLIC_ROUTE');
 export const Public = (): CustomDecorator<symbol> =>
   SetMetadata(IS_PUBLIC_ROUTE, true);
 
+/**
+ * Marks a route reachable with a guest id instead of a bearer.
+ *
+ * @remarks The marker itself is what lets `JwtAuthGuard` pass a tokenless request through,
+ * so `GuestIdentityGuard` — which acts only on routes carrying this marker — can insist on
+ * `X-Guest-Id` instead. The routes pair it with {@link Public} because the contract spells
+ * "no bearer required" as `authenticated: false`, and the contract specs hold `@Public()`
+ * and that flag to each other: two decorators, one statement, checked from both sides. A
+ * presented bearer is never downgraded by this marker — it is verified like anywhere else.
+ */
+export const IS_GUEST_ALLOWED = Symbol('IS_GUEST_ALLOWED');
+
+export const AllowGuest = (): CustomDecorator<symbol> =>
+  SetMetadata(IS_GUEST_ALLOWED, true);
+
 /** Permissions a route demands. Read by `PermissionsGuard`, answered by access-control. */
 export const REQUIRED_PERMISSIONS = Symbol('REQUIRED_PERMISSIONS');
 

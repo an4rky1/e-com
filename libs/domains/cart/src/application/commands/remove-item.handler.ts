@@ -10,7 +10,6 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { ValidationException } from '@auth/platform/error-handling';
 import { CartWorkspace } from '../cart-workspace';
 import { buildCartReadModel, type CartReadModel } from '../cart-read-model';
 import {
@@ -18,6 +17,7 @@ import {
   type ProductPricingPort,
 } from '../../domain/ports/product-pricing.port';
 import { CART_CONFIG, type CartConfig } from '../../cart.config';
+import { Sku } from '../../domain/value-objects/sku.vo';
 import { RemoveItemCommand } from './cart.commands';
 
 @Injectable()
@@ -32,10 +32,7 @@ export class RemoveItemHandler
   ) {}
 
   async execute(command: RemoveItemCommand): Promise<CartReadModel> {
-    const sku = command.sku?.trim() ?? '';
-    if (sku.length === 0) {
-      throw new ValidationException('sku is required', { sku: command.sku });
-    }
+    const sku = Sku.of(command.sku);
 
     const cart = await this.workspace.mutate(command.identity, (target) => {
       target.removeItem(sku, new Date());

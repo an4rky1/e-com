@@ -193,6 +193,14 @@ describe('GrantRoleToUserHandler', () => {
     const [assignment] = [...assignments.rows.values()];
     expect(assignment.grantedBy).toBe(operator);
   });
+
+  it('refuses to grant guest: it is identity status, not an assignment', async () => {
+    const { handler } = await build();
+
+    await expect(
+      handler.execute(new GrantRoleToUserCommand(USER, 'guest')),
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
 });
 
 describe('RevokeRoleFromUserHandler', () => {
@@ -219,12 +227,15 @@ describe('RevokeRoleFromUserHandler', () => {
     expect(await assignments.findActiveByUser(USER)).toEqual([]);
   });
 
-  it('refuses to revoke something the user does not hold', async () => {
-    const { handler } = await build();
+  it('is idempotent when the user does not hold the role', async () => {
+    const { handler, assignments } = await build();
 
+    // A retried revoke after a lost response is already-done work, not an error.
     await expect(
       handler.execute(new RevokeRoleFromUserCommand(USER, 'billing_admin')),
-    ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    ).resolves.toBeUndefined();
+    // The unrelated role the fixture granted is still there; the absent role stayed absent.
+    expect(await assignments.countActiveByUser(USER)).toBe(1);
   });
 
   it('rejects a malformed role name as a caller error', async () => {

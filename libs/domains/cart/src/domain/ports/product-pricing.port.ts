@@ -12,6 +12,8 @@
  * Totals are built from the snapshots the lines already carry; the catalogue is consulted
  * to report a difference, never to overwrite one.
  */
+import type { Money } from '../value-objects/money';
+
 export const PRODUCT_PRICING = Symbol('PRODUCT_PRICING');
 
 /** A SKU as the catalogue lists it right now, including the name a line is labelled with. */
@@ -19,15 +21,14 @@ export interface SellableSku {
   readonly sku: string;
   readonly productId: string;
   readonly name: string;
-  readonly priceMinor: number;
-  readonly currency: string;
+  /** The current price as a validated amount + currency, not two loose fields. */
+  readonly price: Money;
 }
 
 /** One SKU's current price. `active: false` means it is listed but not sellable. */
 export interface CurrentPrice {
   readonly sku: string;
-  readonly priceMinor: number;
-  readonly currency: string;
+  readonly price: Money;
   readonly active: boolean;
 }
 

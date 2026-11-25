@@ -13,7 +13,7 @@ import {
   type KafkaMessage,
   type Producer,
 } from 'kafkajs';
-import { dlqTopicFor, retryTopicFor, type Topic } from '@auth/contracts';
+import { dlqTopicFor, EVENT_SCHEMA_VERSION, retryTopicFor, type Topic } from '@auth/contracts';
 import type { EventPublisher } from '@auth/infra/outbox';
 import { KAFKA_CONFIG } from './kafka.tokens';
 import { clientSecurity, type KafkaConfig } from './kafka.config';
@@ -81,7 +81,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy, Even
           headers: {
             ...(options.traceId ? { 'x-trace-id': options.traceId } : {}),
             ...(options.eventId ? { 'x-event-id': options.eventId } : {}),
-            'x-schema-version': '1',
+            'x-schema-version': EVENT_SCHEMA_VERSION.toString(),
           },
         },
       ],
