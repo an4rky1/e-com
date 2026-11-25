@@ -25,6 +25,7 @@ export const METHOD = {
   SET_PASSWORD: '/credential_vault.v1.CredentialVaultService/SetPassword',
   REVOKE_ALL_CREDENTIALS: '/credential_vault.v1.CredentialVaultService/RevokeAllCredentials',
   LIST_PRODUCTS: '/catalog.v1.CatalogService/ListByCategory',
+  SEARCH_PRODUCTS: '/catalog.v1.CatalogService/SearchProducts',
   GET_PRODUCT: '/catalog.v1.CatalogService/GetProduct',
   CREATE_PRODUCT: '/catalog.v1.CatalogService/CreateProduct',
   SET_VARIANT_PRICE: '/catalog.v1.CatalogService/SetVariantPrice',

@@ -47,6 +47,13 @@ export interface CatalogListQuery {
   pageSize?: number;
 }
 
+export interface CatalogSearchQuery {
+  /** The text matched against product name and description. */
+  text?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface CatalogCreateProductRequest {
   name: string;
   description: string;

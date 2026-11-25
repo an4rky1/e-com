@@ -52,6 +52,7 @@
       "@auth/platform/observability": ["./libs/platform/observability/src/index.ts"],
       "@auth/platform/shutdown": ["./libs/platform/shutdown/src/index.ts"],
       "@auth/infra/cache": ["./libs/infra/cache/src/index.ts"],
+      "@auth/infra/elasticsearch": ["./libs/infra/elasticsearch/src/index.ts"],
       "@auth/infra/events": ["./libs/infra/events/src/index.ts"],
       "@auth/infra/grpc": ["./libs/infra/grpc/src/index.ts"],
       "@auth/infra/idempotency": ["./libs/infra/idempotency/src/index.ts"],

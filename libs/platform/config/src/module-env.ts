@@ -59,6 +59,7 @@ export const ENV_PREFIXES = {
   http: 'HTTP',
   webhooks: 'WEBHOOKS',
   encryption: 'ENCRYPTION',
+  elasticsearch: 'ELASTICSEARCH',
 } as const;
 
 /**

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import {
   ResourceAlreadyExistsException,
@@ -13,6 +13,7 @@ import {
   PRODUCT_REPOSITORY,
   type ProductRepositoryPort,
 } from '../../domain/ports/product-repository.port';
+import { PRODUCT_SEARCH_INDEXER, type ProductSearchIndexer } from '../../domain/ports/product-search-indexer.port';
 import { CATALOG_CONFIG, type CatalogConfig } from '../../catalog.config';
 import {
   CreateProductCommand,
@@ -36,9 +37,12 @@ import {
 export class CreateProductHandler
   implements ICommandHandler<CreateProductCommand, ProductView>
 {
+  private static readonly logger = new Logger(CreateProductHandler.name);
+
   constructor(
     @Inject(PRODUCT_REPOSITORY) private readonly products: ProductRepositoryPort,
     @Inject(CATALOG_CONFIG) private readonly config: CatalogConfig,
+    @Inject(PRODUCT_SEARCH_INDEXER) private readonly searchIndexer: ProductSearchIndexer,
   ) {}
 
   async execute(command: CreateProductCommand): Promise<ProductView> {
@@ -123,6 +127,20 @@ export class CreateProductHandler
 
     // The repository writes the row and its `product.created` event in one transaction.
     await this.products.save(product);
+
+    // Search indexing is a projection: the product exists whether or not the engine holds
+    // it yet, so a refusal to index must not fail the write or the caller would have no
+    // answer for "is my product searchable?". It is logged rather than swallowed because
+    // an index that stays empty is exactly what an incident starts from.
+    try {
+      await this.searchIndexer.index(product);
+    } catch (error) {
+      CreateProductHandler.logger.warn(
+        `search index write failed for product ${product.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
 
     return toProductView(product);
   }

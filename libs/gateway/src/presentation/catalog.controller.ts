@@ -19,7 +19,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PERMISSIONS } from '@auth/contracts';
-import type { CatalogListQuery, ProductList } from '@auth/contracts/http';
+import type { CatalogListQuery, CatalogSearchQuery, ProductList } from '@auth/contracts/http';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
@@ -57,6 +57,19 @@ export class CatalogController {
 
     return this.storefront.listProducts({
       categoryPath,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+      pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 20,
+    });
+  }
+
+  @Public()
+  @Get('search')
+  async search(@Query() query: CatalogSearchQuery): Promise<ProductList> {
+    const page = Number(query.page ?? 1);
+    const pageSize = Number(query.pageSize ?? 20);
+
+    return this.storefront.searchProducts({
+      text: String(query.text ?? ''),
       page: Number.isFinite(page) && page > 0 ? page : 1,
       pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 20,
     });

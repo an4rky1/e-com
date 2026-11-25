@@ -56,6 +56,7 @@ export {
   MAX_PAGE_SIZE,
   type ProductListPage,
 } from './application/queries/product.queries';
+export { SearchProductsHandler, SearchProductsQuery } from './application/queries/product.search-query';
 
 // ---- application --------------------------------------------------------------
 export { CatalogService } from './application/facade/catalog.service';

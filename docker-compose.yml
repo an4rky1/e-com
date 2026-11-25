@@ -52,6 +52,28 @@ services:
       timeout: 5s
       retries: 20
 
+  # Elasticsearch is the search engine behind the catalog's text search. Single node,
+  # security disabled — the platform's data is not sensitive and the search index is a
+  # derived projection it can lose without harm.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.2
+    container_name: auth-elasticsearch
+    command:
+      - /usr/share/elasticsearch/bin/elasticsearch
+      - -Ediscovery.type=single-node
+      - -Expack.security.enabled=false
+    environment:
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - '9200:9200'
+    healthcheck:
+      test: ['CMD', 'curl', '-fs', 'http://localhost:9200/_cluster/health']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+
   # Redpanda is API-compatible with the Kafka protocol the services speak, without a JVM.
   redpanda:
     image: docker.io/redpandadata/redpanda:v24.2.2
@@ -139,5 +161,6 @@ volumes:
   redis-data:
   mongo-data:
   redpanda-data:
+  elasticsearch-data:
   prometheus-data:
   grafana-data:

@@ -14,6 +14,7 @@ import {
   ListByCategoryQuery,
   type ProductListPage,
 } from '../queries/product.queries';
+import { SearchProductsQuery } from '../queries/product.search-query';
 
 /**
  * The only public surface of the catalog module.
@@ -83,6 +84,13 @@ export class CatalogService {
         input.page ?? 1,
         input.pageSize ?? DEFAULT_PAGE_SIZE,
       ),
+    );
+  }
+
+  /** The question a search answers: "which products mention `text`?" — in relevance order. */
+  searchProducts(input: { text: string; page?: number; pageSize?: number }): Promise<ProductListPage> {
+    return this.queryBus.execute(
+      new SearchProductsQuery(input.text, input.page ?? 1, input.pageSize ?? DEFAULT_PAGE_SIZE),
     );
   }
 

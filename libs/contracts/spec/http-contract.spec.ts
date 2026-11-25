@@ -110,6 +110,7 @@ describe('http surface', () => {
   it('pins the storefront routes', () => {
     expect(Object.keys(StorefrontRoutes)).toEqual([
       'catalogList',
+      'catalogSearch',
       'catalogProduct',
       'catalogCreateProduct',
       'catalogSetPrice',
@@ -160,6 +161,7 @@ describe('http surface', () => {
       .map(([name]) => name);
     expect(publicRoutes).toEqual([
       'catalogList',
+      'catalogSearch',
       'catalogProduct',
       'cartGet',
       'cartAddItem',

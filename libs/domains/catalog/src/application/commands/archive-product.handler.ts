@@ -1,10 +1,14 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { ResourceNotFoundException } from '@auth/platform/error-handling';
 import {
   PRODUCT_REPOSITORY,
   type ProductRepositoryPort,
 } from '../../domain/ports/product-repository.port';
+import {
+  PRODUCT_SEARCH_INDEXER,
+  type ProductSearchIndexer,
+} from '../../domain/ports/product-search-indexer.port';
 import {
   ArchiveProductCommand,
   toProductView,
@@ -28,8 +32,11 @@ import {
 export class ArchiveProductHandler
   implements ICommandHandler<ArchiveProductCommand, ProductView>
 {
+  private static readonly logger = new Logger(ArchiveProductHandler.name);
+
   constructor(
     @Inject(PRODUCT_REPOSITORY) private readonly products: ProductRepositoryPort,
+    @Inject(PRODUCT_SEARCH_INDEXER) private readonly searchIndexer: ProductSearchIndexer,
   ) {}
 
   async execute(command: ArchiveProductCommand): Promise<ProductView> {
@@ -44,6 +51,21 @@ export class ArchiveProductHandler
 
     if (product.domainEvents.length > 0) {
       await this.products.save(product);
+    }
+
+    // The document is dropped on the same fact the caller already has (`isActive`), so the
+    // write path stays best-effort exactly like the index one: the product is already
+    // withdrawn from sale; the search index is a projection of it.
+    if (!product.isActive) {
+      try {
+        await this.searchIndexer.remove(product);
+      } catch (error) {
+        ArchiveProductHandler.logger.warn(
+          `search index removal failed for product ${product.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
 
     return toProductView(product);

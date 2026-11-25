@@ -236,6 +236,25 @@ export class GrpcCatalogClient implements CatalogClientPort {
     };
   }
 
+  async searchByText(input: {
+    text: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ products: readonly ReturnType<typeof toProduct>[]; total: number }> {
+    const response = await this.peers.call<{
+      products?: WireProduct[];
+      total?: number;
+    }>(METHOD.SEARCH_PRODUCTS, {
+      text: input.text,
+      page: input.page,
+      pageSize: input.pageSize,
+    });
+    return {
+      products: (response.products ?? []).map(toProduct),
+      total: response.total ?? 0,
+    };
+  }
+
   async getProduct(id: string): Promise<ReturnType<typeof toProduct>> {
     return toProduct(await this.peers.call<WireProduct>(METHOD.GET_PRODUCT, { id }));
   }

@@ -357,6 +357,13 @@ export interface ListByCategoryRequest {
   pageSize: number;
 }
 
+export interface SearchProductsRequest {
+  /** Case-insensitive fragment matched against the product name and description. */
+  text: string;
+  page: number;
+  pageSize: number;
+}
+
 export interface ProductList {
   products: readonly CatalogProduct[];
   total: number;
@@ -380,6 +387,7 @@ export interface GetPricingResponse {
 export interface CatalogGrpcClient {
   GetProduct(request: { id: string }): Promise<CatalogProduct>;
   ListByCategory(request: ListByCategoryRequest): Promise<ProductList>;
+  SearchProducts(request: SearchProductsRequest): Promise<ProductList>;
   GetPricing(request: GetPricingRequest): Promise<GetPricingResponse>;
   CreateProduct(request: CreateProductRequest): Promise<CatalogProduct>;
   SetVariantPrice(request: SetVariantPriceRequest): Promise<CatalogProduct>;

@@ -328,6 +328,11 @@ export interface CatalogClientPort {
     page: number;
     pageSize: number;
   }): Promise<{ products: readonly GatewayCatalogProduct[]; total: number }>;
+  searchByText(input: {
+    text: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ products: readonly GatewayCatalogProduct[]; total: number }>;
   getProduct(id: string): Promise<GatewayCatalogProduct>;
   createProduct(input: {
     name: string;

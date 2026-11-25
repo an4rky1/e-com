@@ -38,6 +38,12 @@ export interface CatalogListInput {
   readonly pageSize: number;
 }
 
+export interface CatalogSearchInput {
+  readonly text: string;
+  readonly page: number;
+  readonly pageSize: number;
+}
+
 export interface CheckoutPreviewInput {
   readonly customerCountry?: string;
   readonly couponCode?: string;
@@ -77,6 +83,14 @@ export class StorefrontService {
     total: number;
   }> {
     return this.catalog.listByCategory(input);
+  }
+
+  /** The storefront's text search: products the catalog engine matched, relevance ordered. */
+  searchProducts(input: CatalogSearchInput): Promise<{
+    products: readonly GatewayCatalogProduct[];
+    total: number;
+  }> {
+    return this.catalog.searchByText(input);
   }
 
   getProduct(id: string): Promise<GatewayCatalogProduct> {

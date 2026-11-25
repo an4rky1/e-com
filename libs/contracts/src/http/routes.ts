@@ -94,6 +94,7 @@ export const ApiRoutes = {
 export const StorefrontRoutes = {
   // Catalog reads are public: the vitrina is reachable before sign-in.
   catalogList: { method: 'GET', path: '/catalog', authenticated: false },
+  catalogSearch: { method: 'GET', path: '/catalog/search', authenticated: false },
   catalogProduct: { method: 'GET', path: '/catalog/:id', authenticated: false },
   catalogCreateProduct: {
     method: 'POST',

@@ -9,6 +9,7 @@ import type {
   GetPricingResponse,
   ListByCategoryRequest,
   ProductList,
+  SearchProductsRequest,
   SetVariantPriceRequest,
 } from '@auth/contracts';
 import { ValidationException } from '@auth/platform/error-handling';
@@ -49,6 +50,25 @@ export class CatalogGrpcController extends GrpcControllerBase {
 
     const result = await this.catalog.listByCategory({
       categoryPath: request.categoryPath ?? [],
+      page,
+      ...(pageSize !== undefined ? { pageSize } : {}),
+    });
+
+    return {
+      products: result.products.map(toCatalogProduct),
+      total: result.total,
+    };
+  }
+
+  @GrpcMethod(SERVICE, 'SearchProducts')
+  async searchProducts(request: SearchProductsRequest): Promise<ProductList> {
+    // Same zero-as-unset rule as `ListByCategory`: proto3 has no `0` page, so a zero is a
+    // caller who sent nothing and gets page 1; a zero `pageSize` means "the default".
+    const page = request.page > 0 ? request.page : 1;
+    const pageSize = request.pageSize > 0 ? request.pageSize : undefined;
+
+    const result = await this.catalog.searchProducts({
+      text: request.text ?? '',
       page,
       ...(pageSize !== undefined ? { pageSize } : {}),
     });

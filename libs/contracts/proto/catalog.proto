@@ -8,6 +8,10 @@ package catalog.v1;
 service CatalogService {
   rpc GetProduct (GetProductRequest) returns (Product);
   rpc ListByCategory (ListByCategoryRequest) returns (ProductList);
+  // Text search over the product name and description, in relevance order. The engine
+  // that answers it is the platform's search infrastructure, not the catalog's SQL —
+  // `total` is the match count across the whole catalogue, not the page length.
+  rpc SearchProducts (SearchProductsRequest) returns (ProductList);
   // Bulk price lookup for the cart: the cart validates its price snapshot against the
   // data owner rather than trusting what the browser sent.
   rpc GetPricing (GetPricingRequest) returns (GetPricingResponse);
@@ -50,6 +54,12 @@ message GetProductRequest {
 
 message ListByCategoryRequest {
   repeated string category_path = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message SearchProductsRequest {
+  string text = 1;
   int32 page = 2;
   int32 page_size = 3;
 }

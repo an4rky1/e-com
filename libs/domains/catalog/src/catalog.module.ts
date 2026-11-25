@@ -17,6 +17,7 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaService } from '@auth/infra/prisma';
+import { ElasticsearchModule } from '@auth/infra/elasticsearch';
 import {
   createOutboxModule,
   PrismaOutboxRepository,
@@ -31,9 +32,14 @@ import {
   GetProductHandler,
   ListByCategoryHandler,
 } from './application/queries/product.queries';
+import { SearchProductsHandler } from './application/queries/product.search-query';
 import { CatalogService } from './application/facade/catalog.service';
 import { PRODUCT_REPOSITORY } from './domain/ports/product-repository.port';
+import { PRODUCT_SEARCH } from './domain/ports/product-search.port';
+import { PRODUCT_SEARCH_INDEXER } from './domain/ports/product-search-indexer.port';
 import { PrismaProductRepository } from './infrastructure/persistence/prisma-product.repository';
+import { ElasticsearchProductSearch } from './infrastructure/search/elasticsearch-product-search';
+import { ElasticsearchProductIndexer } from './infrastructure/search/elasticsearch-product-indexer';
 import { CatalogGrpcController } from './presentation/grpc/catalog.grpc.controller';
 import { CatalogHealthIndicator } from './catalog.health';
 import { CATALOG_CONFIG, CATALOG_PRISMA, resolveCatalogConfig } from './catalog.config';
@@ -81,6 +87,7 @@ export function createCatalogModule(options: CatalogModuleOptions): DynamicModul
     imports: [
       CqrsModule.forRoot(),
       createOutboxModule({ repository: outboxRepository, publisher: options.publisher }),
+      ElasticsearchModule.forRoot(),
     ],
     controllers: [CatalogGrpcController],
     providers: [
@@ -88,12 +95,15 @@ export function createCatalogModule(options: CatalogModuleOptions): DynamicModul
       { provide: CATALOG_CONFIG, useFactory: () => resolveCatalogConfig() },
 
       { provide: PRODUCT_REPOSITORY, useClass: PrismaProductRepository },
+      { provide: PRODUCT_SEARCH, useClass: ElasticsearchProductSearch },
+      { provide: PRODUCT_SEARCH_INDEXER, useClass: ElasticsearchProductIndexer },
 
       CreateProductHandler,
       SetVariantPriceHandler,
       ArchiveProductHandler,
       GetProductHandler,
       ListByCategoryHandler,
+      SearchProductsHandler,
       GetPricingHandler,
 
       CatalogService,
@@ -103,6 +113,8 @@ export function createCatalogModule(options: CatalogModuleOptions): DynamicModul
       CatalogService,
       CatalogHealthIndicator,
       PRODUCT_REPOSITORY,
+      PRODUCT_SEARCH,
+      PRODUCT_SEARCH_INDEXER,
     ],
   };
 }
